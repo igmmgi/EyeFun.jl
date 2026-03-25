@@ -397,7 +397,7 @@ one-row-per-trial DataFrame where each unique variable name becomes a column.
 
 # Example
 ```julia
-edf = read_eyelink_edf("recording.edf")
+edf = read_eyelink("recording.edf")
 conditions = variables(edf.variables)                        # auto-detect
 conditions = variables(edf.variables; trial_marker="trial")  # explicit
 ```

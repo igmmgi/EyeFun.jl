@@ -1,5 +1,5 @@
 """
-    read_eyelink_edf_binary(filename::String;
+    read_eyelink_edf(filename::String;
                     start_marker::String = DEFAULT_START_MARKER,
                     end_marker::String = DEFAULT_END_MARKER) -> EDFFile
 
@@ -18,7 +18,7 @@ An `EDFFile` containing:
 - `saccades`, `fixations`, `blinks`, `messages`: Parsed sub-DataFrames
 - `samples`: DataFrame of eye tracking samples
 """
-function read_eyelink_edf_binary(
+function read_eyelink_edf(
     filename::String;
     start_marker::String = DEFAULT_START_MARKER,
     end_marker::String = DEFAULT_END_MARKER,
@@ -149,6 +149,7 @@ function read_eyelink_edf_binary(
                             binary_data,
                             pos,
                             flags_peek,
+                            current_sflags,
                             current_sample_ts,
                             current_eye_code,
                             in_trial,
@@ -392,7 +393,7 @@ end
 
 
 """
-    read_eyelink_edf_asc(filename::String;
+    read_eyelink_asc(filename::String;
              loadsamples::Bool = true,
              start_marker::String = "TRIALID",
              end_marker::String = "TRIAL_RESULT") -> EDFFile
@@ -408,9 +409,9 @@ Read an EDF ASCII (`.asc`) file produced by SR Research's `edf2asc` tool.
 
 # Returns
 An `EDFFile` with `.fixations`, `.saccades`, `.blinks`, `.messages`, `.samples`, and
-`.recordings` DataFrames, identical in structure to `read_eyelink_edf_binary`.
+`.recordings` DataFrames, identical in structure to `read_eyelink_edf`.
 """
-function read_eyelink_edf_asc(
+function read_eyelink_asc(
     filename::String;
     loadsamples::Bool = true,
     start_marker::String = "TRIALID",
@@ -564,62 +565,71 @@ function read_eyelink_edf_asc(
 end
 
 """
-    read_eyelink_edf(filename::String; kwargs...) -> EDFFile
+    read_eyelink(filename::String; kwargs...) -> EDFFile
 
 Unified EyeLink data reader. Dispatches on file extension:
-- `.edf` → `read_eyelink_edf_binary` (pure Julia binary reader, no external tools)
-- `.asc` → `read_eyelink_edf_asc` (reads `.asc` produced by `edf2asc`)
+- `.edf` → `read_eyelink_edf` (pure Julia binary reader, no external tools)
+- `.asc` → `read_eyelink_asc` (reads `.asc` produced by `edf2asc`)
 
 ```julia
-et = read_eyelink_edf("recording.edf")
-et = read_eyelink_edf("recording.asc")
+et = read_eyelink("recording.edf")
+et = read_eyelink("recording.asc")
 ```
 """
-function read_eyelink_edf(filename::String; kwargs...)
+function read_eyelink(filename::String; kwargs...)
     @info "Reading $(filename)"
     ext = lowercase(splitext(filename)[2])
     if ext == ".edf"
-        return read_eyelink_edf_binary(filename; kwargs...)
+        return read_eyelink_edf(filename; kwargs...)
     elseif ext == ".asc"
-        return read_eyelink_edf_asc(filename; kwargs...)
+        return read_eyelink_asc(filename; kwargs...)
     else
         error("Unknown file extension '$ext'. Expected .edf or .asc")
     end
 end
 
 """
-    write_eyelink_edf_to_asc(edf_path::String, asc_path::String)
+    write_eyelink_edf_to_ascii(edf_path::String, asc_path::String=replace(edf_path, r"\\.edf\$"i => ".asc"))
 
 Convert an EDF file to ASC format (equivalent to the `edf2asc` tool).
+By default the output path matches the input with an `.asc` extension.
 
 ```julia
-write_eyelink_edf_to_asc("recording.edf", "recording.asc")
+write_eyelink_edf_to_ascii("recording.edf")                    # → recording.asc
+write_eyelink_edf_to_ascii("recording.edf", "custom_name.asc") # explicit path
 ```
 """
-function write_eyelink_edf_to_asc(edf_path::String, asc_path::String)
+function write_eyelink_edf_to_ascii(
+    edf_path::String,
+    asc_path::String = replace(edf_path, r"\.edf$"i => ".asc"),
+)
+    # If a directory is passed, dispatch to the batch method
+    isdir(edf_path) && return _write_eyelink_edf_dir_to_ascii(edf_path)
     @info "Writing $(edf_path) to $(asc_path)"
-    et = read_eyelink_edf_binary(edf_path)
+    et = read_eyelink_edf(edf_path)
     export_to_ascii(et, asc_path)
     return nothing
 end
 
 """
-    read_eyelink_edf_dataframe(filename::String; trial_time_zero=nothing, kwargs...) -> DataFrame
+    write_eyelink_edf_to_ascii(dir::String)
 
-Convenience function: read an EDF or ASC file and return the annotated wide
-DataFrame directly (`read_eyelink_edf` + `create_eyelink_edf_dataframe` in one call).
+Convert all `.edf` files in `dir` to ASC format. Each output file is written
+to the same directory with an `.asc` extension.
 
-`trial_time_zero` is forwarded to `create_eyelink_edf_dataframe`; all other
-kwargs are forwarded to `read_eyelink_edf`.
-
-# Example
 ```julia
-df = read_eyelink_edf_dataframe("recording.edf"; trial_time_zero="Stimulus On")
+write_eyelink_edf_to_ascii("/path/to/data/")   # converts all *.edf in the directory
 ```
 """
-function read_eyelink_edf_dataframe(filename::String; trial_time_zero = nothing, kwargs...)
-    edf = read_eyelink_edf(filename; kwargs...)
-    return create_eyelink_edf_dataframe(edf; trial_time_zero = trial_time_zero)
+function _write_eyelink_edf_dir_to_ascii(dir::AbstractString)
+    isdir(dir) || error("Not a directory: $dir")
+    edf_files = filter(f -> endswith(lowercase(f), ".edf"), readdir(dir; join = true))
+    isempty(edf_files) && @warn "No .edf files found in $dir"
+    @info "Found $(length(edf_files)) EDF file(s) in $dir"
+    for edf_path in edf_files
+        write_eyelink_edf_to_ascii(edf_path)
+    end
+    return nothing
 end
 
 

@@ -7,121 +7,109 @@ Plot pupil size over time. Shades blink periods in gray.
 
 Uses `time_rel` for X axis if available, otherwise absolute time offset.
 """
-function plot_pupil(df::EyeData; selection = nothing, eye::Symbol = :auto)
+function plot_pupil(
+    df::EyeData;
+    selection = nothing,
+    eye::Symbol = :auto,
+    facet = nothing,
+)
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
-    # Select pupil column based on eye
-    eye in (:L, :l) && (eye = :left)
-    eye in (:R, :r) && (eye = :right)
-
-    has_left = hasproperty(samples, :paL) && !all(isnan, samples.paL)
-    has_right = hasproperty(samples, :paR) && !all(isnan, samples.paR)
-
-    if eye == :auto
-        eye =
-            has_left ? :left :
-            (has_right ? :right : error("No valid pupil data found in either eye"))
-    end
-
-    if eye == :left
-        has_left || error("No left-eye pupil data.")
-        pa = Float64.(samples.paL)
-        eye_label = "Left eye"
+    if facet !== nothing
+        hasproperty(samples, facet) || error("Column :$facet not found for faceting.")
+        groups = filter(r -> !ismissing(r[facet]), samples)
+        facet_vals = sort(unique(groups[!, facet]))
     else
-        has_right || error("No right-eye pupil data.")
-        pa = Float64.(samples.paR)
-        eye_label = "Right eye"
+        groups = samples
+        facet_vals = [nothing]
     end
+    n_panels = length(facet_vals)
+    n_panels == 0 && error("No non-missing values in :$facet for faceting.")
 
-    # Time axis
-    has_rel = hasproperty(samples, :time_rel)
-    if has_rel && !all(ismissing, samples.time_rel)
-        t = Float64[ismissing(v) ? NaN : Float64(v) for v in samples.time_rel]
-        t_label = "Time (ms, relative)"
-    else
-        time_ms = Float64.(samples.time)
-        t = time_ms .- time_ms[1]
-        t_label = "Time (ms)"
-    end
+    title = _format_title("Pupil", selection)
 
-    title_sel = selection !== nothing ? " ($selection)" : ""
-    title = "Pupil$title_sel ($eye_label)"
+    panel_w = facet !== nothing ? 450 : 900
+    fig_w = facet !== nothing ? (panel_w * n_panels + 50) : panel_w
+    fig_h = 400
+    fig = Figure(size = (fig_w, fig_h))
 
-    fig = Figure(size = (900, 400))
-    ax = Axis(fig[1, 1]; xlabel = t_label, ylabel = "Pupil size", title = title)
+    for (idx, fval) in enumerate(facet_vals)
+        sub_facet = fval === nothing ? groups : filter(r -> r[facet] == fval, groups)
 
-    # Helper to extract time and pupil for a sub-dataframe
-    function _get_trial_tp(sub)
-        if eye == :left
-            pa_sub = Float64.(sub.paL)
-        else
-            pa_sub = Float64.(sub.paR)
-        end
-        if has_rel && !all(ismissing, sub.time_rel)
-            t_sub = Float64[ismissing(v) ? NaN : Float64(v) for v in sub.time_rel]
-        else
-            time_ms_sub = Float64.(sub.time)
-            t_sub = time_ms_sub .- time_ms_sub[1]
-        end
-        return t_sub, pa_sub
-    end
+        # Use shared helpers for eye resolution
+        resolved_eye = _resolve_eye(sub_facet, eye; cols = :pupil)
+        pa_col = _eye_columns(resolved_eye).pa
+        pa = Float64.(sub_facet[!, pa_col])
 
-    # Draw per-trial to avoid connecting lines between trials
-    has_trials = hasproperty(samples, :trial)
-    if has_trials && length(unique(skipmissing(samples.trial))) > 1
-        trial_data = filter(r -> !ismissing(r.trial), samples)
-        for g in groupby(trial_data, :trial)
-            sub = DataFrame(g)
-            t_sub, pa_sub = _get_trial_tp(sub)
+        # Time axis — only use time_rel when a selection is active
+        use_rel = selection !== nothing &&
+                  hasproperty(sub_facet, :time_rel) &&
+                  !all(ismissing, sub_facet.time_rel)
 
-            # Shade blink periods for this trial
-            if hasproperty(sub, :in_blink)
-                bm = sub.in_blink
-                i = 1
-                while i <= length(bm)
-                    if bm[i]
-                        j = i
-                        while j <= length(bm) && bm[j]
-                            ;
-                            j += 1;
-                        end
-                        Makie.vspan!(
-                            ax,
-                            [t_sub[i]],
-                            [t_sub[min(j, length(t_sub))]];
-                            color = (:gray, 0.15),
-                        )
-                        i = j
-                    else
-                        i += 1
-                    end
-                end
+        ax = Axis(
+            fig[1, idx];
+            xlabel = "Time (ms)",
+            ylabel = idx == 1 ? "Pupil size" : "",
+            title = fval === nothing ? title : "$fval",
+        )
+
+        global_t0 = Float64(sub_facet.time[1])
+        function _get_trial_tp(sub)
+            pa_sub = Float64.(sub[!, pa_col])
+            if use_rel && !all(ismissing, sub.time_rel)
+                t_sub = Float64[ismissing(v) ? NaN : Float64(v) for v in sub.time_rel]
+            else
+                t_sub = Float64.(sub.time) .- global_t0
             end
+            return t_sub, pa_sub
+        end
 
-            lines!(ax, t_sub, pa_sub; color = :black, linewidth = 0.5)
-        end
-    else
-        # Single trial or no trial column
-        if hasproperty(samples, :in_blink)
-            blink_mask = samples.in_blink
-            i = 1
-            while i <= length(blink_mask)
-                if blink_mask[i]
-                    j = i
-                    while j <= length(blink_mask) && blink_mask[j]
-                        ;
-                        j += 1;
-                    end
-                    Makie.vspan!(ax, [t[i]], [t[min(j, length(t))]]; color = (:gray, 0.2))
-                    i = j
-                else
-                    i += 1
-                end
+        # Draw per-trial to avoid connecting lines between trials
+        has_trials = hasproperty(sub_facet, :trial)
+        if has_trials && length(unique(skipmissing(sub_facet.trial))) > 1
+            trial_data = filter(r -> !ismissing(r.trial), sub_facet)
+            for g_df in groupby(trial_data, :trial)
+                sub_t = DataFrame(g_df)
+                t_sub, pa_sub = _get_trial_tp(sub_t)
+                _shade_blinks!(ax, sub_t, t_sub)
+                lines!(ax, t_sub, pa_sub; color = :black, linewidth = 0.5)
             end
+        else
+            if use_rel
+                t = Float64[ismissing(v) ? NaN : Float64(v) for v in sub_facet.time_rel]
+            else
+                time_ms = Float64.(sub_facet.time)
+                t = time_ms .- time_ms[1]
+            end
+            _shade_blinks!(ax, sub_facet, t)
+            lines!(ax, t, pa; color = :black, linewidth = 0.5)
         end
-        lines!(ax, t, pa; color = :black, linewidth = 0.5)
     end
 
     return fig
+end
+
+"""Shade blink periods on an axis as gray vertical bands."""
+function _shade_blinks!(ax, samples, t::Vector{Float64})
+    !hasproperty(samples, :in_blink) && return
+    bm = samples.in_blink
+    i = 1
+    while i <= length(bm)
+        if bm[i]
+            j = i
+            while j <= length(bm) && bm[j]
+                j += 1
+            end
+            Makie.vspan!(
+                ax,
+                [t[i]],
+                [t[min(j, length(t))]];
+                color = (:gray, 0.15),
+            )
+            i = j
+        else
+            i += 1
+        end
+    end
 end

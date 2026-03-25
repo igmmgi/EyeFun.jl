@@ -126,16 +126,10 @@ function data_quality(df::EyeData; eye::Symbol = :auto, group_by = :trial)
         dur_ms = n / sr * 1000.0
         blink_rate = blink_n * sr / n
 
-        # Mean pupil (inline accumulator avoids allocating filtered array)
+        # Mean pupil
         pa = g[!, pa_col]
-        pa_sum, pa_n = 0.0, 0
-        for v in pa
-            if !isnan(v)
-                pa_sum += v
-                pa_n += 1
-            end
-        end
-        mean_pa = pa_n > 0 ? pa_sum / pa_n : NaN
+        pa_valid = filter(!isnan, pa)
+        mean_pa = isempty(pa_valid) ? NaN : mean(pa_valid)
 
         push!(
             rows,
@@ -205,13 +199,14 @@ function group_summary(df::EyeData; group_by = :trial, by = nothing, eye::Symbol
 
     for g in groupby(valid_df, all_group_cols)
         label = _group_labels(g, all_group_cols)
-        n = nrow(g)
+
         gx = g[!, gx_col]
         pa = g[!, pa_col]
 
         # Tracking loss
+        n_samples = nrow(g)
         valid_n = count(!isnan, gx)
-        loss_pct = round((n - valid_n) / n * 100.0; digits = 1)
+        loss_pct = round((n_samples - valid_n) / n_samples * 100.0; digits = 1)
 
         # Fixation stats (column vectors instead of eachrow)
         n_fix = 0
@@ -257,15 +252,9 @@ function group_summary(df::EyeData; group_by = :trial, by = nothing, eye::Symbol
             0
         end
 
-        # Pupil (inline accumulator)
-        pa_sum, pa_n = 0.0, 0
-        for v in pa
-            if !isnan(v)
-                pa_sum += v
-                pa_n += 1
-            end
-        end
-        mean_pa = pa_n > 0 ? round(pa_sum / pa_n; digits = 1) : NaN
+        # Mean pupil
+        pa_valid = filter(!isnan, pa)
+        mean_pa = isempty(pa_valid) ? NaN : round(mean(pa_valid); digits = 1)
 
         row = merge(
             label,

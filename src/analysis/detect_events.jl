@@ -440,6 +440,7 @@ function detect_events!(
     # Process whole continuous recording
     gx = Vector{Float64}(df.df[!, gx_col])
     gy = Vector{Float64}(df.df[!, gy_col])
+    pa = Vector{Float64}(df.df[!, pa_col])
 
     all_vel = _compute_velocity_deg(gx, gy, ppd, sample_rate)
     if method == :ivt
@@ -450,16 +451,7 @@ function detect_events!(
     end
 
     # Write columns
-    _write_event_columns!(
-        df,
-        all_labels,
-        df.df[!, gx_col],
-        df.df[!, gy_col],
-        df.df[!, pa_col],
-        all_vel,
-        ppd,
-        prefix,
-    )
+    _write_event_columns!(df, all_labels, gx, gy, pa, all_vel, ppd, prefix)
 
     return df
 end

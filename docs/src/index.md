@@ -62,7 +62,7 @@ plot_heatmap(df; selection=(trial=1,))
 dq = data_quality(df)
 
 # Export to ASC format
-write_eyelink_edf_to_asc("recording.edf", "recording.asc")
+write_eyelink_edf_to_ascii("recording.edf")  # → recording.asc
 ```
 
 ## Documentation

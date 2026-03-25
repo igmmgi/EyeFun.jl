@@ -4,7 +4,7 @@
     isfile(edf_path) || @warn "test1.edf not found"
 
     if isfile(edf_path)
-        edf = read_eyelink_edf_binary(edf_path)
+        edf = read_eyelink_edf(edf_path)
 
         @testset "Samples DataFrame is usable after read" begin
             # Verify types are correct (not degraded by copycols=false)
@@ -46,7 +46,7 @@ end
     isfile(edf_path) || @warn "test1.edf not found"
 
     if isfile(edf_path)
-        edf = read_eyelink_edf_binary(edf_path)
+        edf = read_eyelink_edf(edf_path)
 
         @testset "Output is non-empty and parseable" begin
             out_path = tempname() * ".asc"
@@ -57,7 +57,7 @@ end
                 @test filesize(out_path) > 0
 
                 # Should be re-readable by the ASC reader
-                edf2 = read_eyelink_edf_asc(out_path)
+                edf2 = read_eyelink_asc(out_path)
                 @test edf2 isa EyeFun.EDFFile
                 @test edf2.samples !== nothing
                 @test nrow(edf2.samples) > 0
@@ -116,7 +116,7 @@ end
     @testset "Binocular EDF" begin
         bino_path = joinpath(DATA_DIR, "test3.edf")
         if isfile(bino_path)
-            edf = read_eyelink_edf_binary(bino_path)
+            edf = read_eyelink_edf(bino_path)
             @test edf.samples !== nothing
             @test nrow(edf.samples) > 0
 
@@ -139,7 +139,7 @@ end
     @testset "Message parsing with null bytes" begin
         edf_path = joinpath(DATA_DIR, "test1.edf")
         if isfile(edf_path)
-            edf = read_eyelink_edf_binary(edf_path)
+            edf = read_eyelink_edf(edf_path)
             msg_df = messages(edf)
             @test nrow(msg_df) > 0
 

@@ -1,21 +1,21 @@
-# ── batch_read_eyelink_edf_dataframe ───────────────────────────────────────── #
+# ── batch_read_eyelink ───────────────────────────────────────── #
 
 """
-    batch_read_eyelink_edf_dataframe(files::Vector{String};
+    batch_read_eyelink(files::Vector{String};
         participant_labels=nothing,
         trial_time_zero=nothing,
         verbose=false,
         kwargs...)
 
 Read multiple EDF/ASC files and stack into a single `EyeData` with a
-`:participant` column. Each file is processed with `read_eyelink_edf_dataframe`.
+`:participant` column.
 
 # Parameters
 - `participant_labels`: a `Vector` of labels (same length as `files`), or
   `nothing` to auto-derive from filenames (without extension)
 - `trial_time_zero`: message string to use as t=0 within each trial (passed to reader)
 - `verbose`: if `true`, log each file as it is read
-- `kwargs...`: additional keyword arguments forwarded to `read_eyelink_edf_dataframe`
+- `kwargs...`: additional keyword arguments forwarded to `read_eyelink`
 
 Metadata (sample rate, screen resolution, etc.) is taken from the first file.
 A warning is emitted if sample rates differ across files.
@@ -23,10 +23,10 @@ A warning is emitted if sample rates differ across files.
 # Example
 ```julia
 files = ["sub01.edf", "sub02.edf", "sub03.edf"]
-df_all = batch_read_eyelink_edf_dataframe(files; trial_time_zero="Stimulus On")
+df_all = batch_read_eyelink(files; trial_time_zero="Stimulus On")
 ```
 """
-function batch_read_eyelink_edf_dataframe(
+function batch_read_eyelink(
     files::Vector{String};
     participant_labels = nothing,
     trial_time_zero = nothing,
@@ -44,16 +44,15 @@ function batch_read_eyelink_edf_dataframe(
         labels = [splitext(basename(f))[1] for f in files]
     end
 
-    dfs = DataFrame[]
     eds = EyeData[]
 
     for (i, file) in enumerate(files)
         verbose && @info "Reading $file ($(labels[i]))"
-        ed_i =
-            read_eyelink_edf_dataframe(file; trial_time_zero = trial_time_zero, kwargs...)
-        df_i = ed_i.df
-        insertcols!(df_i, 1, :participant => fill(labels[i], nrow(df_i)))
-        push!(dfs, df_i)
+        ed_i = create_eyelink_edf_dataframe(
+            read_eyelink(file; kwargs...);
+            trial_time_zero = trial_time_zero,
+        )
+        insertcols!(ed_i.df, 1, :participant => fill(labels[i], nrow(ed_i.df)))
         push!(eds, ed_i)
     end
 
@@ -63,7 +62,7 @@ function batch_read_eyelink_edf_dataframe(
         @warn "Files have different sample rates: $rates. Using $(eds[1].sample_rate) Hz from first file."
     end
 
-    combined = vcat(dfs...; cols = :union)
+    combined = vcat([ed.df for ed in eds]...; cols = :union)
     return EyeData(
         combined;
         source = eds[1].source,
@@ -75,7 +74,7 @@ function batch_read_eyelink_edf_dataframe(
 end
 
 """
-    batch_read_eyelink_edf_dataframe(dir::String; recursive=false, kwargs...)
+    batch_read_eyelink(dir::String; recursive=false, kwargs...)
 
 Read all `.edf` files in `dir` and stack into a single `EyeData`.
 Files are sorted alphabetically. Participant labels are derived from filenames.
@@ -84,10 +83,10 @@ Set `recursive=true` to search subdirectories as well.
 
 # Example
 ```julia
-df_all = batch_read_eyelink_edf_dataframe("data/raw/")
+df_all = batch_read_eyelink("data/raw/")
 ```
 """
-function batch_read_eyelink_edf_dataframe(
+function batch_read_eyelink(
     dir::AbstractString;
     recursive::Bool = false,
     kwargs...,
@@ -103,5 +102,5 @@ function batch_read_eyelink_edf_dataframe(
     end
     sort!(files)
     isempty(files) && error("No .edf files found in $dir")
-    return batch_read_eyelink_edf_dataframe(files; kwargs...)
+    return batch_read_eyelink(files; kwargs...)
 end

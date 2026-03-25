@@ -61,7 +61,7 @@ plot_pupil(df; selection=(trial=1,))
 
 ```julia
 # Convert EDF to ASC format (equivalent to edf2asc)
-write_eyelink_edf_to_asc("recording.edf", "recording.asc")
+write_eyelink_edf_to_ascii("recording.edf")  # → recording.asc
 ```
 
 ## Next Steps

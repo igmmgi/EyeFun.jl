@@ -4,7 +4,7 @@ using DataFrames
 using Makie
 using Statistics
 
-const DATA_DIR = joinpath(@__DIR__, "data")
+const DATA_DIR = joinpath(dirname(@__DIR__), "resources", "data", "eyelink")
 
 println("Running EyeFun.jl Test Suite")
 println("=" ^ 40)
@@ -22,6 +22,7 @@ println("=" ^ 40)
     include("tests/detect_events.jl")
     include("tests/ascii_exporter.jl")
     include("tests/safety.jl")
+    include("tests/smi.jl")
 
 end
 

@@ -42,6 +42,7 @@ function detect_microsaccades!(
 
     # Compute pixels per degree from metadata
     ppd = df.screen_res[1] / (2.0 * atand(df.screen_width_cm / 2.0, df.viewing_distance_cm))
+    min_dur_samples = max(1, round(Int, min_duration_ms * df.sample_rate / 1000.0))
 
     valid_df = filter(r -> all(s -> !ismissing(r[s]), group_cols), df.df)
 
@@ -94,7 +95,7 @@ function detect_microsaccades!(
                 dur = offset - onset + 1
 
                 # Minimum duration check
-                dur < min_duration_ms && continue
+                dur < min_dur_samples && continue
 
                 # Amplitude check
                 dx = gx[offset] - gx[onset]

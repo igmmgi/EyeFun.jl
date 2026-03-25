@@ -314,7 +314,7 @@ uuid = "411431e0-e8b7-467b-b5e0-f676ba4f2910"
 version = "0.1.6"
 
 [[deps.EyeFun]]
-deps = ["DataFrames", "Dates", "GLMakie", "Makie", "Printf", "Statistics"]
+deps = ["BenchmarkTools", "DataFrames", "Dates", "GLMakie", "Makie", "Printf", "Statistics"]
 path = "."
 uuid = "12345678-1234-5678-9012-123456789012"
 version = "0.1.0"
@@ -405,9 +405,9 @@ version = "4.1.1"
 
 [[deps.FreeType2_jll]]
 deps = ["Artifacts", "Bzip2_jll", "JLLWrappers", "Libdl", "Zlib_jll"]
-git-tree-sha1 = "2c5512e11c791d1baed2049c5652441b28fc6a31"
+git-tree-sha1 = "70329abc09b886fd2c5d94ad2d9527639c421e3e"
 uuid = "d7e528f0-a631-5988-bf34-fe36492bcfd7"
-version = "2.13.4+0"
+version = "2.14.3+1"
 
 [[deps.FreeTypeAbstraction]]
 deps = ["BaseDirs", "ColorVectorSpace", "Colors", "FreeType", "GeometryBasics", "Mmap"]
@@ -1072,9 +1072,9 @@ version = "1.5.2"
 
 [[deps.PrettyTables]]
 deps = ["Crayons", "LaTeXStrings", "Markdown", "PrecompileTools", "Printf", "REPL", "Reexport", "StringManipulation", "Tables"]
-git-tree-sha1 = "211530a7dc76ab59087f4d4d1fc3f086fbe87594"
+git-tree-sha1 = "568dec03462a2b686e9e6ce37dfd0f5aad3301b1"
 uuid = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
-version = "3.2.3"
+version = "3.3.1"
 
     [deps.PrettyTables.extensions]
     PrettyTablesTypstryExt = "Typstry"

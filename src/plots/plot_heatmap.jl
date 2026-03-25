@@ -72,7 +72,7 @@ end
 
 """
     plot_heatmap(df::EyeData; selection=nothing, eye=:auto,
-                 xlims=(0,1280), ylims=(0,960), ydir=:down,
+                 xlims=(0,df.screen_res[1]), ylims=(0,df.screen_res[2]), ydir=:down,
                  bins=(50,50), colormap=:inferno, metric=:samples, sigma=2.0,
                  background=nothing, facet=nothing)
 
@@ -93,8 +93,8 @@ function plot_heatmap(
     df::EyeData;
     selection = nothing,
     eye::Symbol = :auto,
-    xlims = (0, 1280),
-    ylims = (0, 960),
+    xlims = (0, df.screen_res[1]),
+    ylims = (0, df.screen_res[2]),
     ydir::Symbol = :down,
     bins = (50, 50),
     colormap = :inferno,
@@ -115,55 +115,71 @@ function plot_heatmap(
         n_panels = length(facet_vals)
         n_panels == 0 && error("No non-missing values in :$facet for faceting.")
 
+        # Compute all panels first to get shared color range
+        sr = df.sample_rate
+        panel_data = []
+        for lev in facet_vals
+            sub = filter(r -> r[facet] == lev, groups)
+            x_c, y_c, vals, _, cb_label =
+                _build_heatmap_data(sub, eye, xlims, ylims, bins, metric, sr)
+            vals = _gaussian_smooth(vals, sigma)
+            push!(panel_data, (x_c=x_c, y_c=y_c, vals=vals, label=string(lev), cb_label=cb_label))
+        end
+
+        # Find global min/max for shared colorbar
+        all_vals = vcat([vec(pd.vals) for pd in panel_data]...)
+        vmin, vmax = minimum(all_vals), maximum(all_vals)
+        vmax == vmin && (vmax = vmin + 1.0)  # avoid degenerate range
+
         aspect_ratio = (xlims[2] - xlims[1]) / (ylims[2] - ylims[1])
         panel_w = 400
         panel_h = round(Int, panel_w / aspect_ratio)
         fig = Figure(size = (panel_w * n_panels + 100, panel_h + 80))
 
         local hm_ref
-        local cb_label_facet = ""
-        for (idx, fval) in enumerate(facet_vals)
-            sub = filter(r -> r[facet] == fval, groups)
-            sr = 1000.0
-            x_c, y_c, vals, _, cb_label_facet =
-                _build_heatmap_data(sub, eye, xlims, ylims, bins, metric, sr)
-            vals = _gaussian_smooth(vals, sigma)
-
+        for (idx, pd) in enumerate(panel_data)
             ax = Axis(
                 fig[1, idx];
                 xlabel = "X (px)",
                 ylabel = idx == 1 ? "Y (px)" : "",
-                title = "$fval",
+                title = pd.label,
+                aspect = DataAspect(),
             )
             ax.yreversed = (ydir == :down)
+            Makie.xlims!(ax, xlims...)
+            Makie.ylims!(ax, ylims...)
 
             if background !== nothing
                 img = Makie.FileIO.load(background)
                 Makie.image!(ax, xlims[1]..xlims[2], ylims[1]..ylims[2], Makie.rotr90(img))
             end
 
-            hm_ref =
-                Makie.heatmap!(ax, x_c, y_c, vals; colormap = colormap, interpolate = true)
+            hm_ref = Makie.heatmap!(ax, pd.x_c, pd.y_c, pd.vals;
+                                    colormap = colormap, interpolate = true,
+                                    colorrange = (vmin, vmax))
+                                    
+            aois !== nothing && _draw_aois!(ax, aois)
         end
-        Colorbar(fig[1, n_panels+1], hm_ref; label = cb_label_facet)
+        Colorbar(fig[1, n_panels+1], hm_ref; label = panel_data[1].cb_label)
         return fig
     end
 
     # ── Single panel ──
-    sr = 1000.0
+    sr = df.sample_rate
     x_c, y_c, vals, eye_label, cb_label =
         _build_heatmap_data(samples, eye, xlims, ylims, bins, metric, sr)
     vals = _gaussian_smooth(vals, sigma)
 
-    title_sel = selection !== nothing ? " ($selection)" : ""
-    title = "Heatmap$title_sel ($eye_label)"
+    title = _format_title("Heatmap", selection)
 
     aspect_ratio = (xlims[2] - xlims[1]) / (ylims[2] - ylims[1])
     fig_h = 650
     fig_w = round(Int, fig_h * aspect_ratio + 100)
     fig = Figure(size = (fig_w, fig_h))
-    ax = Axis(fig[1, 1]; xlabel = "X (px)", ylabel = "Y (px)", title = title)
+    ax = Axis(fig[1, 1]; xlabel = "X (px)", ylabel = "Y (px)", title = title, aspect = DataAspect())
     ax.yreversed = (ydir == :down)
+    Makie.xlims!(ax, xlims...)
+    Makie.ylims!(ax, ylims...)
 
     if background !== nothing
         img = Makie.FileIO.load(background)

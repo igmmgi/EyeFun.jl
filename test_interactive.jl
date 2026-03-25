@@ -4,36 +4,45 @@
 using EyeFun
 using DataFrames
 using GLMakie
+using BenchmarkTools
 
 # ── Read the EDF file ─────────────────────────────────────────────────────── #
-edf = read_eyelink_edf("/home/ian/Documents/Julia/oA_1.edf")
+# edf = read_eyelink("/home/ian/Documents/Julia/oA_1.edf")
+edf = read_eyelink("/home/ian/Desktop/EyeTracking/data_2016/edf/201.edf")
 
-@btime write_eyelink_edf_to_asc("/home/ian/Documents/Julia/oA_1.edf", "/home/ian/Documents/Julia/test.asc")
-
-# ── Inspect the data (just type the variable — show methods do the work) ──── #
-edf                       # summary: samples, trials, events
-first(fixations(edf), 5)  # peek at fixation events
-first(saccades(edf), 5)   # peek at saccade events
-first(blinks(edf), 5)     # peek at blink events
-variables(edf)            # trial conditions (wide pivot)
+# # ── Inspect the data (just type the variable — show methods do the work) ──── #
+# edf                       # summary: samples, trials, events
+# first(fixations(edf), 5)  # peek at fixation events
+# first(saccades(edf), 5)   # peek at saccade events
+# first(blinks(edf), 5)     # peek at blink events
+# variables(edf)            # trial conditions (wide pivot)
 
 # ── Build the wide DataFrame ──────────────────────────────────────────────── #
-@btime df = create_eyelink_edf_dataframe(edf, trial_time_zero="Stimulus On")
+df = create_eyelink_edf_dataframe(edf)
 
-@btime EyeFun.export_to_ascii($edf, "/tmp/test_bench.asc")
+plot_heatmap(df)
+plot_heatmap(df, facet=:itemtype)
+plot_databrowser(df)
+plot_databrowser(df; split_by=nothing)
 
 
 # Some plots
 plot_gaze(df)
-plot_gaze(df, selection=(trial=1,))
+plot_gaze(df, facet=:itemtype)
+plot_gaze(df, selection=(trial=100,))
 plot_gaze(df, selection=(trial=1:10,))
 
 plot_scanpath(df)
+plot_scanpath(df, facet=:itemtype)
 plot_scanpath(df, selection=(trial=1,))
 plot_scanpath(df, selection=(trial=1:10,))
 
 plot_heatmap(df)
+plot_heatmap(df, facet=:itemtype)
 plot_heatmap(df, selection=(trial=1,))
+plot_heatmap(df, selection=(trial=2,))
+plot_heatmap(df, selection=(trial=3,))
+plot_heatmap(df, selection=(trial=4,))
 plot_heatmap(df, selection=(trial=1:10,))
 
 plot_heatmap(df; selection=(trial=1:10,), metric=:samples)     # raw sample counts
@@ -46,23 +55,38 @@ plot_heatmap(df; metric=:dwell, sigma=1.0)   # more smoothing
 plot_heatmap(df; metric=:dwell, sigma=0)     # no smoothing
 
 # ── Fixation plots ────────────────────────────────────────────────────────── #
+plot_fixations(df)
 plot_fixations(df; selection=(trial=1,))                  # single trial, numbered
 plot_fixations(df; selection=(trial=1,), numbered=false)  # without numbers
 plot_fixations(df; selection=(trial=1:5,))                # multiple trials
 
 # ── Pupil size ────────────────────────────────────────────────────────────── #
+plot_pupil(df)
+plot_pupil(df; facet=:itemtype)
 plot_pupil(df; selection=(trial=1,))          # single trial
 plot_pupil(df; selection=(trial=1:3,))        # multiple trials, blink shading
 
 # ── Saccade velocity ──────────────────────────────────────────────────────── #
+plot_velocity(df)
+plot_velocity(df; facet=:itemtype)
 plot_velocity(df; selection=(trial=1,))       # single trial
 plot_velocity(df; selection=(trial=1:10,))    # across trials
 
+# ── Interactive eye data viewer ───────────────────────────────────────────── #
+plot_databrowser(df)
+plot_databrowser(df; split_by=[:trial])
+plot_databrowser(df; split_by=nothing)
+# plot_databrowser(df; split_by=nothing)
+
+
+
+
 # ── AOI analysis ──────────────────────────────────────────────────────────── #
-aoi_regions = Dict(
-    "Center" => (440, 280, 840, 680),
-    "Top-Left" => (0, 0, 320, 240),
-)
+aoi_regions = [
+    RectAOI("Center", 440, 280, 840, 680),
+    RectAOI("Top-Left", 0, 0, 320, 240),
+    CircleAOI("Fixation", 640, 480, 50),
+]
 
 plot_scanpath(df; selection=(trial=1,), aois=aoi_regions)
 plot_fixations(df; selection=(trial=1,), aois=aoi_regions)
@@ -72,6 +96,21 @@ plot_dwell(df, aoi_regions; selection=(trial=1:10,))
 
 # ── Faceted heatmap (by condition) ────────────────────────────────────────── #
 plot_heatmap(df; facet=:type, metric=:dwell)
+
+# ── New plot types ────────────────────────────────────────────────────────── #
+plot_sequence(df; selection=(trial=1:10,))                    # event sequence chart
+plot_transitions(df, aoi_regions; selection=(trial=1:10,))    # AOI transition heatmap
+plot_comparison(df; compare_by=:type)                         # side-by-side heatmaps
+
+# ── Coordinate utilities ──────────────────────────────────────────────────── #
+ppd = pixels_per_degree(df)
+println("Pixels per degree: ", ppd)
+x_deg, y_deg = px_to_deg(df, 640, 480)
+println("Center in degrees: ", (x_deg, y_deg))
+
+# ── Trial exclusion ──────────────────────────────────────────────────────── #
+# df_clean = copy(df)
+# result = exclude_trials!(df_clean; max_tracking_loss=40, max_blink_count=5)
 
 # ── Heatmap with background image (uncomment with real path) ──────────────── #
 # plot_heatmap(df; selection=(trial=1,), background="/home/ian/Documents/Julia/oA_1.edf")
@@ -145,7 +184,7 @@ detect_events!(df_custom; method=:ivt,
 
 # ── Batch processing (uncomment with real paths) ──────────────────────────── #
 # files = ["sub01.edf", "sub02.edf"]
-# df_all = batch_read_eyelink_edf_dataframe(files; trial_time_zero="Stimulus On")
+# df_all = batch_read_eyelink(files; trial_time_zero="Stimulus On")
 # gs_group = group_summary(df_all; by=[:participant, :type])
 
 # ── Baseline correction methods ───────────────────────────────────────────── #
@@ -176,7 +215,7 @@ println(first(dq2, 5))
 # dq3 = data_quality(df; group_by=[:block, :trial])  # multi-block (if :block exists)
 
 # ── Interactive eye data viewer ───────────────────────────────────────────── #
-# plot_databrowser(df)
+plot_databrowser(df)
 plot_databrowser(df; split_by=[:trial])
 plot_databrowser(df; split_by=nothing)
 # plot_databrowser(df; split_by=nothing)

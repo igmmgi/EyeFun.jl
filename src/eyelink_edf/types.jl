@@ -25,7 +25,7 @@ end
 """
     EDFFile
 
-Main container returned by `read_eyelink_edf_binary` and `read_eyelink_edf_asc`.
+Main container returned by `read_eyelink_edf` and `read_eyelink_asc`.
 
 Access sub-tables via functions rather than fields:
 - `saccades(edf)`, `fixations(edf)`, `blinks(edf)`

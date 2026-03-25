@@ -9,6 +9,7 @@ mutable struct EyeViewerState
     trial::Observable{Int}      # current segment index
     frame::Observable{Int}
     show_samples::Observable{Bool}
+    show_heatmap::Observable{Bool}
     show_saccades::Observable{Bool}
     show_fixations::Observable{Bool}
     show_blinks::Observable{Bool}
@@ -52,13 +53,13 @@ function _extract_saccades(g::DataFrame)
                 push!(
                     saccades,
                     (
-                        x1 = x1,
-                        y1 = y1,
-                        x2 = x2,
-                        y2 = y2,
-                        time_idx = i,
-                        angle = atan(dx, dy),  # compass bearing: 0=up, π/2=right
-                        amplitude = sqrt(dx^2 + dy^2),
+                        x1=x1,
+                        y1=y1,
+                        x2=x2,
+                        y2=y2,
+                        time_idx=i,
+                        angle=atan(dx, dy),  # compass bearing: 0=up, π/2=right
+                        amplitude=sqrt(dx^2 + dy^2),
                     ),
                 )
             end
@@ -76,33 +77,35 @@ function _extract_fixations(g::DataFrame)
     fixations = FixationInfo[]
     !hasproperty(g, :fix_gavx) && return fixations
     !hasproperty(g, :fix_gavy) && return fixations
-    prev_fx = NaN
-    for i in eachindex(g.fix_gavx)
+    
+    i = 1
+    n = length(g.fix_gavx)
+    while i <= n
         if g.in_fix[i] && !isnan(g.fix_gavx[i]) && !isnan(g.fix_gavy[i])
             fx = Float64(g.fix_gavx[i])
-            if fx != prev_fx
-                # Find extent of this fixation
-                t_start = i
-                t_end = i
-                for j = i:length(g.in_fix)
-                    if g.in_fix[j] && Float64(g.fix_gavx[j]) == fx
-                        t_end = j
-                    else
-                        break
-                    end
+            # Find extent of this fixation
+            t_start = i
+            t_end = i
+            for j = i:n
+                if g.in_fix[j] && Float64(g.fix_gavx[j]) == fx
+                    t_end = j
+                else
+                    break
                 end
-                push!(
-                    fixations,
-                    (
-                        x = fx,
-                        y = Float64(g.fix_gavy[i]),
-                        dur = Float64(g.fix_dur[i]),
-                        time_start = t_start,
-                        time_end = t_end,
-                    ),
-                )
-                prev_fx = fx
             end
+            push!(
+                fixations,
+                (
+                    x=fx,
+                    y=Float64(g.fix_gavy[i]),
+                    dur=Float64(g.fix_dur[i]),
+                    time_start=t_start,
+                    time_end=t_end,
+                ),
+            )
+            i = t_end + 1
+        else
+            i += 1
         end
     end
     return fixations
@@ -152,7 +155,7 @@ function _get_segment_data(df::EyeData, segment, split_by)
 end
 
 """Generate a human-readable label for the current segment."""
-function _segment_label(state::EyeViewerState)
+function _segment_label(state)
     idx = state.trial[]
     n = length(state.segments)
     seg = state.segments[idx]
@@ -168,7 +171,7 @@ function _segment_label(state::EyeViewerState)
 end
 
 """Draw blink shading bands on a time-series axis."""
-function _draw_blink_bands!(ax, g::DataFrame, t::Vector{Float64}, state::EyeViewerState)
+function _draw_blink_bands!(ax, g::DataFrame, t::Vector{Float64}, state)
     !state.show_blinks[] && return
     !hasproperty(g, :in_blink) && return
 
@@ -193,7 +196,7 @@ function _draw_blink_bands!(ax, g::DataFrame, t::Vector{Float64}, state::EyeView
     end
 
     if !isempty(xlo)
-        vspan!(ax, xlo, xhi; color = (:salmon, 0.3))
+        vspan!(ax, xlo, xhi; color=(:salmon, 0.3))
     end
 end
 
@@ -203,10 +206,10 @@ end
 function _draw_spatial!(
     ax,
     g::DataFrame,
-    state::EyeViewerState,
+    state,
     saccades::Vector{SaccadeInfo},
     fixations::Vector{FixationInfo};
-    reset_zoom::Bool = false,
+    reset_zoom::Bool=false,
 )
     # Save current zoom before clearing (if user has zoomed)
     if !reset_zoom && !isnothing(state.spatial_zoom)
@@ -232,51 +235,64 @@ function _draw_spatial!(
     sx, sy = state.screen_res
 
     # Screen boundary
-    lines!(ax, [0, sx, sx, 0, 0], [0, 0, sy, sy, 0]; color = :grey70, linewidth = 1)
+    lines!(ax, [0, sx, sx, 0, 0], [0, 0, sy, sy, 0]; color=:grey70, linewidth=1)
 
     # Screen center crosshair
-    lines!(ax, [sx / 2, sx / 2], [0, sy]; color = :grey85, linewidth = 0.5)
-    lines!(ax, [0, sx], [sy / 2, sy / 2]; color = :grey85, linewidth = 0.5)
+    lines!(ax, [sx / 2, sx / 2], [0, sy]; color=:grey85, linewidth=0.5)
+    lines!(ax, [0, sx], [sy / 2, sy / 2]; color=:grey85, linewidth=0.5)
 
-    # Gaze trace
+    # Gaze trace or Heatmap
     valid = .!isnan.(gx) .& .!isnan.(gy)
-    if state.show_samples[] && any(valid)
-        lines!(ax, gx[valid], gy[valid]; color = (:black, 0.5), linewidth = 1)
+    if any(valid)
+        if state.show_heatmap[]
+            px = gx[valid]
+            py = gy[valid]
+            x_c, y_c, counts = _bin_samples(px, py, (0.0, Float64(sx)), (0.0, Float64(sy)), (50, 50))
+            vals = _gaussian_smooth(counts, 2.0)
+            Makie.heatmap!(ax, x_c, y_c, vals; colormap=:inferno, interpolate=true)
+        elseif state.show_samples[]
+            lines!(ax, gx[valid], gy[valid]; color=(:black, 0.5), linewidth=1)
+        end
     end
 
     # Fixations (use pre-extracted list)
     if state.show_fixations[]
+        fxs = Float64[]
+        fys = Float64[]
+        sizes = Float64[]
+        labels = String[]
         for (fi, f) in enumerate(fixations)
-            r = max(3.0, min(f.dur / 10.0, 40.0))
-            scatter!(
-                ax,
-                [f.x],
-                [f.y];
-                color = (:red, 0.3),
-                markersize = r,
-                marker = :circle,
-                strokewidth = 1,
-                strokecolor = :red,
-            )
+            push!(fxs, f.x)
+            push!(fys, f.y)
+            push!(sizes, max(3.0, min(f.dur / 10.0, 40.0)))
+            push!(labels, string(fi))
+        end
+        if !isempty(fxs)
+            scatter!(ax, fxs, fys; markersize=sizes, color=(:red, 0.4), marker=:circle)
+            text!(ax, fxs, fys; text=labels, color=:black, fontsize=10, align=(:center, :center))
         end
     end
 
-    # Saccades (use pre-extracted list)
+    # Saccades
     if state.show_saccades[]
-        for (si, s) in enumerate(saccades)
-            lines!(ax, [s.x1, s.x2], [s.y1, s.y2]; color = (:green, 0.7), linewidth = 2)
-            # Arrowhead at end point to show direction (negate dy for yreversed axis)
-            dx, dy = s.x2 - s.x1, -(s.y2 - s.y1)
-            θ = atan(dy, dx)
-            scatter!(
-                ax,
-                [s.x2],
-                [s.y2];
-                color = (:green, 0.7),
-                markersize = 10,
-                marker = :rtriangle,
-                rotation = [θ],
-            )
+        slx = Float64[]
+        sly = Float64[]
+        mxs, mys, dxs, dys = Float64[], Float64[], Float64[], Float64[]
+        for s in saccades
+            push!(slx, s.x1, s.x2, NaN)
+            push!(sly, s.y1, s.y2, NaN)
+            m_x, m_y = (s.x1 + s.x2) / 2, (s.y1 + s.y2) / 2
+            push!(mxs, m_x)
+            push!(mys, m_y)
+            # Arrow direction, scaled to be visible
+            push!(dxs, (s.x2 - s.x1) * 0.1)
+            push!(dys, (s.y2 - s.y1) * 0.1)
+        end
+        if !isempty(slx)
+            lines!(ax, slx, sly; color=(:green, 0.7), linewidth=2)
+        end
+        if !isempty(mxs)
+            arrows!(ax, mxs, mys, dxs, dys; color=(:green, 0.7), arrowsize=10, lengthscale=1.0)
         end
     end
 
@@ -296,7 +312,7 @@ end
 function _draw_xy_trace!(
     ax,
     g::DataFrame,
-    state::EyeViewerState,
+    state,
     saccades::Vector{SaccadeInfo},
     fixations::Vector{FixationInfo},
 )
@@ -307,61 +323,61 @@ function _draw_xy_trace!(
     gy = Float64.(g[!, state.gy_col])
     t = _trial_time(g)
 
-    lines!(ax, t, gx; color = :dodgerblue, linewidth = 1, label = "X Pos ($eye_str)")
-    lines!(ax, t, gy; color = :darkorange, linewidth = 1, label = "Y Pos ($eye_str)")
+    lines!(ax, t, gx; color=:dodgerblue, linewidth=1, label="X Pos ($eye_str)")
+    lines!(ax, t, gy; color=:darkorange, linewidth=1, label="Y Pos ($eye_str)")
     axislegend(
         ax;
-        position = :rt,
-        framevisible = false,
-        labelsize = 11,
-        padding = (4, 4, 2, 2),
+        position=:rt,
+        framevisible=false,
+        labelsize=11,
+        padding=(4, 4, 2, 2),
     )
 
     sx, sy = state.screen_res
-    hlines!(ax, [sx / 2.0]; color = :grey70, linewidth = 0.5, linestyle = :dash)
-    hlines!(ax, [sy / 2.0]; color = :grey80, linewidth = 0.5, linestyle = :dash)
+    hlines!(ax, [sx / 2.0]; color=:grey70, linewidth=0.5, linestyle=:dash)
+    hlines!(ax, [sy / 2.0]; color=:grey80, linewidth=0.5, linestyle=:dash)
 
     # Bar height = 5% of data range
     valid_gx = filter(!isnan, gx)
     valid_gy = filter(!isnan, gy)
-    y_max = max(maximum(valid_gx; init = 1.0), maximum(valid_gy; init = 1.0))
+    y_max = max(maximum(valid_gx; init=1.0), maximum(valid_gy; init=1.0))
     bar_h = max(2.0, y_max * 0.05)
 
     # Fixation bars first (drawn below saccade markers)
     if state.show_fixations[]
-        for (fi, f) in enumerate(fixations)
-            poly!(
-                ax,
-                Point2f[
-                    (t[f.time_start], 0),
-                    (t[f.time_end], 0),
-                    (t[f.time_end], bar_h),
-                    (t[f.time_start], bar_h),
-                ];
-                color = (:red, 0.3),
-            )
+        rects = Rect2f[]
+        for f in fixations
+            ts = max(1, f.time_start)
+            te = min(length(t), f.time_end)
+            if ts <= te
+                x = t[ts]
+                w = t[te] - x
+                push!(rects, Rect2f(x, 0.0, max(w, 1e-5), bar_h))
+            end
+        end
+        if !isempty(rects)
+            poly!(ax, rects; color=(:red, 0.3))
         end
     end
 
     # Saccade markers on top
     if state.show_saccades[]
-        for (si, s) in enumerate(saccades)
-            vlines!(ax, [t[s.time_idx]]; color = (:green, 0.4), linewidth = 1)
+        sx = [t[s.time_idx] for s in saccades if 1 <= s.time_idx <= length(t)]
+        if !isempty(sx)
+            vlines!(ax, sx; color=(:green, 0.4), linewidth=1)
         end
     end
 
     # Message markers
     if state.show_messages[] && hasproperty(g, :message)
+        msg_x = Float64[]
         for i in eachindex(g.message)
             if !ismissing(g.message[i]) && g.message[i] != ""
-                vlines!(
-                    ax,
-                    [t[i]];
-                    color = (:black, 0.6),
-                    linewidth = 1.5,
-                    linestyle = :dash,
-                )
+                push!(msg_x, t[i])
             end
+        end
+        if !isempty(msg_x)
+            vlines!(ax, msg_x; color=(:black, 0.6), linewidth=1.5, linestyle=:dash)
         end
     end
 
@@ -373,8 +389,9 @@ end
 function _draw_velocity!(
     ax,
     g::DataFrame,
-    state::EyeViewerState,
+    state,
     saccades::Vector{SaccadeInfo},
+    fixations::Vector{FixationInfo},
 )
     empty!(ax)
 
@@ -385,8 +402,8 @@ function _draw_velocity!(
     vx, vy = _compute_velocity(gx, gy)
     speed = sqrt.(vx .^ 2 .+ vy .^ 2)
 
-    lines!(ax, t, speed; color = :black, linewidth = 1)
-    hlines!(ax, [0.0]; color = :grey70, linewidth = 0.5)
+    lines!(ax, t, speed; color=:black, linewidth=1)
+    hlines!(ax, [0.0]; color=:grey70, linewidth=0.5)
 
     # Bar height = 5% of data range
     valid_speed = filter(!isnan, speed)
@@ -395,25 +412,26 @@ function _draw_velocity!(
 
     # Fixation bars first
     if state.show_fixations[] && hasproperty(g, :fix_gavx)
-        fixations = _extract_fixations(g)
-        for (fi, f) in enumerate(fixations)
-            poly!(
-                ax,
-                Point2f[
-                    (t[f.time_start], 0),
-                    (t[f.time_end], 0),
-                    (t[f.time_end], bar_h),
-                    (t[f.time_start], bar_h),
-                ];
-                color = (:red, 0.3),
-            )
+        rects = Rect2f[]
+        for f in fixations
+            ts = max(1, f.time_start)
+            te = min(length(t), f.time_end)
+            if ts <= te
+                x = t[ts]
+                w = t[te] - x
+                push!(rects, Rect2f(x, 0.0, max(w, 1e-5), bar_h))
+            end
+        end
+        if !isempty(rects)
+            poly!(ax, rects; color=(:red, 0.3))
         end
     end
 
     # Saccade markers on top
     if state.show_saccades[]
-        for (si, s) in enumerate(saccades)
-            vlines!(ax, [t[s.time_idx]]; color = (:green, 0.4), linewidth = 1)
+        sx = [t[s.time_idx] for s in saccades if 1 <= s.time_idx <= length(t)]
+        if !isempty(sx)
+            vlines!(ax, sx; color=(:green, 0.4), linewidth=1)
         end
     end
 
@@ -422,13 +440,13 @@ function _draw_velocity!(
 
     !isnan(t[1]) && !isnan(t[end]) && t[1] < t[end] && xlims!(ax, t[1], t[end])
 end
-function _draw_pupil!(ax, g::DataFrame, state::EyeViewerState)
+function _draw_pupil!(ax, g::DataFrame, state)
     empty!(ax)
 
     pa = Float64.(g[!, state.pa_col])
     t = _trial_time(g)
 
-    lines!(ax, t, pa; color = :black, linewidth = 1)
+    lines!(ax, t, pa; color=:black, linewidth=1)
 
     # Blink shading — use vspan! for full-height vertical bands
     _draw_blink_bands!(ax, g, t, state)
@@ -461,7 +479,7 @@ const _polar_plots = Any[]
 function _draw_saccade_polar!(
     ax,
     g::DataFrame,
-    state::EyeViewerState,
+    state,
     saccades::Vector{SaccadeInfo},
 )
     # Remove only our previously added plots (not axis decorations)
@@ -481,7 +499,7 @@ function _draw_saccade_polar!(
 
     n_bins = 36
     bin_width = 2π / n_bins
-    bin_edges = range(-π, π; length = n_bins + 1)
+    bin_edges = range(-π, π; length=n_bins + 1)
     counts = zeros(n_bins)
     for a in angles
         for b = 1:n_bins
@@ -499,10 +517,10 @@ function _draw_saccade_polar!(
             ax,
             bin_centers,
             counts;
-            width = bin_width,
-            color = (:green, 0.7),
-            strokewidth = 1.5,
-            strokecolor = :darkgreen,
+            width=bin_width,
+            color=(:green, 0.7),
+            strokewidth=1.5,
+            strokecolor=:darkgreen,
         )
         push!(_polar_plots, p)
     catch
@@ -515,11 +533,11 @@ end
 function _draw_all!(
     axes,
     df::EyeData,
-    state::EyeViewerState,
+    state,
     trial_label,
     cache::Dict{Symbol,Any};
-    reset_zoom::Bool = false,
-    window_start::Int = 1,
+    reset_zoom::Bool=false,
+    window_start::Int=1,
 )
     g_full = _get_segment_data(df, state.segments[state.trial[]], state.split_by)
     n_full = nrow(g_full)
@@ -537,7 +555,7 @@ function _draw_all!(
     gy = Float64.(g_full[!, state.gy_col])
     valid_gx = filter(!isnan, gx)
     valid_gy = filter(!isnan, gy)
-    y_max = max(maximum(valid_gx; init = 1.0), maximum(valid_gy; init = 1.0))
+    y_max = max(maximum(valid_gx; init=1.0), maximum(valid_gy; init=1.0))
 
     vx, vy = _compute_velocity(gx, gy)
     spd = sqrt.(vx .^ 2 .+ vy .^ 2)
@@ -559,18 +577,18 @@ function _draw_all!(
         axes,
         state,
         cache;
-        reset_zoom = reset_zoom,
-        window_start = window_start,
+        reset_zoom=reset_zoom,
+        window_start=window_start,
     )
 end
 
 """Fast redraw using cached full-segment data — used by scroll slider."""
 function _redraw_window!(
     axes,
-    state::EyeViewerState,
+    state,
     cache::Dict{Symbol,Any};
-    reset_zoom::Bool = false,
-    window_start::Int = 1,
+    reset_zoom::Bool=false,
+    window_start::Int=1,
 )
     g_full = cache[:g]::DataFrame
     n_full = cache[:n_full]::Int
@@ -603,7 +621,7 @@ function _redraw_window!(
             s.y1,
             s.x2,
             s.y2,
-            time_idx = s.time_idx - w_start + 1,
+            time_idx=s.time_idx - w_start + 1,
             s.angle,
             s.amplitude,
         ) for s in saccades_win
@@ -613,8 +631,8 @@ function _redraw_window!(
             f.x,
             f.y,
             f.dur,
-            time_start = max(1, f.time_start - w_start + 1),
-            time_end = min(f.time_end - w_start + 1, nrow(g)),
+            time_start=max(1, f.time_start - w_start + 1),
+            time_end=min(f.time_end - w_start + 1, nrow(g)),
         ) for f in fixations_win
     ]
 
@@ -629,11 +647,11 @@ function _redraw_window!(
         state,
         saccades_draw,
         fixations_draw;
-        reset_zoom = reset_zoom,
+        reset_zoom=reset_zoom,
     )
     _draw_saccade_polar!(axes[2], g, state, saccades_draw)
     _draw_xy_trace!(axes[3], g, state, saccades_draw, fixations_draw)
-    _draw_velocity!(axes[4], g, state, saccades_draw)
+    _draw_velocity!(axes[4], g, state, saccades_draw, fixations_draw)
     _draw_pupil!(axes[5], g, state)
 end
 
@@ -644,36 +662,36 @@ function _add_cursor_dots!(axes, cursor_obs)
     scatter!(
         axes[1],
         cursor_obs[:spatial_pts];
-        color = :black,
-        markersize = 12,
-        marker = :circle,
+        color=:black,
+        markersize=12,
+        marker=:circle,
     )
     # axes[2] is PolarAxis — no cursor dot
     scatter!(
         axes[3],
         cursor_obs[:xy_pts];
-        color = [:dodgerblue, :darkorange],
-        markersize = 10,
-        marker = :circle,
+        color=[:dodgerblue, :darkorange],
+        markersize=10,
+        marker=:circle,
     )
     scatter!(
         axes[4],
         cursor_obs[:vel_pts];
-        color = :black,
-        markersize = 10,
-        marker = :circle,
+        color=:black,
+        markersize=10,
+        marker=:circle,
     )
     scatter!(
         axes[5],
         cursor_obs[:pup_pts];
-        color = :black,
-        markersize = 10,
-        marker = :circle,
+        color=:black,
+        markersize=10,
+        marker=:circle,
     )
 end
 
 """Update the black dot cursor positions across all panels for the current frame."""
-function _update_cursor!(cursor_obs, cache::Dict{Symbol,Any}, state::EyeViewerState)
+function _update_cursor!(cursor_obs, cache::Dict{Symbol,Any}, state)
     haskey(cache, :g) || return
     g = cache[:g]::DataFrame
     nrow(g) == 0 && return
@@ -745,9 +763,9 @@ plot_databrowser(df; split_by=[:block, :trial])
 """
 function plot_databrowser(
     df::EyeData;
-    eye::Symbol = :auto,
-    split_by::Union{Nothing,Symbol,Vector{Symbol}} = :trial,
-    display_plot::Bool = true,
+    eye::Symbol=:auto,
+    split_by::Union{Nothing,Symbol,Vector{Symbol}}=:trial,
+    display_plot::Bool=true,
 )
 
     # Resolve eye
@@ -760,11 +778,11 @@ function plot_databrowser(
     if isnothing(split_by)
         segments = Any[1]  # single pseudo-segment
     elseif split_by isa Symbol
-        segments = Any[v for v in sort(unique(skipmissing(df[!, split_by])))]
+        segments = Any[v for v in sort(unique(skipmissing(df.df[!, split_by])))]
     else
         # Multi-column: get unique combos as NamedTuples
         cols = Symbol.(split_by)
-        combos = unique(df[!, cols])
+        combos = unique(df.df[!, cols])
         # Remove rows with missing values
         combos = filter(r -> all(c -> !ismissing(r[c]), cols), combos)
         # Sort by columns in order
@@ -774,15 +792,16 @@ function plot_databrowser(
     end
     isempty(segments) && error("No segments found in DataFrame for split_by=$(split_by).")
 
-    # Auto window: if first segment is large, enable windowing
+    # Initialize auto_window
     g_first = _get_segment_data(df, segments[1], split_by)
-    auto_window = nrow(g_first) > 5000 ? 5000 : 0
+    auto_window = isnothing(split_by) && nrow(g_first) > 5000 ? 5000 : 0
 
     # Create state
     state = EyeViewerState(
         Observable(1),          # segment index
         Observable(1),          # frame
         Observable(true),       # show_samples
+        Observable(false),      # show_heatmap
         Observable(true),       # show_saccades
         Observable(true),       # show_fixations
         Observable(false),      # show_blinks
@@ -801,53 +820,56 @@ function plot_databrowser(
     )
 
     # ── Figure layout ──────────────────────────────────────────────────────── #
-    fig = Figure(size = (1600, 1000))
+    fig = Figure(size=(1600, 1000))
 
-    # Left column: spatial (rows 1:2) + polar (row 3)
+    g_left = fig[1, 1] = GridLayout()
+    g_right = fig[1, 2] = GridLayout()
+
+    # Left column: spatial (top) + polar (bottom)
     ax_spatial = Axis(
-        fig[1:2, 1];
-        xlabel = "X (pixels)",
-        ylabel = "Y (pixels)",
-        aspect = DataAspect(),
-        yreversed = true,
-        title = "Gaze Position",
-        xgridvisible = false,
-        ygridvisible = false,
+        g_left[1:2, 1];
+        xlabel="X (pixels)",
+        ylabel="Y (pixels)",
+        aspect=DataAspect(),
+        yreversed=true,
+        title="Gaze Position",
+        xgridvisible=false,
+        ygridvisible=false,
     )
 
     ax_polar = PolarAxis(
-        fig[3, 1];
-        title = "Saccade Directions",
-        theta_0 = -π / 2,
-        direction = -1,
-        thetaticklabelsize = 10,
-        rtickangle = π / 6,
-        rticklabelsize = 10,
+        g_left[3, 1];
+        title="Saccade Directions",
+        theta_0=-π / 2,
+        direction=-1,
+        thetaticklabelsize=10,
+        rtickangle=π / 6,
+        rticklabelsize=10,
     )
 
     # Right column: time-series (rows 1:3)
     ax_xy = Axis(
-        fig[1, 2];
-        ylabel = "Position (px)",
-        xgridvisible = false,
-        ygridvisible = false,
+        g_right[1:4, 1];
+        ylabel="Position (px)",
+        xgridvisible=false,
+        ygridvisible=false,
     )
-    hidexdecorations!(ax_xy; label = true)
+    hidexdecorations!(ax_xy; label=true)
 
     ax_vel = Axis(
-        fig[2, 2];
-        ylabel = "Velocity (px/s)",
-        xgridvisible = false,
-        ygridvisible = false,
+        g_right[5, 1];
+        ylabel="Velocity (px/s)",
+        xgridvisible=false,
+        ygridvisible=false,
     )
-    hidexdecorations!(ax_vel; label = true)
+    hidexdecorations!(ax_vel; label=true)
 
     ax_pup = Axis(
-        fig[3, 2];
-        xlabel = "Time (ms)",
-        ylabel = "Pupil",
-        xgridvisible = false,
-        ygridvisible = false,
+        g_right[6, 1];
+        xlabel="Time (ms)",
+        ylabel="Pupil",
+        xgridvisible=false,
+        ygridvisible=false,
     )
 
     linkxaxes!(ax_xy, ax_vel, ax_pup)
@@ -855,13 +877,16 @@ function plot_databrowser(
     axes = [ax_spatial, ax_polar, ax_xy, ax_vel, ax_pup]
 
     # ── Controls ───────────────────────────────────────────────────────────── #
+
     # Left column (under spatial): navigation + toggles
-    left_controls = fig[4, 1] = GridLayout()
+    left_controls = fig[2, 1] = GridLayout(valign=:top)
 
     # Trial navigation + toggles — single horizontal row
     trial_label = Observable(_segment_label(state))
     n_segs = length(state.segments)
 
+
+    window_view_obs = Observable(state.window_samples > 0)
 
     # ◀ label ▶ [textbox] | toggles...
     col = 1
@@ -870,41 +895,52 @@ function plot_databrowser(
         Label(
             left_controls[1, col],
             "All Data";
-            fontsize = 14,
-            halign = :center,
-            tellwidth = true,
+            fontsize=14,
+            halign=:center,
+            tellwidth=true,
         )
         col += 1
+        
+        tog_win = Toggle(left_controls[1, col]; active=window_view_obs[], tellwidth=true)
+        col += 1
+        Label(left_controls[1, col], "Windowed"; fontsize=12, halign=:left, tellwidth=true)
+        col += 1
+        
+        on(tog_win.active) do val
+            window_view_obs[] = val
+        end
+
         btn_prev = nothing
         btn_next = nothing
         tb_trial = nothing
     else
-        btn_prev = Button(left_controls[1, col]; label = "◀", width = 36, tellwidth = true)
+        btn_prev = Button(left_controls[1, col]; label="◀", width=36, tellwidth=true)
         col += 1
         Label(
             left_controls[1, col],
             trial_label;
-            fontsize = 14,
-            halign = :center,
-            tellwidth = true,
+            fontsize=14,
+            halign=:center,
+            tellwidth=true,
         )
         col += 1
-        btn_next = Button(left_controls[1, col]; label = "▶", width = 36, tellwidth = true)
+        btn_next = Button(left_controls[1, col]; label="▶", width=36, tellwidth=true)
         col += 1
         tb_trial = Textbox(
             left_controls[1, col];
-            placeholder = "Trial #",
-            validator = Int,
-            width = 70,
-            stored_string = nothing,
-            tellwidth = true,
-            reset_on_defocus = true,
+            placeholder="Trial #",
+            validator=Int,
+            width=70,
+            stored_string=nothing,
+            tellwidth=true,
+            reset_on_defocus=true,
         )
         col += 1
     end
 
     toggles = [
         ("Samples", state.show_samples),
+        ("Heatmap", state.show_heatmap),
         ("Fixations", state.show_fixations),
         ("Saccades", state.show_saccades),
         ("Blinks", state.show_blinks),
@@ -914,14 +950,14 @@ function plot_databrowser(
     tcol = 0
     for (i, (label, obs)) in enumerate(toggles)
         tcol += 1
-        tog = Toggle(left_controls[2, tcol]; active = obs[], tellwidth = true)
+        tog = Toggle(left_controls[2, tcol]; active=obs[], tellwidth=true)
         tcol += 1
         Label(
             left_controls[2, tcol],
             label;
-            fontsize = 12,
-            halign = :left,
-            tellwidth = true,
+            fontsize=12,
+            halign=:left,
+            tellwidth=true,
         )
         on(tog.active) do val
             obs[] = val
@@ -931,7 +967,7 @@ function plot_databrowser(
                 state,
                 trial_label,
                 _cache;
-                window_start = isnothing(sl_scroll) ? 1 : round(Int, sl_scroll.value[]),
+                window_start=isnothing(sl_scroll) ? 1 : round(Int, sl_scroll.value[]),
             )
             _add_cursor_dots!(axes, cursor_obs)
             _update_cursor!(cursor_obs, _cache, state)
@@ -941,62 +977,77 @@ function plot_databrowser(
     colgap!(left_controls, 4)
     rowgap!(left_controls, 4)
 
-    # Scrubber area: sliders in column 2 aligned with plots
+    # Scrubber area: sliders in column 2 aligned exactly with plots
+    slider_controls = fig[2, 2] = GridLayout(valign=:top)
+
     g1 = _get_segment_data(df, state.segments[1], state.split_by)
     n_samples_init = max(1, nrow(g1))
     ws = state.window_samples
     _is_windowed = ws > 0 && n_samples_init > ws
 
-    # Row 5: play button (col 1) + frame slider (col 2)
-    # Frame slider: cursor within window (range = window_size or full segment)
+    # Row 1: play button (col 1) + frame slider (col 2)
     frame_range = _is_windowed ? ws : n_samples_init
     btn_play =
-        Button(fig[5, 1]; label = "▶", fontsize = 14, tellwidth = false, halign = :right)
+        Button(slider_controls[1, 1]; label="▶", fontsize=14, tellwidth=false, halign=:right)
     sl_frame = Slider(
-        fig[5, 2];
-        range = 1:frame_range,
-        startvalue = 1,
-        snap = true,
-        tellwidth = false,
+        slider_controls[1, 2];
+        range=1:frame_range,
+        startvalue=1,
+        snap=true,
+        tellwidth=false,
     )
 
-    # Row 6: speed label (col 1) + speed slider (col 2)
+    # Row 2: speed label (col 1) + speed slider (col 2)
     lbl_speed =
-        Label(fig[6, 1], "Speed:"; fontsize = 11, halign = :right, tellwidth = false)
-    sample_rate = round(
-        Int,
-        1.0 / max(
-            1e-6,
-            (
-                nrow(g1) > 1 ?
-                (Float64(g1[end, :time]) - Float64(g1[1, :time])) / (nrow(g1) - 1) /
-                1000.0 : 0.001
-            ),
-        ),
-    )
+        Label(slider_controls[2, 1], "Speed:"; fontsize=11, halign=:right, tellwidth=false)
+    sample_rate = round(Int, 1.0 / max(1e-6, (nrow(g1) > 1 ? (Float64(g1[end, :time]) - Float64(g1[1, :time])) / (nrow(g1) - 1) / 1000.0 : 0.001)))
     realtime_step = max(1, round(Int, sample_rate / 30))
     max_speed = realtime_step * 2
     sl_speed = Slider(
-        fig[6, 2];
-        range = 1:1:max_speed,
-        startvalue = realtime_step,
-        snap = true,
-        tellwidth = false,
+        slider_controls[2, 2];
+        range=1:1:max_speed,
+        startvalue=realtime_step,
+        snap=true,
+        tellwidth=false,
     )
 
-    # Row 7: scroll slider — only for windowed mode
-    sl_scroll = nothing
-    if _is_windowed
-        Label(fig[7, 1], "Scroll:"; fontsize = 11, halign = :right, tellwidth = false)
-        scroll_max = max(1, n_samples_init - ws + 1)
-        sl_scroll = Slider(
-            fig[7, 2];
-            range = 1:scroll_max,
-            startvalue = 1,
-            snap = false,
-            tellwidth = false,
-        )
+    # Row 3: scroll slider (visibility bound to window_view_obs)
+    lbl_scroll = Label(slider_controls[3, 1], "Scroll:"; fontsize=11, halign=:right, tellwidth=false)
+    scroll_max = max(1, n_samples_init - (window_view_obs[] ? 5000 : 10000) + 1)
+    sl_scroll = Slider(
+        slider_controls[3, 2];
+        range=1:scroll_max,
+        startvalue=1,
+        snap=false,
+        tellwidth=false,
+    )
+    
+    on(window_view_obs) do is_win
+        lbl_scroll.blockscene.visible = is_win && isnothing(state.split_by)
+        sl_scroll.blockscene.visible = is_win && isnothing(state.split_by)
+        
+        state.window_samples = is_win ? 5000 : 0
+        ws = state.window_samples
+        n = max(1, nrow(_get_segment_data(df, state.segments[state.trial[]], state.split_by)))
+        
+        frame_range = (ws > 0 && n > ws) ? ws : n
+        sl_frame.range[] = 1:frame_range
+        
+        if ws > 0 && n > ws
+            sl_scroll.range[] = 1:max(1, n - ws + 1)
+            # Avoid triggering the slider hook synchronously if possible, safely bypass set_close_to! cascade
+            sl_scroll.value.val = 1
+        end
+        
+        _redraw_window!(axes, state, _cache; reset_zoom=true, window_start=1)
+        _add_cursor_dots!(axes, cursor_obs)
+        _update_cursor!(cursor_obs, _cache, state)
+        _create_overlay_plots!()
     end
+    
+    # Initialize visibility
+    lbl_scroll.blockscene.visible = window_view_obs[] && isnothing(state.split_by)
+    sl_scroll.blockscene.visible = window_view_obs[] && isnothing(state.split_by)
 
     # Play/pause state — animates cursor within visible window
     _playing = Observable(false)
@@ -1045,7 +1096,7 @@ function plot_databrowser(
         ws = state.window_samples
         if ws > 0 && n > ws
             if !isnothing(sl_scroll)
-                sl_scroll.range[] = 1:max(1, n-ws+1)
+                sl_scroll.range[] = 1:max(1, n - ws + 1)
                 set_close_to!(sl_scroll, 1)
             end
             sl_frame.range[] = 1:ws
@@ -1060,8 +1111,8 @@ function plot_databrowser(
             state,
             trial_label,
             _cache;
-            reset_zoom = true,
-            window_start = w_start,
+            reset_zoom=true,
+            window_start=w_start,
         )
         _add_cursor_dots!(axes, cursor_obs)
         _update_cursor!(cursor_obs, _cache, state)
@@ -1107,7 +1158,7 @@ function plot_databrowser(
     if !isnothing(sl_scroll)
         on(sl_scroll.value) do w
             w_start = round(Int, w)
-            _redraw_window!(axes, state, _cache; window_start = w_start)
+            _redraw_window!(axes, state, _cache; window_start=w_start)
             _add_cursor_dots!(axes, cursor_obs)
             _create_overlay_plots!()
             # Re-map cursor to new window
@@ -1162,37 +1213,37 @@ function plot_databrowser(
         lines!(
             axes[1],
             _hl_sacc_spatial_pts;
-            color = (:green, 0.9),
-            linewidth = 6,
-            visible = _hl_sacc_vis,
+            color=(:green, 0.9),
+            linewidth=6,
+            visible=_hl_sacc_vis,
         )
         vlines!(
             axes[3],
             _hl_sacc_xy_t;
-            color = (:green, 0.7),
-            linewidth = 3,
-            visible = _hl_sacc_vis,
+            color=(:green, 0.7),
+            linewidth=3,
+            visible=_hl_sacc_vis,
         )
         vlines!(
             axes[4],
             _hl_sacc_vel_t;
-            color = (:green, 0.7),
-            linewidth = 3,
-            visible = _hl_sacc_vis,
+            color=(:green, 0.7),
+            linewidth=3,
+            visible=_hl_sacc_vis,
         )
 
         scatter!(
             axes[1],
             _hl_fix_spatial_pts;
-            color = (:red, 0.1),
-            markersize = _hl_fix_spatial_ms,
-            marker = :circle,
-            strokewidth = 3,
-            strokecolor = :red,
-            visible = _hl_fix_vis,
+            color=(:red, 0.1),
+            markersize=_hl_fix_spatial_ms,
+            marker=:circle,
+            strokewidth=3,
+            strokecolor=:red,
+            visible=_hl_fix_vis,
         )
-        poly!(axes[3], _hl_fix_xy_pts; color = (:red, 0.5), visible = _hl_fix_vis)
-        poly!(axes[4], _hl_fix_vel_pts; color = (:red, 0.5), visible = _hl_fix_vis)
+        poly!(axes[3], _hl_fix_xy_pts; color=(:red, 0.5), visible=_hl_fix_vis)
+        poly!(axes[4], _hl_fix_vel_pts; color=(:red, 0.5), visible=_hl_fix_vis)
     end
 
     function _update_highlight_overlay!()
@@ -1229,8 +1280,8 @@ function plot_databrowser(
                     axes[2],
                     [s.angle, s.angle],
                     [0.0, r_max];
-                    color = :red,
-                    linewidth = 2,
+                    color=:red,
+                    linewidth=2,
                 )
                 push!(_polar_plots, hl)
             catch
@@ -1446,18 +1497,32 @@ function plot_databrowser(
         state,
         trial_label,
         _cache;
-        reset_zoom = true,
-        window_start = isnothing(sl_scroll) ? 1 : 1,
+        reset_zoom=true,
+        window_start=isnothing(sl_scroll) ? 1 : 1,
     )
     _add_cursor_dots!(axes, cursor_obs)
     _update_cursor!(cursor_obs, _cache, state)
     _create_overlay_plots!()
 
-    # Column widths: spatial gets 40%, time traces get 60%
-    colsize!(fig.layout, 1, Relative(0.55))
-    colsize!(fig.layout, 2, Relative(0.45))
-    # Row heights: polar plot (row 3) is compact
-    rowsize!(fig.layout, 3, Fixed(300))
+    # Figure layout columns and UI rows
+    colsize!(fig.layout, 1, Relative(0.60))
+    colsize!(fig.layout, 2, Relative(0.40))
+    colsize!(slider_controls, 2, Relative(1.05))
+
+    # Proportion main rows: 90% for plots, 10% for UI controls
+    rowsize!(fig.layout, 1, Relative(0.90))
+    rowsize!(fig.layout, 2, Relative(0.10))
+
+    # Left column row heights: Spatial gets 2.0, Polar gets 1.25
+    rowsize!(g_left, 1, Auto(2.0))
+    rowsize!(g_left, 2, Auto(1.25))
+
+    # Right column row heights: Position plot twice as high as Velocity and Pupil
+    rowsize!(g_right, 1, Auto(2.0))
+    rowsize!(g_right, 2, Auto(1.0))
+    rowsize!(g_right, 3, Auto(1.0))
+
+
 
     if display_plot
         display(fig)

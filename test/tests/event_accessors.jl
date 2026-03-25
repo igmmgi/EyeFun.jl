@@ -7,7 +7,7 @@
     isfile(edf_path) || @warn "test1.edf not found"
 
     if isfile(edf_path)
-        edf = read_eyelink_edf_binary(edf_path)
+        edf = read_eyelink_edf(edf_path)
 
         @testset "fixations" begin
             fix = fixations(edf)

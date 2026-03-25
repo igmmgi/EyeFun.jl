@@ -44,7 +44,7 @@ All conditions must match (AND logic). Also supports plain `Int` for trial numbe
     _apply_selection(df, (stimulus="Face",))             # all trials with stimulus == "Face"
 """
 function _apply_selection(df::EyeData, selection)
-    selection === nothing && return df
+    selection === nothing && return df.df
 
     # Backward compat: plain Int → filter by trial
     if selection isa Int
@@ -73,31 +73,74 @@ function _apply_selection(df::EyeData, selection)
     )
 end
 
-"""Draw AOI rectangles on an axis. `aois` is a Dict of name => (x1, y1, x2, y2)."""
-function _draw_aois!(ax, aois::Dict)
+"""Format a clean plot title, e.g. "Gaze: Trial=1" or "Gaze: Trial=1:10, Stimulus=Face"."""
+function _format_title(prefix::String, selection)
+    selection === nothing && return prefix
+    if selection isa Int
+        return "$prefix: Trial=$selection"
+    end
+    if selection isa NamedTuple
+        parts = ["$(titlecase(string(k)))=$(v isa AbstractRange ? "$(first(v)):$(last(v))" : v)" for (k, v) in pairs(selection)]
+        return "$prefix: $(join(parts, ", "))"
+    end
+    return prefix
+end
+
+"""Draw AOI shapes on an axis."""
+function _draw_aois!(ax, aois::Vector{<:AOI})
     isempty(aois) && return
     colors = Makie.wong_colors()
-    for (i, (name, bounds)) in enumerate(sort(collect(aois)))
-        x1, y1, x2, y2 = bounds
+    for (i, aoi) in enumerate(sort(aois; by=a -> a.name))
         c = colors[mod1(i, length(colors))]
-        poly!(
-            ax,
-            Makie.Rect(x1, y1, x2-x1, y2-y1);
-            color = (c, 0.15),
-            strokewidth = 2,
-            strokecolor = c,
-        )
-        Makie.text!(
-            ax,
-            (x1 + x2) / 2,
-            y1;
-            text = name,
-            align = (:center, :bottom),
-            fontsize = 12,
-            color = c,
-            font = :bold,
-        )
+        _draw_single_aoi!(ax, aoi, c)
     end
+end
+
+function _draw_single_aoi!(ax, aoi::RectAOI, c)
+    poly!(
+        ax,
+        Makie.Rect(aoi.x1, aoi.y1, aoi.x2 - aoi.x1, aoi.y2 - aoi.y1);
+        color = (c, 0.15),
+        strokewidth = 2,
+        strokecolor = c,
+    )
+    _aoi_label!(ax, (aoi.x1 + aoi.x2) / 2, aoi.y1, aoi.name, c)
+end
+
+function _draw_single_aoi!(ax, aoi::CircleAOI, c)
+    θ = range(0, 2π; length = 64)
+    xs = aoi.cx .+ aoi.radius .* cos.(θ)
+    ys = aoi.cy .+ aoi.radius .* sin.(θ)
+    poly!(ax, Point2f.(xs, ys); color = (c, 0.15), strokewidth = 2, strokecolor = c)
+    _aoi_label!(ax, aoi.cx, aoi.cy - aoi.radius, aoi.name, c)
+end
+
+function _draw_single_aoi!(ax, aoi::EllipseAOI, c)
+    θ = range(0, 2π; length = 64)
+    xs = aoi.cx .+ aoi.rx .* cos.(θ)
+    ys = aoi.cy .+ aoi.ry .* sin.(θ)
+    poly!(ax, Point2f.(xs, ys); color = (c, 0.15), strokewidth = 2, strokecolor = c)
+    _aoi_label!(ax, aoi.cx, aoi.cy - aoi.ry, aoi.name, c)
+end
+
+function _draw_single_aoi!(ax, aoi::PolygonAOI, c)
+    pts = Point2f.(aoi.vertices)
+    poly!(ax, pts; color = (c, 0.15), strokewidth = 2, strokecolor = c)
+    # Label at centroid
+    cx = mean(first.(aoi.vertices))
+    cy = minimum(last.(aoi.vertices))
+    _aoi_label!(ax, cx, cy, aoi.name, c)
+end
+
+function _aoi_label!(ax, x, y, name, c)
+    Makie.text!(
+        ax, x, y;
+        text = name,
+        align = (:center, :bottom),
+        fontsize = 12,
+        color = c,
+        font = :bold,
+    )
 end
 
 # ── Binning & smoothing ───────────────────────────────────────────────────── #

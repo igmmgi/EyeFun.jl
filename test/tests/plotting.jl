@@ -7,10 +7,10 @@
     isfile(edf_path) || @warn "test1.edf not found"
 
     if isfile(edf_path)
-        edf = read_eyelink_edf_binary(edf_path)
+        edf = read_eyelink_edf(edf_path)
         df = create_eyelink_edf_dataframe(edf; trial_time_zero = nothing)
 
-        aoi_regions = Dict("Center" => (440, 280, 840, 680), "TopLeft" => (0, 0, 320, 240))
+        aoi_regions = [RectAOI("Center", 440, 280, 840, 680), RectAOI("TopLeft", 0, 0, 320, 240)]
 
         @testset "plot_gaze (EDFFile)" begin
             fig = plot_gaze(edf; selection = (trial = 1,))
@@ -82,6 +82,23 @@
         @testset "plot_dwell" begin
             fig = plot_dwell(df, aoi_regions; selection = (trial = 1,))
             @test fig isa Makie.Figure
+        end
+
+        @testset "plot_sequence" begin
+            fig = plot_sequence(df; selection = (trial = 1:5,))
+            @test fig isa Makie.Figure
+        end
+
+        @testset "plot_transitions" begin
+            fig = plot_transitions(df, aoi_regions; selection = (trial = 1:5,))
+            @test fig isa Makie.Figure
+        end
+
+        @testset "plot_comparison" begin
+            if hasproperty(df.df, :type)
+                fig = plot_comparison(df; compare_by = :type)
+                @test fig isa Makie.Figure
+            end
         end
     end
 end

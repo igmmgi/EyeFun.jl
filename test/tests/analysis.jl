@@ -7,10 +7,10 @@
     isfile(edf_path) || @warn "test1.edf not found"
 
     if isfile(edf_path)
-        edf = read_eyelink_edf_binary(edf_path)
+        edf = read_eyelink_edf(edf_path)
         df = create_eyelink_edf_dataframe(edf; trial_time_zero = nothing)
 
-        aoi_regions = Dict("Center" => (440, 280, 840, 680), "TopLeft" => (0, 0, 320, 240))
+        aoi_regions = [RectAOI("Center", 440, 280, 840, 680), RectAOI("TopLeft", 0, 0, 320, 240)]
 
         @testset "data_quality" begin
             dq = data_quality(df)
@@ -70,6 +70,127 @@
             @test hasproperty(am, :entry_count)
             # Should have one row per AOI per trial
             @test nrow(am) == length(aoi_regions)
+
+            # Test with CircleAOI
+            circle_aois = [CircleAOI("Center", 640, 480, 200)]
+            am2 = aoi_metrics(df, circle_aois; selection = (trial = 1,))
+            @test am2 isa DataFrame
+            @test nrow(am2) > 0
+        end
+
+        @testset "coordinates" begin
+            ppd = pixels_per_degree(df)
+            @test ppd > 0
+            @test ppd isa Float64
+
+            # Screen center should be (0, 0) in degrees
+            cx, cy = df.screen_res[1] / 2, df.screen_res[2] / 2
+            xd, yd = px_to_deg(df, cx, cy)
+            @test xd ≈ 0.0 atol = 0.01
+            @test yd ≈ 0.0 atol = 0.01
+
+            # Round-trip
+            xp, yp = deg_to_px(df, xd, yd)
+            @test xp ≈ cx atol = 0.01
+            @test yp ≈ cy atol = 0.01
+        end
+
+        @testset "exclude_trials!" begin
+            df_copy = EyeData(copy(df.df);
+                source = df.source, sample_rate = df.sample_rate,
+                screen_res = df.screen_res, screen_width_cm = df.screen_width_cm,
+                viewing_distance_cm = df.viewing_distance_cm)
+            n_before = length(unique(skipmissing(df_copy.df.trial)))
+            result = exclude_trials!(df_copy; max_tracking_loss = 50.0, verbose = false)
+            @test result.n_before == n_before
+            @test result.n_after <= n_before
+            @test result.n_excluded >= 0
+        end
+
+        @testset "transition_matrix" begin
+            tm = transition_matrix(df, aoi_regions; selection = (trial = 1:5,))
+            @test tm.matrix isa Matrix{Float64}
+            @test length(tm.labels) == length(aoi_regions)
+            @test size(tm.matrix) == (length(aoi_regions), length(aoi_regions))
+        end
+
+        @testset "fixation_metrics" begin
+            fm = fixation_metrics(df, aoi_regions; selection = (trial = 1:5,))
+            @test fm isa DataFrame
+            @test nrow(fm) > 0
+            @test hasproperty(fm, :aoi)
+            @test hasproperty(fm, :first_fixation_duration)
+            @test hasproperty(fm, :gaze_duration)
+            @test hasproperty(fm, :total_time)
+            @test hasproperty(fm, :fixation_count)
+            @test hasproperty(fm, :revisits)
+            @test hasproperty(fm, :skipped)
+        end
+
+        @testset "scanpath_similarity" begin
+            result = scanpath_similarity(df, aoi_regions;
+                selection1 = (trial = 1,), selection2 = (trial = 2,))
+            @test result.distance isa Int
+            @test 0.0 <= result.similarity <= 1.0
+            @test result.seq1 isa String
+            @test result.seq2 isa String
+
+            # Same trial should have similarity 1.0
+            same = scanpath_similarity(df, aoi_regions;
+                selection1 = (trial = 1,), selection2 = (trial = 1,))
+            @test same.similarity == 1.0
+        end
+
+        @testset "time_bin" begin
+            tb = time_bin(df; bin_ms = 100, measure = :pupil, selection = (trial = 1:3,))
+            @test tb isa DataFrame
+            @test nrow(tb) > 0
+            @test hasproperty(tb, :time_bin)
+            @test hasproperty(tb, :value)
+            @test hasproperty(tb, :n)
+        end
+
+        @testset "proportion_of_looks" begin
+            pol = proportion_of_looks(df, aoi_regions;
+                bin_ms = 100, selection = (trial = 1:3,))
+            @test pol isa DataFrame
+            @test nrow(pol) > 0
+            @test hasproperty(pol, :time_bin)
+            @test hasproperty(pol, :outside)
+            # Should have columns for each AOI name
+            for aoi in aoi_regions
+                @test hasproperty(pol, Symbol(aoi.name))
+            end
+        end
+
+        @testset "velocity_filter!" begin
+            df_copy = EyeData(copy(df.df);
+                source = df.source, sample_rate = df.sample_rate,
+                screen_res = df.screen_res, screen_width_cm = df.screen_width_cm,
+                viewing_distance_cm = df.viewing_distance_cm)
+            n_removed = velocity_filter!(df_copy; threshold_deg_s = 1000.0)
+            @test n_removed isa Int
+            @test n_removed >= 0
+        end
+
+        @testset "outlier_filter!" begin
+            df_copy = EyeData(copy(df.df);
+                source = df.source, sample_rate = df.sample_rate,
+                screen_res = df.screen_res, screen_width_cm = df.screen_width_cm,
+                viewing_distance_cm = df.viewing_distance_cm)
+            n_removed = outlier_filter!(df_copy)
+            @test n_removed isa Int
+            @test n_removed >= 0
+        end
+
+        @testset "interpolate_gaps!" begin
+            df_copy = EyeData(copy(df.df);
+                source = df.source, sample_rate = df.sample_rate,
+                screen_res = df.screen_res, screen_width_cm = df.screen_width_cm,
+                viewing_distance_cm = df.viewing_distance_cm)
+            n_filled = interpolate_gaps!(df_copy; max_gap_ms = 75)
+            @test n_filled isa Int
+            @test n_filled >= 0
         end
 
         @testset "group_summary" begin
@@ -96,9 +217,32 @@
             @test eltype(df2.df.in_msacc) == Bool
         end
 
-        @testset "batch_read_eyelink_edf_dataframe" begin
+        @testset "prepare_analysis_data" begin
+            pad = prepare_analysis_data(df;
+                measures = [:pupil, :gaze_x], selection = (trial = 1:3,))
+            @test pad isa DataFrame
+            @test nrow(pad) > 0
+            @test hasproperty(pad, :time)
+            @test hasproperty(pad, :sample)
+            @test hasproperty(pad, :pupil)
+            @test hasproperty(pad, :gaze_x)
+            @test hasproperty(pad, :trial)
+        end
+
+        @testset "growth_curve_data" begin
+            tb = time_bin(df; bin_ms = 100, measure = :pupil, selection = (trial = 1:3,))
+            gcd = growth_curve_data(tb; degree = 3)
+            @test gcd isa DataFrame
+            @test hasproperty(gcd, :ot1)
+            @test hasproperty(gcd, :ot2)
+            @test hasproperty(gcd, :ot3)
+            # ot columns should be normalized (mean ≈ 0)
+            @test abs(mean(gcd.ot1)) < 0.1
+        end
+
+        @testset "batch_read_eyelink" begin
             # Read the same file twice as two "participants"
-            df_batch = batch_read_eyelink_edf_dataframe(
+            df_batch = batch_read_eyelink(
                 [edf_path, edf_path];
                 participant_labels = ["sub01", "sub02"],
             )

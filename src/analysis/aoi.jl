@@ -1,7 +1,7 @@
 # ── aoi_metrics ────────────────────────────────────────────────────────────── #
 
 """
-    aoi_metrics(df::EyeData, aois::Dict{String, <:Tuple};
+    aoi_metrics(df::EyeData, aois::Vector{<:AOI};
                 selection=nothing, eye=:auto, group_by=:trial)
 
 Compute standard Area of Interest metrics per group. Returns a DataFrame with:
@@ -15,20 +15,20 @@ Compute standard Area of Interest metrics per group. Returns a DataFrame with:
 - `entry_count` — number of gaze entries into AOI
 
 # Parameters
-- `aois`: dictionary mapping AOI names to `(x1, y1, x2, y2)` bounding boxes
+- `aois`: vector of AOI objects (RectAOI, CircleAOI, EllipseAOI, PolygonAOI)
 - `selection`: optional selection predicate to filter samples
 - `eye`: which eye to use (`:auto`, `:left`, `:right`)
 - `group_by`: grouping column(s) (default `:trial`)
 
 # Example
 ```julia
-aois = Dict("Face" => (400, 200, 800, 600))
+aois = [RectAOI("Face", 400, 200, 800, 600)]
 am = aoi_metrics(df, aois; group_by=[:block, :trial])
 ```
 """
 function aoi_metrics(
     df::EyeData,
-    aois::Dict{String,<:Tuple};
+    aois::Vector{<:AOI};
     selection = nothing,
     eye::Symbol = :auto,
     group_by = :trial,
@@ -43,7 +43,6 @@ function aoi_metrics(
 
     has_rel = hasproperty(samples, :time_rel)
     sr = df.sample_rate
-    aoi_names = sort(collect(keys(aois)))
 
     rows = NamedTuple[]
 
@@ -62,12 +61,10 @@ function aoi_metrics(
             t = t_raw .- t_raw[1]
         end
 
-        for aoi_name in aoi_names
-            x1, y1, x2, y2 = aois[aoi_name]
-
-            # Compute in_aoi without intermediate allocations
-            in_aoi = @. !isnan(gx) & !isnan(gy) & (gx >= x1) & (gx <= x2) & (gy >= y1) &
-               (gy <= y2)
+        for aoi in aois
+            # Compute in_aoi using contains() dispatch
+            in_aoi = Bool[!isnan(gx[i]) && !isnan(gy[i]) && contains(aoi, gx[i], gy[i])
+                          for i in eachindex(gx)]
 
             # Dwell time in ms (using actual sample rate)
             dwell = round(sum(in_aoi) / sr * 1000.0; digits = 1)
@@ -85,10 +82,9 @@ function aoi_metrics(
                 col_fy = g.fix_gavy
                 col_fd = g.fix_dur
                 for i in eachindex(col_fx)
-                    # Detect fixation onset (transition into fixation)
                     is_onset = col_in_fix[i] && (i == 1 || !col_in_fix[i-1])
                     if is_onset && !isnan(col_fx[i]) && !isnan(col_fy[i])
-                        if x1 <= col_fx[i] <= x2 && y1 <= col_fy[i] <= y2
+                        if contains(aoi, col_fx[i], col_fy[i])
                             fix_count += 1
                             if isnan(first_fix_time) && !isnan(t[i])
                                 first_fix_time = t[i]
@@ -98,7 +94,6 @@ function aoi_metrics(
                     end
                 end
             else
-                # Fallback: first sample in AOI
                 for i in eachindex(in_aoi)
                     if in_aoi[i] && !isnan(t[i])
                         first_fix_time = t[i]
@@ -112,7 +107,7 @@ function aoi_metrics(
                 merge(
                     label,
                     (
-                        aoi = aoi_name,
+                        aoi = aoi.name,
                         dwell_time_ms = dwell,
                         fixation_count = fix_count,
                         first_fixation_time_ms = isnan(first_fix_time) ? missing :

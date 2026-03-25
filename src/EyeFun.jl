@@ -12,15 +12,17 @@ using Statistics
 
 # Types
 export EyeData
+export AOI, RectAOI, CircleAOI, EllipseAOI, PolygonAOI
+export contains
 
 # I/O
+export read_eyelink
 export read_eyelink_edf
-export read_eyelink_edf_binary
-export read_eyelink_edf_asc
-export write_eyelink_edf_to_asc
+export read_eyelink_asc
+export write_eyelink_edf_to_ascii
 export create_eyelink_edf_dataframe
-export read_eyelink_edf_dataframe
-export batch_read_eyelink_edf_dataframe
+export batch_read_eyelink
+export read_smi
 
 # Event accessors
 export saccades
@@ -39,12 +41,38 @@ export interpolate_blinks!
 export baseline_correct_pupil!
 export smooth_pupil!
 export drift_correct!
+export exclude_trials!
+
+# Coordinates
+export pixels_per_degree
+export px_to_deg
+export deg_to_px
+export to_center_coords!
+
+# Transitions & scanpath
+export transition_matrix
+export scanpath_similarity
+
+# Fixation metrics
+export fixation_metrics
+
+# Time course
+export time_bin
+export proportion_of_looks
+
+# Filtering
+export velocity_filter!
+export outlier_filter!
+export interpolate_gaps!
+
+# Statistics
+export prepare_analysis_data
+export growth_curve_data
 
 # Event detection
 export detect_events!
 export detect_microsaccades!
 
-# Plotting
 export plot_gaze
 export plot_scanpath
 export plot_heatmap
@@ -52,6 +80,8 @@ export plot_fixations
 export plot_pupil
 export plot_velocity
 export plot_dwell
+export plot_sequence
+export plot_transitions
 export plot_databrowser
 
 # ── Source files ──────────────────────────────────────────────────────────── #
@@ -68,14 +98,23 @@ include("eyelink_edf/parsers.jl")
 include("eyelink_edf/ascii_exporter.jl")
 include("eyelink_edf/eyelink.jl")
 
-# Analysis
+# SMI support
+include("smi/smi_reader.jl")
+
 include("analysis/analysis.jl")
 include("analysis/aoi.jl")
 include("analysis/batch.jl")
+include("analysis/coordinates.jl")
 include("analysis/detect_events.jl")
 include("analysis/drift.jl")
+include("analysis/exclusion.jl")
+include("analysis/filtering.jl")
+include("analysis/fixation_metrics.jl")
 include("analysis/microsaccades.jl")
 include("analysis/pupil.jl")
+include("analysis/scanpath_comparison.jl")
+include("analysis/statistics.jl")
+include("analysis/time_course.jl")
 
 # Plotting
 include("plots/common/common.jl")
@@ -86,6 +125,8 @@ include("plots/plot_fixations.jl")
 include("plots/plot_pupil.jl")
 include("plots/plot_velocity.jl")
 include("plots/plot_dwell.jl")
+include("plots/plot_sequence.jl")
+include("plots/plot_transitions.jl")
 include("plots/plot_databrowser.jl")
 include("eyelink_edf/plotting_edf.jl")
 

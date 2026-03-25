@@ -50,7 +50,7 @@ edf.recordings   # DataFrame: time, sample_rate, eye, state, …
 Convert an EDF file to ASC format (equivalent to `edf2asc`):
 
 ```julia
-write_eyelink_edf_to_asc("recording.edf", "recording.asc")
+write_eyelink_edf_to_ascii("recording.edf")  # → recording.asc
 ```
 
 ## create_eyelink_edf_dataframe

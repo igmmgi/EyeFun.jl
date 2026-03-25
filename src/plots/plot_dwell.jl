@@ -1,52 +1,47 @@
 # ── plot_dwell ─────────────────────────────────────────────────────────────── #
 
 """
-    plot_dwell(df::EyeData, aois::Dict{String, Tuple};
+    plot_dwell(df::EyeData, aois::Vector{<:AOI};
                selection=nothing, eye=:auto)
 
 Bar chart of dwell time (ms) per Area of Interest.
 
-`aois` is a Dict mapping AOI names to `(x_min, y_min, x_max, y_max)` rectangles.
-
 # Example
 ```julia
-aois = Dict("Face" => (400, 200, 800, 600), "Object" => (100, 100, 300, 400))
+aois = [RectAOI("Face", 400, 200, 800, 600), CircleAOI("Cross", 640, 480, 50)]
 plot_dwell(df, aois; selection=(trial=1,))
 ```
 """
 function plot_dwell(
     df::EyeData,
-    aois::Dict{String,<:Tuple};
+    aois::Vector{<:AOI};
     selection = nothing,
     eye::Symbol = :auto,
 )
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
-    gx, gy, eye_label = _select_eye(samples, eye)
+    gx, gy, _ = _select_eye(samples, eye)
 
     valid = .!isnan.(gx) .& .!isnan.(gy)
     px = Float64.(gx[valid])
     py = Float64.(gy[valid])
 
-    aoi_names = sort(collect(keys(aois)))
+    aoi_names = [a.name for a in aois]
     dwell_ms = Float64[]
     colors = Makie.wong_colors()
 
-    for name in aoi_names
-        x1, y1, x2, y2 = aois[name]
-        count = sum((px .>= x1) .& (px .<= x2) .& (py .>= y1) .& (py .<= y2))
-        push!(dwell_ms, Float64(count))  # at 1 kHz, count ≈ ms
+    for aoi in aois
+        count = sum(contains(aoi, px[i], py[i]) for i in eachindex(px))
+        push!(dwell_ms, count / df.sample_rate * 1000.0)
     end
-
-    title_sel = selection !== nothing ? " ($selection)" : ""
 
     fig = Figure(size = (500, 400))
     ax = Axis(
         fig[1, 1];
         xlabel = "AOI",
         ylabel = "Dwell time (ms)",
-        title = "Dwell Time$title_sel ($eye_label)",
+        title = _format_title("Dwell Time", selection),
         xticks = (1:length(aoi_names), aoi_names),
     )
 
