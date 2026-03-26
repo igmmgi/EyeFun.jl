@@ -38,9 +38,10 @@ function plot_velocity(df::EyeData; selection = nothing, facet = nothing)
         sacc_rows = filter(r -> r.in_sacc == true && !isnan(r.sacc_pvel), sub_facet)
 
         t_mid, pvel = Float64[], Float64[]
-        use_rel = selection !== nothing &&
-                  hasproperty(sacc_rows, :time_rel) &&
-                  !all(ismissing, sacc_rows.time_rel)
+        use_rel =
+            selection !== nothing &&
+            hasproperty(sacc_rows, :time_rel) &&
+            !all(ismissing, sacc_rows.time_rel)
 
         prev_stx = NaN
         for r in eachrow(sacc_rows)

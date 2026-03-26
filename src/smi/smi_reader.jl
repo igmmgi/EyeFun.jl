@@ -28,14 +28,24 @@ detect_events!(ed)
 plot_gaze(ed)
 ```
 """
-function read_smi(path::String; screen_width_cm::Real = 30.0, viewing_distance_cm::Real = 50.0)
+function read_smi(
+    path::String;
+    screen_width_cm::Real = 30.0,
+    viewing_distance_cm::Real = 50.0,
+)
     ext = lowercase(splitext(path)[2])
     if ext == ".txt"
-        return _read_smi_txt(path; screen_width_cm = screen_width_cm,
-                              viewing_distance_cm = viewing_distance_cm)
+        return _read_smi_txt(
+            path;
+            screen_width_cm = screen_width_cm,
+            viewing_distance_cm = viewing_distance_cm,
+        )
     elseif ext == ".idf"
-        return _read_smi_idf(path; screen_width_cm = screen_width_cm,
-                              viewing_distance_cm = viewing_distance_cm)
+        return _read_smi_idf(
+            path;
+            screen_width_cm = screen_width_cm,
+            viewing_distance_cm = viewing_distance_cm,
+        )
     else
         error("Unknown SMI file extension: $ext. Expected .txt or .idf")
     end
@@ -43,7 +53,11 @@ end
 
 # ── Text export reader ─────────────────────────────────────────────────────── #
 
-function _read_smi_txt(path::String; screen_width_cm::Real = 30.0, viewing_distance_cm::Real = 50.0)
+function _read_smi_txt(
+    path::String;
+    screen_width_cm::Real = 30.0,
+    viewing_distance_cm::Real = 50.0,
+)
     lines = readlines(path)
 
     # Parse header
@@ -87,7 +101,7 @@ function _read_smi_txt(path::String; screen_width_cm::Real = 30.0, viewing_dista
         elseif startswith(content, "Head Distance [mm]:")
             head_dist_mm = parse(Float64, strip(split(content, "\t")[end]))
         elseif startswith(content, "Format:")
-            format_str = strip(split(content, ":"; limit=2)[end])
+            format_str = strip(split(content, ":"; limit = 2)[end])
             has_left = occursin("LEFT", uppercase(format_str))
             has_right = occursin("RIGHT", uppercase(format_str))
         end
@@ -150,7 +164,7 @@ function _read_smi_txt(path::String; screen_width_cm::Real = 30.0, viewing_dista
     paR = fill(NaN, n_samples)
 
     row = 0
-    for i in (header_end + 1):length(lines)
+    for i = (header_end+1):length(lines)
         line = strip(lines[i])
         isempty(line) && continue
 
@@ -179,7 +193,8 @@ function _read_smi_txt(path::String; screen_width_cm::Real = 30.0, viewing_dista
             lx = parse(Float64, strip(fields[idx_lx]))
             ly = parse(Float64, strip(fields[idx_ly]))
         else
-            lx = 0.0; ly = 0.0
+            lx = 0.0;
+            ly = 0.0
         end
 
         # Pupil diameter (average of X and Y diameter)
@@ -210,7 +225,8 @@ function _read_smi_txt(path::String; screen_width_cm::Real = 30.0, viewing_dista
             rx = parse(Float64, strip(fields[idx_rx]))
             ry = parse(Float64, strip(fields[idx_ry]))
         else
-            rx = 0.0; ry = 0.0
+            rx = 0.0;
+            ry = 0.0
         end
 
         if idx_rdx !== nothing
@@ -268,7 +284,11 @@ end
 
 # ── IDF binary reader ──────────────────────────────────────────────────────── #
 
-function _read_smi_idf(path::String; screen_width_cm::Real = 30.0, viewing_distance_cm::Real = 50.0)
+function _read_smi_idf(
+    path::String;
+    screen_width_cm::Real = 30.0,
+    viewing_distance_cm::Real = 50.0,
+)
     data = read(path)
     n_bytes = length(data)
 
@@ -279,15 +299,19 @@ function _read_smi_idf(path::String; screen_width_cm::Real = 30.0, viewing_dista
     # Look for "TimeStamp" which marks its start
     header_str = ""
     col_offset = 0
-    for i in 1:(n_bytes - 9)
-        if data[i] == UInt8('T') && data[i+1] == UInt8('i') && data[i+2] == UInt8('m') &&
-           data[i+3] == UInt8('e') && data[i+4] == UInt8('S') && data[i+5] == UInt8('t')
+    for i = 1:(n_bytes-9)
+        if data[i] == UInt8('T') &&
+           data[i+1] == UInt8('i') &&
+           data[i+2] == UInt8('m') &&
+           data[i+3] == UInt8('e') &&
+           data[i+4] == UInt8('S') &&
+           data[i+5] == UInt8('t')
             # Read until null byte or non-printable
             j = i
             while j <= n_bytes && data[j] >= 0x20 && data[j] <= 0x7e
                 j += 1
             end
-            header_str = String(data[i:j-1])
+            header_str = String(data[i:(j-1)])
             col_offset = j
             break
         end
@@ -347,28 +371,61 @@ function _read_smi_idf(path::String; screen_width_cm::Real = 30.0, viewing_dista
     # Let's figure out the record size by finding two consecutive timestamps
 
     # Read first timestamp candidate
-    float_cols = filter(c -> c ∉ ("TimeStamp", "SetNum", "Quality", "Trig", "Aux"), col_names)
+    float_cols =
+        filter(c -> c ∉ ("TimeStamp", "SetNum", "Quality", "Trig", "Aux"), col_names)
     n_float_cols = length(float_cols)
 
     # Map column names to our output columns
     col_map = Dict{String,Symbol}()
     for c in col_names
-        if c == "LPupX"; col_map[c] = :raw_lx
-        elseif c == "LPupY"; col_map[c] = :raw_ly
-        elseif c == "LPupDX"; col_map[c] = :dia_lx
-        elseif c == "LPupDY"; col_map[c] = :dia_ly
-        elseif c == "LCr0X"; col_map[c] = :cr_lx
-        elseif c == "LCr0Y"; col_map[c] = :cr_ly
-        elseif c == "LGX"; col_map[c] = :gaze_lx
-        elseif c == "LGY"; col_map[c] = :gaze_ly
-        elseif c == "RPupX"; col_map[c] = :raw_rx
-        elseif c == "RPupY"; col_map[c] = :raw_ry
-        elseif c == "RPupDX"; col_map[c] = :dia_rx
-        elseif c == "RPupDY"; col_map[c] = :dia_ry
-        elseif c == "RCr0X"; col_map[c] = :cr_rx
-        elseif c == "RCr0Y"; col_map[c] = :cr_ry
-        elseif c == "RGX"; col_map[c] = :gaze_rx
-        elseif c == "RGY"; col_map[c] = :gaze_ry
+        if c == "LPupX"
+            ;
+            col_map[c] = :raw_lx
+        elseif c == "LPupY"
+            ;
+            col_map[c] = :raw_ly
+        elseif c == "LPupDX"
+            ;
+            col_map[c] = :dia_lx
+        elseif c == "LPupDY"
+            ;
+            col_map[c] = :dia_ly
+        elseif c == "LCr0X"
+            ;
+            col_map[c] = :cr_lx
+        elseif c == "LCr0Y"
+            ;
+            col_map[c] = :cr_ly
+        elseif c == "LGX"
+            ;
+            col_map[c] = :gaze_lx
+        elseif c == "LGY"
+            ;
+            col_map[c] = :gaze_ly
+        elseif c == "RPupX"
+            ;
+            col_map[c] = :raw_rx
+        elseif c == "RPupY"
+            ;
+            col_map[c] = :raw_ry
+        elseif c == "RPupDX"
+            ;
+            col_map[c] = :dia_rx
+        elseif c == "RPupDY"
+            ;
+            col_map[c] = :dia_ry
+        elseif c == "RCr0X"
+            ;
+            col_map[c] = :cr_rx
+        elseif c == "RCr0Y"
+            ;
+            col_map[c] = :cr_ry
+        elseif c == "RGX"
+            ;
+            col_map[c] = :gaze_rx
+        elseif c == "RGY"
+            ;
+            col_map[c] = :gaze_ry
         end
     end
 
@@ -425,25 +482,29 @@ function _read_smi_idf(path::String; screen_width_cm::Real = 30.0, viewing_dista
     #   - diff is consistent across several consecutive records (within 5%)
     #   - diff > 0 (non-zero spacing)
     #   - record_size > 40 (sanity check against tiny values)
-    for try_offset in data_start:4:min(data_start + 300, n_bytes - 300)
-        if try_offset + 7 > n_bytes; continue; end
-        ts1 = reinterpret(Int64, data[try_offset:try_offset+7])[1]
+    for try_offset = data_start:4:min(data_start+300, n_bytes-300)
+        if try_offset + 7 > n_bytes
+            ;
+            continue;
+        end
+        ts1 = reinterpret(Int64, data[try_offset:(try_offset+7)])[1]
         ts1 > 1_000_000 || continue
 
         # Try record sizes from 80 to 280
-        for rs in 80:4:280
+        for rs = 80:4:280
             try_offset + 3 * rs + 7 > n_bytes && continue
-            ts2 = reinterpret(Int64, data[try_offset+rs:try_offset+rs+7])[1]
+            ts2 = reinterpret(Int64, data[(try_offset+rs):(try_offset+rs+7)])[1]
             diff = ts2 - ts1
             diff > 0 || continue
 
             # Validate consistency across next two records as well
-            ts3 = reinterpret(Int64, data[try_offset+2*rs:try_offset+2*rs+7])[1]
-            ts4 = reinterpret(Int64, data[try_offset+3*rs:try_offset+3*rs+7])[1]
+            ts3 = reinterpret(Int64, data[(try_offset+2*rs):(try_offset+2*rs+7)])[1]
+            ts4 = reinterpret(Int64, data[(try_offset+3*rs):(try_offset+3*rs+7)])[1]
             diff2 = ts3 - ts2
             diff3 = ts4 - ts3
             # All diffs must be within 5% of each other and positive
-            if diff2 > 0 && diff3 > 0 &&
+            if diff2 > 0 &&
+               diff3 > 0 &&
                abs(diff2 - diff) < 0.05 * diff &&
                abs(diff3 - diff) < 0.05 * diff
                 record_size = rs
@@ -485,11 +546,11 @@ function _read_smi_idf(path::String; screen_width_cm::Real = 30.0, viewing_dista
     # With 10 float cols: 8 + 4 + 4 + 80 + 4 + 4 = 104
     # Let's see if 104 matches our detected record_size
 
-    for r in 1:n_records
+    for r = 1:n_records
         offset = data_start + (r - 1) * record_size
 
         # Timestamp (Int64, microseconds)
-        ts = reinterpret(Int64, data[offset:offset+7])[1]
+        ts = reinterpret(Int64, data[offset:(offset+7)])[1]
         time_vec[r] = Float64(ts) / 1000.0  # µs → ms
 
         # Skip SetNum(4) + Quality(4) = 8 bytes after timestamp
@@ -505,8 +566,11 @@ function _read_smi_idf(path::String; screen_width_cm::Real = 30.0, viewing_dista
                 continue
             end
 
-            if foffset + 7 > n_bytes; break; end
-            val = reinterpret(Float64, data[foffset:foffset+7])[1]
+            if foffset + 7 > n_bytes
+                ;
+                break;
+            end
+            val = reinterpret(Float64, data[foffset:(foffset+7)])[1]
             foffset += 8
 
             # Map to output columns
@@ -518,9 +582,15 @@ function _read_smi_idf(path::String; screen_width_cm::Real = 30.0, viewing_dista
                 paL[r] = isnan(paL[r]) ? val : (paL[r] + val) / 2.0
             elseif cname == "LGX"
                 # Prefer calibrated gaze if non-zero
-                if val != 0.0; gxL[r] = val; end
+                if val != 0.0
+                    ;
+                    gxL[r] = val;
+                end
             elseif cname == "LGY"
-                if val != 0.0; gyL[r] = val; end
+                if val != 0.0
+                    ;
+                    gyL[r] = val;
+                end
             elseif cname == "RPupX"
                 gxR[r] = val
             elseif cname == "RPupY"
@@ -528,15 +598,31 @@ function _read_smi_idf(path::String; screen_width_cm::Real = 30.0, viewing_dista
             elseif cname == "RPupDX" || cname == "RPupDY"
                 paR[r] = isnan(paR[r]) ? val : (paR[r] + val) / 2.0
             elseif cname == "RGX"
-                if val != 0.0; gxR[r] = val; end
+                if val != 0.0
+                    ;
+                    gxR[r] = val;
+                end
             elseif cname == "RGY"
-                if val != 0.0; gyR[r] = val; end
+                if val != 0.0
+                    ;
+                    gyR[r] = val;
+                end
             end
         end
 
         # Detect blinks (all zeros)
-        if gxL[r] == 0.0 && gyL[r] == 0.0; gxL[r] = NaN; gyL[r] = NaN; paL[r] = NaN; end
-        if gxR[r] == 0.0 && gyR[r] == 0.0; gxR[r] = NaN; gyR[r] = NaN; paR[r] = NaN; end
+        if gxL[r] == 0.0 && gyL[r] == 0.0
+            ;
+            gxL[r] = NaN;
+            gyL[r] = NaN;
+            paL[r] = NaN;
+        end
+        if gxR[r] == 0.0 && gyR[r] == 0.0
+            ;
+            gxR[r] = NaN;
+            gyR[r] = NaN;
+            paR[r] = NaN;
+        end
     end
 
     df = DataFrame(

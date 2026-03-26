@@ -10,7 +10,8 @@
         edf = read_eyelink_edf(edf_path)
         df = create_eyelink_edf_dataframe(edf; trial_time_zero = nothing)
 
-        aoi_regions = [RectAOI("Center", 440, 280, 840, 680), RectAOI("TopLeft", 0, 0, 320, 240)]
+        aoi_regions =
+            [RectAOI("Center", 440, 280, 840, 680), RectAOI("TopLeft", 0, 0, 320, 240)]
 
         @testset "data_quality" begin
             dq = data_quality(df)
@@ -96,10 +97,14 @@
         end
 
         @testset "exclude_trials!" begin
-            df_copy = EyeData(copy(df.df);
-                source = df.source, sample_rate = df.sample_rate,
-                screen_res = df.screen_res, screen_width_cm = df.screen_width_cm,
-                viewing_distance_cm = df.viewing_distance_cm)
+            df_copy = EyeData(
+                copy(df.df);
+                source = df.source,
+                sample_rate = df.sample_rate,
+                screen_res = df.screen_res,
+                screen_width_cm = df.screen_width_cm,
+                viewing_distance_cm = df.viewing_distance_cm,
+            )
             n_before = length(unique(skipmissing(df_copy.df.trial)))
             result = exclude_trials!(df_copy; max_tracking_loss = 50.0, verbose = false)
             @test result.n_before == n_before
@@ -128,16 +133,24 @@
         end
 
         @testset "scanpath_similarity" begin
-            result = scanpath_similarity(df, aoi_regions;
-                selection1 = (trial = 1,), selection2 = (trial = 2,))
+            result = scanpath_similarity(
+                df,
+                aoi_regions;
+                selection1 = (trial = 1,),
+                selection2 = (trial = 2,),
+            )
             @test result.distance isa Int
             @test 0.0 <= result.similarity <= 1.0
             @test result.seq1 isa String
             @test result.seq2 isa String
 
             # Same trial should have similarity 1.0
-            same = scanpath_similarity(df, aoi_regions;
-                selection1 = (trial = 1,), selection2 = (trial = 1,))
+            same = scanpath_similarity(
+                df,
+                aoi_regions;
+                selection1 = (trial = 1,),
+                selection2 = (trial = 1,),
+            )
             @test same.similarity == 1.0
         end
 
@@ -151,8 +164,12 @@
         end
 
         @testset "proportion_of_looks" begin
-            pol = proportion_of_looks(df, aoi_regions;
-                bin_ms = 100, selection = (trial = 1:3,))
+            pol = proportion_of_looks(
+                df,
+                aoi_regions;
+                bin_ms = 100,
+                selection = (trial = 1:3,),
+            )
             @test pol isa DataFrame
             @test nrow(pol) > 0
             @test hasproperty(pol, :time_bin)
@@ -164,30 +181,42 @@
         end
 
         @testset "velocity_filter!" begin
-            df_copy = EyeData(copy(df.df);
-                source = df.source, sample_rate = df.sample_rate,
-                screen_res = df.screen_res, screen_width_cm = df.screen_width_cm,
-                viewing_distance_cm = df.viewing_distance_cm)
+            df_copy = EyeData(
+                copy(df.df);
+                source = df.source,
+                sample_rate = df.sample_rate,
+                screen_res = df.screen_res,
+                screen_width_cm = df.screen_width_cm,
+                viewing_distance_cm = df.viewing_distance_cm,
+            )
             n_removed = velocity_filter!(df_copy; threshold_deg_s = 1000.0)
             @test n_removed isa Int
             @test n_removed >= 0
         end
 
         @testset "outlier_filter!" begin
-            df_copy = EyeData(copy(df.df);
-                source = df.source, sample_rate = df.sample_rate,
-                screen_res = df.screen_res, screen_width_cm = df.screen_width_cm,
-                viewing_distance_cm = df.viewing_distance_cm)
+            df_copy = EyeData(
+                copy(df.df);
+                source = df.source,
+                sample_rate = df.sample_rate,
+                screen_res = df.screen_res,
+                screen_width_cm = df.screen_width_cm,
+                viewing_distance_cm = df.viewing_distance_cm,
+            )
             n_removed = outlier_filter!(df_copy)
             @test n_removed isa Int
             @test n_removed >= 0
         end
 
         @testset "interpolate_gaps!" begin
-            df_copy = EyeData(copy(df.df);
-                source = df.source, sample_rate = df.sample_rate,
-                screen_res = df.screen_res, screen_width_cm = df.screen_width_cm,
-                viewing_distance_cm = df.viewing_distance_cm)
+            df_copy = EyeData(
+                copy(df.df);
+                source = df.source,
+                sample_rate = df.sample_rate,
+                screen_res = df.screen_res,
+                screen_width_cm = df.screen_width_cm,
+                viewing_distance_cm = df.viewing_distance_cm,
+            )
             n_filled = interpolate_gaps!(df_copy; max_gap_ms = 75)
             @test n_filled isa Int
             @test n_filled >= 0
@@ -218,8 +247,11 @@
         end
 
         @testset "prepare_analysis_data" begin
-            pad = prepare_analysis_data(df;
-                measures = [:pupil, :gaze_x], selection = (trial = 1:3,))
+            pad = prepare_analysis_data(
+                df;
+                measures = [:pupil, :gaze_x],
+                selection = (trial = 1:3,),
+            )
             @test pad isa DataFrame
             @test nrow(pad) > 0
             @test hasproperty(pad, :time)

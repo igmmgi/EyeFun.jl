@@ -123,7 +123,16 @@ function plot_heatmap(
             x_c, y_c, vals, _, cb_label =
                 _build_heatmap_data(sub, eye, xlims, ylims, bins, metric, sr)
             vals = _gaussian_smooth(vals, sigma)
-            push!(panel_data, (x_c=x_c, y_c=y_c, vals=vals, label=string(lev), cb_label=cb_label))
+            push!(
+                panel_data,
+                (
+                    x_c = x_c,
+                    y_c = y_c,
+                    vals = vals,
+                    label = string(lev),
+                    cb_label = cb_label,
+                ),
+            )
         end
 
         # Find global min/max for shared colorbar
@@ -154,10 +163,16 @@ function plot_heatmap(
                 Makie.image!(ax, xlims[1]..xlims[2], ylims[1]..ylims[2], Makie.rotr90(img))
             end
 
-            hm_ref = Makie.heatmap!(ax, pd.x_c, pd.y_c, pd.vals;
-                                    colormap = colormap, interpolate = true,
-                                    colorrange = (vmin, vmax))
-                                    
+            hm_ref = Makie.heatmap!(
+                ax,
+                pd.x_c,
+                pd.y_c,
+                pd.vals;
+                colormap = colormap,
+                interpolate = true,
+                colorrange = (vmin, vmax),
+            )
+
             aois !== nothing && _draw_aois!(ax, aois)
         end
         Colorbar(fig[1, n_panels+1], hm_ref; label = panel_data[1].cb_label)
@@ -176,7 +191,13 @@ function plot_heatmap(
     fig_h = 650
     fig_w = round(Int, fig_h * aspect_ratio + 100)
     fig = Figure(size = (fig_w, fig_h))
-    ax = Axis(fig[1, 1]; xlabel = "X (px)", ylabel = "Y (px)", title = title, aspect = DataAspect())
+    ax = Axis(
+        fig[1, 1];
+        xlabel = "X (px)",
+        ylabel = "Y (px)",
+        title = title,
+        aspect = DataAspect(),
+    )
     ax.yreversed = (ydir == :down)
     Makie.xlims!(ax, xlims...)
     Makie.ylims!(ax, ylims...)

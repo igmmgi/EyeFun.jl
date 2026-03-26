@@ -7,12 +7,7 @@ Plot pupil size over time. Shades blink periods in gray.
 
 Uses `time_rel` for X axis if available, otherwise absolute time offset.
 """
-function plot_pupil(
-    df::EyeData;
-    selection = nothing,
-    eye::Symbol = :auto,
-    facet = nothing,
-)
+function plot_pupil(df::EyeData; selection = nothing, eye::Symbol = :auto, facet = nothing)
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
@@ -43,9 +38,10 @@ function plot_pupil(
         pa = Float64.(sub_facet[!, pa_col])
 
         # Time axis — only use time_rel when a selection is active
-        use_rel = selection !== nothing &&
-                  hasproperty(sub_facet, :time_rel) &&
-                  !all(ismissing, sub_facet.time_rel)
+        use_rel =
+            selection !== nothing &&
+            hasproperty(sub_facet, :time_rel) &&
+            !all(ismissing, sub_facet.time_rel)
 
         ax = Axis(
             fig[1, idx];
@@ -101,12 +97,7 @@ function _shade_blinks!(ax, samples, t::Vector{Float64})
             while j <= length(bm) && bm[j]
                 j += 1
             end
-            Makie.vspan!(
-                ax,
-                [t[i]],
-                [t[min(j, length(t))]];
-                color = (:gray, 0.15),
-            )
+            Makie.vspan!(ax, [t[i]], [t[min(j, length(t))]]; color = (:gray, 0.15))
             i = j
         else
             i += 1

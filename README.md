@@ -25,7 +25,7 @@ Pkg.add(url="https://github.com/igmmgi/EyeFun.jl")
 ```julia
 using EyeFun
 
-# Read an EDF file (no external library needed)
+# Read an EDF file 
 edf = read_eyelink_edf("path/to/file.edf")
 
 # Or use the specific readers directly

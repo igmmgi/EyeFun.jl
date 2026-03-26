@@ -69,8 +69,10 @@ function exclude_trials!(
         n_before = n_before,
         n_excluded = n_excluded,
         n_after = n_before - n_excluded,
-        excluded = [NamedTuple{Tuple(group_cols)}(Tuple(row[c] for c in group_cols))
-                    for row in eachrow(excluded_rows)],
+        excluded = [
+            NamedTuple{Tuple(group_cols)}(Tuple(row[c] for c in group_cols)) for
+            row in eachrow(excluded_rows)
+        ],
     )
 
     if verbose

@@ -62,7 +62,7 @@ function _aoi_sequence(df::EyeData, aois::Vector{<:AOI}, selection, eye::Symbol)
 
     seq = Char[]
     prev_fx = NaN
-    for i in 1:nrow(samples)
+    for i = 1:nrow(samples)
         samples.in_fix[i] || continue
         fx = Float64(samples.fix_gavx[i])
         isnan(fx) && continue
@@ -91,9 +91,9 @@ function _levenshtein(s::AbstractString, t::AbstractString)
     prev = collect(0:n)
     curr = similar(prev)
 
-    for i in 1:m
+    for i = 1:m
         curr[1] = i
-        for j in 1:n
+        for j = 1:n
             cost = s[i] == t[j] ? 0 : 1
             curr[j+1] = min(
                 prev[j+1] + 1,     # deletion

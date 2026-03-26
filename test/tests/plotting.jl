@@ -10,7 +10,8 @@
         edf = read_eyelink_edf(edf_path)
         df = create_eyelink_edf_dataframe(edf; trial_time_zero = nothing)
 
-        aoi_regions = [RectAOI("Center", 440, 280, 840, 680), RectAOI("TopLeft", 0, 0, 320, 240)]
+        aoi_regions =
+            [RectAOI("Center", 440, 280, 840, 680), RectAOI("TopLeft", 0, 0, 320, 240)]
 
         @testset "plot_gaze (EDFFile)" begin
             fig = plot_gaze(edf; selection = (trial = 1,))

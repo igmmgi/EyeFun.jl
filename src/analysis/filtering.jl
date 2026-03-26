@@ -15,11 +15,7 @@ Returns the number of samples removed.
 n_removed = velocity_filter!(df; threshold_deg_s=800)
 ```
 """
-function velocity_filter!(
-    df::EyeData;
-    eye::Symbol = :auto,
-    threshold_deg_s::Real = 1000.0,
-)
+function velocity_filter!(df::EyeData; eye::Symbol = :auto, threshold_deg_s::Real = 1000.0)
     eye = _resolve_eye(df, eye)
     ecols = _eye_columns(eye)
     gx_col, gy_col = ecols.gx, ecols.gy
@@ -83,7 +79,7 @@ function outlier_filter!(
     end
 
     n_removed = 0
-    for i in 1:nrow(df.df)
+    for i = 1:nrow(df.df)
         gx = df.df[i, gx_col]
         gy = df.df[i, gy_col]
         isnan(gx) && continue
@@ -113,11 +109,7 @@ Returns the number of gaps interpolated.
 n_filled = interpolate_gaps!(df; max_gap_ms=100)
 ```
 """
-function interpolate_gaps!(
-    df::EyeData;
-    eye::Symbol = :auto,
-    max_gap_ms::Real = 75,
-)
+function interpolate_gaps!(df::EyeData; eye::Symbol = :auto, max_gap_ms::Real = 75)
     eye = _resolve_eye(df, eye)
     ecols = _eye_columns(eye)
     gx_col, gy_col = ecols.gx, ecols.gy
@@ -141,10 +133,10 @@ function interpolate_gaps!(
 
                 # Only interpolate if gap is short and bounded by valid samples
                 if gap_len <= max_gap_samples && gap_start > 1 && gap_end < n
-                    v_before = vals[gap_start - 1]
-                    v_after = vals[gap_end + 1]
+                    v_before = vals[gap_start-1]
+                    v_after = vals[gap_end+1]
                     if !isnan(v_before) && !isnan(v_after)
-                        for j in gap_start:gap_end
+                        for j = gap_start:gap_end
                             frac = (j - gap_start + 1) / (gap_len + 1)
                             vals[j] = v_before + frac * (v_after - v_before)
                         end

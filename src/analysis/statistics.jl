@@ -58,7 +58,7 @@ function prepare_analysis_data(
             t = t_raw .- t_raw[1]
         end
 
-        for i in 1:nrow(g)
+        for i = 1:nrow(g)
             isnan(t[i]) && continue
 
             # Build measure values
@@ -83,8 +83,11 @@ function prepare_analysis_data(
             end
             skip && continue
 
-            row = merge(label, (time = t[i], sample = i),
-                        NamedTuple{Tuple(measures)}(Tuple(vals[m] for m in measures)))
+            row = merge(
+                label,
+                (time = t[i], sample = i),
+                NamedTuple{Tuple(measures)}(Tuple(vals[m] for m in measures)),
+            )
 
             # Add event flags if present
             if hasproperty(g, :in_fix)
@@ -129,11 +132,7 @@ gcd = growth_curve_data(binned; degree=3)
 #     gcd)
 ```
 """
-function growth_curve_data(
-    df::DataFrame;
-    time_col::Symbol = :time_bin,
-    degree::Int = 3,
-)
+function growth_curve_data(df::DataFrame; time_col::Symbol = :time_bin, degree::Int = 3)
     hasproperty(df, time_col) ||
         error("Column :$time_col not found. Specify time_col= or use time_bin() first.")
     nrow(df) == 0 && error("Empty DataFrame.")
@@ -150,7 +149,7 @@ function growth_curve_data(
     time_to_idx = Dict(t => i for (i, t) in enumerate(time_vals))
 
     result = copy(df)
-    for d in 1:degree
+    for d = 1:degree
         col_name = Symbol("ot$d")
         result[!, col_name] = [polys[time_to_idx[t], d] for t in result[!, time_col]]
     end
@@ -171,15 +170,15 @@ function _orthogonal_polynomials(x::Vector{<:Real}, degree::Int)
 
     # Raw polynomial matrix
     raw = zeros(n, degree + 1)
-    for d in 0:degree
+    for d = 0:degree
         raw[:, d+1] = x_norm .^ d
     end
 
     # Gram-Schmidt orthogonalization
     ortho = zeros(n, degree + 1)
-    for d in 1:(degree+1)
+    for d = 1:(degree+1)
         v = raw[:, d]
-        for j in 1:(d-1)
+        for j = 1:(d-1)
             proj = dot(v, ortho[:, j]) / dot(ortho[:, j], ortho[:, j])
             v = v .- proj .* ortho[:, j]
         end

@@ -55,16 +55,22 @@ function fixation_metrics(
             aoi_fixes = filter(f -> f.aoi_idx == ai, fixations)
 
             if isempty(aoi_fixes)
-                push!(rows, merge(label, (
-                    aoi = aoi.name,
-                    first_fixation_duration = NaN,
-                    first_fixation_onset = NaN,
-                    gaze_duration = NaN,
-                    total_time = 0.0,
-                    fixation_count = 0,
-                    revisits = 0,
-                    skipped = true,
-                )))
+                push!(
+                    rows,
+                    merge(
+                        label,
+                        (
+                            aoi = aoi.name,
+                            first_fixation_duration = NaN,
+                            first_fixation_onset = NaN,
+                            gaze_duration = NaN,
+                            total_time = 0.0,
+                            fixation_count = 0,
+                            revisits = 0,
+                            skipped = true,
+                        ),
+                    ),
+                )
                 continue
             end
 
@@ -104,16 +110,22 @@ function fixation_metrics(
             end
             revisits = max(0, visits - 1)
 
-            push!(rows, merge(label, (
-                aoi = aoi.name,
-                first_fixation_duration = ffd,
-                first_fixation_onset = ff_onset,
-                gaze_duration = gaze_dur,
-                total_time = total,
-                fixation_count = length(aoi_fixes),
-                revisits = revisits,
-                skipped = false,
-            )))
+            push!(
+                rows,
+                merge(
+                    label,
+                    (
+                        aoi = aoi.name,
+                        first_fixation_duration = ffd,
+                        first_fixation_onset = ff_onset,
+                        gaze_duration = gaze_dur,
+                        total_time = total,
+                        fixation_count = length(aoi_fixes),
+                        revisits = revisits,
+                        skipped = false,
+                    ),
+                ),
+            )
         end
     end
 
@@ -122,12 +134,12 @@ end
 
 """Extract ordered fixation list with AOI assignments for a trial group."""
 function _extract_trial_fixations(g::AbstractDataFrame, aois::Vector{<:AOI}, sr::Float64)
-    fixations = NamedTuple{(:aoi_idx, :dur_ms, :onset_ms), Tuple{Int, Float64, Float64}}[]
+    fixations = NamedTuple{(:aoi_idx, :dur_ms, :onset_ms),Tuple{Int,Float64,Float64}}[]
 
     t0 = Float64(g.time[1])
     prev_fx = NaN
 
-    for i in 1:nrow(g)
+    for i = 1:nrow(g)
         g.in_fix[i] || continue
         fx = Float64(g.fix_gavx[i])
         isnan(fx) && continue

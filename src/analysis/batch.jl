@@ -86,11 +86,7 @@ Set `recursive=true` to search subdirectories as well.
 df_all = batch_read_eyelink("data/raw/")
 ```
 """
-function batch_read_eyelink(
-    dir::AbstractString;
-    recursive::Bool = false,
-    kwargs...,
-)
+function batch_read_eyelink(dir::AbstractString; recursive::Bool = false, kwargs...)
     isdir(dir) || error("Not a directory: $dir")
     files = if recursive
         [

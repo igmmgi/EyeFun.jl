@@ -73,7 +73,7 @@ function time_bin(
         t_min, t_max = minimum(t_valid), maximum(t_valid)
         bin_edges = t_min:bin_ms:t_max
 
-        for b in 1:(length(bin_edges)-1)
+        for b = 1:(length(bin_edges)-1)
             lo = bin_edges[b]
             hi = bin_edges[b+1]
             center = (lo + hi) / 2.0
@@ -82,11 +82,17 @@ function time_bin(
             bin_vals = vals[mask]
             valid_vals = filter(!isnan, bin_vals)
 
-            push!(rows, merge(label, (
-                time_bin = center,
-                value = isempty(valid_vals) ? NaN : mean(valid_vals),
-                n = length(valid_vals),
-            )))
+            push!(
+                rows,
+                merge(
+                    label,
+                    (
+                        time_bin = center,
+                        value = isempty(valid_vals) ? NaN : mean(valid_vals),
+                        n = length(valid_vals),
+                    ),
+                ),
+            )
         end
     end
 
@@ -155,7 +161,7 @@ function proportion_of_looks(
         t_min, t_max = minimum(t_valid), maximum(t_valid)
         bin_edges = t_min:bin_ms:t_max
 
-        for b in 1:(length(bin_edges)-1)
+        for b = 1:(length(bin_edges)-1)
             lo = bin_edges[b]
             hi = bin_edges[b+1]
             center = (lo + hi) / 2.0
@@ -171,7 +177,7 @@ function proportion_of_looks(
                 isnan(bin_gx[j]) && continue
                 isnan(bin_gy[j]) && continue
                 n_valid += 1
-                for ai in 1:n_aois
+                for ai = 1:n_aois
                     if contains(aois[ai], bin_gx[j], bin_gy[j])
                         counts[ai] += 1
                         break
@@ -181,7 +187,7 @@ function proportion_of_looks(
 
             # Build row with per-AOI proportions
             props = NamedTuple{Tuple(Symbol.(aoi_names))}(
-                Tuple(n_valid > 0 ? counts[ai] / n_valid : NaN for ai in 1:n_aois)
+                Tuple(n_valid > 0 ? counts[ai] / n_valid : NaN for ai = 1:n_aois),
             )
             outside = n_valid > 0 ? (n_valid - sum(counts)) / n_valid : NaN
 

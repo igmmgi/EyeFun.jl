@@ -80,7 +80,10 @@ function _format_title(prefix::String, selection)
         return "$prefix: Trial=$selection"
     end
     if selection isa NamedTuple
-        parts = ["$(titlecase(string(k)))=$(v isa AbstractRange ? "$(first(v)):$(last(v))" : v)" for (k, v) in pairs(selection)]
+        parts = [
+            "$(titlecase(string(k)))=$(v isa AbstractRange ? "$(first(v)):$(last(v))" : v)"
+            for (k, v) in pairs(selection)
+        ]
         return "$prefix: $(join(parts, ", "))"
     end
     return prefix
@@ -90,7 +93,7 @@ end
 function _draw_aois!(ax, aois::Vector{<:AOI})
     isempty(aois) && return
     colors = Makie.wong_colors()
-    for (i, aoi) in enumerate(sort(aois; by=a -> a.name))
+    for (i, aoi) in enumerate(sort(aois; by = a -> a.name))
         c = colors[mod1(i, length(colors))]
         _draw_single_aoi!(ax, aoi, c)
     end
@@ -134,7 +137,9 @@ end
 
 function _aoi_label!(ax, x, y, name, c)
     Makie.text!(
-        ax, x, y;
+        ax,
+        x,
+        y;
         text = name,
         align = (:center, :bottom),
         fontsize = 12,

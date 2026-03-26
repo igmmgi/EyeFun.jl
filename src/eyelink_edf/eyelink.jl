@@ -3,7 +3,7 @@
                     start_marker::String = DEFAULT_START_MARKER,
                     end_marker::String = DEFAULT_END_MARKER) -> EDFFile
 
-Read an EDF file using pure Julia binary parsing — no external libraries required.
+Read an EDF file
 
 # Arguments
 - `filename`: Path to the .edf file

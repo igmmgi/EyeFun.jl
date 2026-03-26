@@ -105,8 +105,22 @@ function plot_scanpath(
             py = Float64.(gy[valid])
             lines!(ax, px, py; color = :black, linewidth = 0.5)
             if length(px) > 0
-                scatter!(ax, [px[1]], [py[1]]; color = :green, markersize = 10, label = "Start")
-                scatter!(ax, [px[end]], [py[end]]; color = :red, markersize = 10, label = "End")
+                scatter!(
+                    ax,
+                    [px[1]],
+                    [py[1]];
+                    color = :green,
+                    markersize = 10,
+                    label = "Start",
+                )
+                scatter!(
+                    ax,
+                    [px[end]],
+                    [py[end]];
+                    color = :red,
+                    markersize = 10,
+                    label = "End",
+                )
                 idx == 1 && axislegend(ax; position = :rt)
             end
         end

@@ -13,16 +13,20 @@ hero:
       link: https://github.com/igmmgi/EyeFun.jl
 
 features:
-  - icon: 👁️
+  - icon: 
+      src: /icon_eye.png
     title: Pure Julia EDF Reader
     details: Read EyeLink EDF files directly — no SR Research SDK needed
-  - icon: 📊
+  - icon: 
+      src: /icon_df.png
     title: Tidy DataFrames
     details: Fixations, saccades, blinks, messages, and continuous samples as DataFrames
-  - icon: 🔬
+  - icon: 
+      src: /icon_analysis.png
     title: Analysis Tools
     details: Data quality, AOI metrics, pupil processing, drift correction, event detection
-  - icon: 📈
+  - icon: 
+      src: /icon_visualisation.png
     title: Visualisation
     details: Gaze plots, scanpaths, heatmaps, fixation maps, and pupil traces with Makie.jl
 ---
@@ -42,7 +46,7 @@ Read and analyse eye-tracking data:
 ```julia
 using EyeFun
 
-# Read an EDF file (no external library needed)
+# Read an EDF file 
 edf = read_eyelink_edf("path/to/file.edf")
 
 # Access event tables

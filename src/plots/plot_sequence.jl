@@ -32,7 +32,7 @@ function plot_sequence(
 
     # Pre-compute labels
     labels = String[]
-    for gi in 1:n_groups
+    for gi = 1:n_groups
         g = groups[gi]
         label = _group_labels(g, group_cols)
         push!(labels, join(["$(v)" for v in values(label)], "/"))
@@ -47,7 +47,7 @@ function plot_sequence(
         yticks = (1:n_groups, labels),
     )
 
-    for gi in 1:n_groups
+    for gi = 1:n_groups
         g = groups[gi]
         nsamp = nrow(g)
         t_end = (nsamp - 1) / sr * 1000.0
@@ -56,8 +56,11 @@ function plot_sequence(
         y_hi = gi + 0.35
 
         # Background: gray for tracking loss
-        poly!(ax, Point2f[(0, y_lo), (t_end, y_lo), (t_end, y_hi), (0, y_hi)];
-              color = (:gray80, 0.5))
+        poly!(
+            ax,
+            Point2f[(0, y_lo), (t_end, y_lo), (t_end, y_hi), (0, y_hi)];
+            color = (:gray80, 0.5),
+        )
 
         # Fixations
         if hasproperty(g, :in_fix)
@@ -79,9 +82,14 @@ function plot_sequence(
     elem_fix = PolyElement(color = (:green, 0.7))
     elem_sacc = PolyElement(color = (:dodgerblue, 0.7))
     elem_blink = PolyElement(color = (:red, 0.6))
-    Legend(fig[2, 1], [elem_fix, elem_sacc, elem_blink],
-           ["Fixation", "Saccade", "Blink"];
-           orientation = :horizontal, tellheight = true, tellwidth = false)
+    Legend(
+        fig[2, 1],
+        [elem_fix, elem_sacc, elem_blink],
+        ["Fixation", "Saccade", "Blink"];
+        orientation = :horizontal,
+        tellheight = true,
+        tellwidth = false,
+    )
 
     return fig
 end
@@ -98,9 +106,11 @@ function _draw_event_bars!(ax, event_col, sr, y_lo, y_hi, color)
             end
             t_start = (i - 1) / sr * 1000.0
             t_stop = (j - 1) / sr * 1000.0
-            poly!(ax,
-                  Point2f[(t_start, y_lo), (t_stop, y_lo), (t_stop, y_hi), (t_start, y_hi)];
-                  color = color)
+            poly!(
+                ax,
+                Point2f[(t_start, y_lo), (t_stop, y_lo), (t_stop, y_hi), (t_start, y_hi)];
+                color = color,
+            )
             i = j
         else
             i += 1

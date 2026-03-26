@@ -135,8 +135,7 @@ struct RectAOI <: AOI
     y2::Float64
 end
 
-contains(aoi::RectAOI, x::Real, y::Real) =
-    aoi.x1 <= x <= aoi.x2 && aoi.y1 <= y <= aoi.y2
+contains(aoi::RectAOI, x::Real, y::Real) = aoi.x1 <= x <= aoi.x2 && aoi.y1 <= y <= aoi.y2
 
 # ── CircleAOI ──────────────────────────────────────────────────────────────── #
 
@@ -157,8 +156,7 @@ struct CircleAOI <: AOI
     radius::Float64
 end
 
-contains(aoi::CircleAOI, x::Real, y::Real) =
-    (x - aoi.cx)^2 + (y - aoi.cy)^2 <= aoi.radius^2
+contains(aoi::CircleAOI, x::Real, y::Real) = (x - aoi.cx)^2 + (y - aoi.cy)^2 <= aoi.radius^2
 
 # ── EllipseAOI ─────────────────────────────────────────────────────────────── #
 
@@ -208,7 +206,7 @@ function contains(aoi::PolygonAOI, x::Real, y::Real)
     n < 3 && return false
     inside = false
     j = n
-    for i in 1:n
+    for i = 1:n
         xi, yi = verts[i]
         xj, yj = verts[j]
         if ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)
@@ -221,10 +219,14 @@ end
 
 # ── AOI Show methods ──────────────────────────────────────────────────────── #
 
-Base.show(io::IO, a::RectAOI) = print(io, "RectAOI(\"$(a.name)\", $(a.x1), $(a.y1), $(a.x2), $(a.y2))")
-Base.show(io::IO, a::CircleAOI) = print(io, "CircleAOI(\"$(a.name)\", $(a.cx), $(a.cy), r=$(a.radius))")
-Base.show(io::IO, a::EllipseAOI) = print(io, "EllipseAOI(\"$(a.name)\", $(a.cx), $(a.cy), $(a.rx)×$(a.ry))")
-Base.show(io::IO, a::PolygonAOI) = print(io, "PolygonAOI(\"$(a.name)\", $(length(a.vertices)) vertices)")
+Base.show(io::IO, a::RectAOI) =
+    print(io, "RectAOI(\"$(a.name)\", $(a.x1), $(a.y1), $(a.x2), $(a.y2))")
+Base.show(io::IO, a::CircleAOI) =
+    print(io, "CircleAOI(\"$(a.name)\", $(a.cx), $(a.cy), r=$(a.radius))")
+Base.show(io::IO, a::EllipseAOI) =
+    print(io, "EllipseAOI(\"$(a.name)\", $(a.cx), $(a.cy), $(a.rx)×$(a.ry))")
+Base.show(io::IO, a::PolygonAOI) =
+    print(io, "PolygonAOI(\"$(a.name)\", $(length(a.vertices)) vertices)")
 
 
 # ── Event Extraction from EyeData ──────────────────────────────────────────── #
@@ -235,24 +237,24 @@ Base.show(io::IO, a::PolygonAOI) = print(io, "PolygonAOI(\"$(a.name)\", $(length
 Reconstruct a fixations DataFrame by extracting contiguous blocks from the `in_fix` column
 (or `[prefix]_in_fix` if specified).
 """
-function fixations(ed::EyeData; prefix::Union{Nothing,Symbol}=nothing)
+function fixations(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
     col(name) = prefix === nothing ? name : Symbol(string(prefix) * "_" * string(name))
     df = ed.df
     mask_col = col(:in_fix)
     !hasproperty(df, mask_col) && return DataFrame()
-    
+
     mask = df[!, mask_col]
     n = length(mask)
     sttime, entime = UInt32[], UInt32[]
     gavx, gavy, ava = Float64[], Float64[], Float64[]
     dur = Int32[]
-    
+
     has_gavx = hasproperty(df, col(:fix_gavx))
     has_gavy = hasproperty(df, col(:fix_gavy))
     has_ava = hasproperty(df, col(:fix_ava))
     has_dur = hasproperty(df, col(:fix_dur))
     times = df.time
-    
+
     i = 1
     while i <= n
         if mask[i]
@@ -271,8 +273,8 @@ function fixations(ed::EyeData; prefix::Union{Nothing,Symbol}=nothing)
             i += 1
         end
     end
-    
-    result = DataFrame(sttime=sttime, entime=entime, duration=dur)
+
+    result = DataFrame(sttime = sttime, entime = entime, duration = dur)
     has_gavx && (result.gavx = gavx)
     has_gavy && (result.gavy = gavy)
     has_ava && (result.ava = ava)
@@ -285,12 +287,12 @@ end
 Reconstruct a saccades DataFrame by extracting contiguous blocks from the `in_sacc` column
 (or `[prefix]_in_sacc` if specified).
 """
-function saccades(ed::EyeData; prefix::Union{Nothing,Symbol}=nothing)
+function saccades(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
     col(name) = prefix === nothing ? name : Symbol(string(prefix) * "_" * string(name))
     df = ed.df
     mask_col = col(:in_sacc)
     !hasproperty(df, mask_col) && return DataFrame()
-    
+
     mask = df[!, mask_col]
     n = length(mask)
     sttime, entime = UInt32[], UInt32[]
@@ -306,7 +308,7 @@ function saccades(ed::EyeData; prefix::Union{Nothing,Symbol}=nothing)
     has_pvel = hasproperty(df, col(:sacc_pvel))
     has_dur = hasproperty(df, col(:sacc_dur))
     times = df.time
-    
+
     i = 1
     while i <= n
         if mask[i]
@@ -328,15 +330,15 @@ function saccades(ed::EyeData; prefix::Union{Nothing,Symbol}=nothing)
             i += 1
         end
     end
-    
-    result = DataFrame(sttime=sttime, entime=entime, duration=dur)
+
+    result = DataFrame(sttime = sttime, entime = entime, duration = dur)
     has_gstx && (result.gstx = gstx)
     has_gsty && (result.gsty = gsty)
     has_genx && (result.genx = genx)
     has_geny && (result.geny = geny)
     has_ampl && (result.ampl = ampl)
     has_pvel && (result.pvel = pvel)
-    
+
     return result
 end
 
@@ -345,12 +347,12 @@ end
 
 Reconstruct a blinks DataFrame by extracting contiguous blocks from the `in_blink` column.
 """
-function blinks(ed::EyeData; prefix::Union{Nothing,Symbol}=nothing)
+function blinks(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
     col(name) = prefix === nothing ? name : Symbol(string(prefix) * "_" * string(name))
     df = ed.df
     mask_col = col(:in_blink)
     !hasproperty(df, mask_col) && return DataFrame()
-    
+
     mask = df[!, mask_col]
     n = length(mask)
     sttime, entime = UInt32[], UInt32[]
@@ -358,7 +360,7 @@ function blinks(ed::EyeData; prefix::Union{Nothing,Symbol}=nothing)
 
     has_dur = hasproperty(df, col(:blink_dur))
     times = df.time
-    
+
     i = 1
     while i <= n
         if mask[i]
@@ -374,8 +376,8 @@ function blinks(ed::EyeData; prefix::Union{Nothing,Symbol}=nothing)
             i += 1
         end
     end
-    
-    return DataFrame(sttime=sttime, entime=entime, duration=dur)
+
+    return DataFrame(sttime = sttime, entime = entime, duration = dur)
 end
 
 """
@@ -387,22 +389,63 @@ Returns a `DataFrame` with one row per valid trial.
 function variables(ed::EyeData)
     df = ed.df
     !hasproperty(df, :trial) && return DataFrame()
-    
-    res = combine(groupby(df, :trial; skipmissing=true), first)
-    
+
+    res = combine(groupby(df, :trial; skipmissing = true), first)
+
     # Generic sample columns to drop
-    sample_cols = Set([:time, :gxR, :gyR, :paR, :gxL, :gyL, :paL, 
-                   :in_fix, :fix_gavx, :fix_gavy, :fix_ava, :fix_dur,
-                   :in_sacc, :sacc_gstx, :sacc_gsty, :sacc_genx, :sacc_geny, :sacc_dur, :sacc_ampl, :sacc_pvel,
-                   :in_blink, :blink_dur, :message, :time_rel,
-                   :ivt_in_fix, :ivt_fix_gavx, :ivt_fix_gavy, :ivt_fix_ava, :ivt_fix_dur,
-                   :ivt_in_sacc, :ivt_sacc_gstx, :ivt_sacc_gsty, :ivt_sacc_genx, :ivt_sacc_geny, 
-                   :ivt_sacc_dur, :ivt_sacc_ampl, :ivt_sacc_pvel,
-                   :idt_in_fix, :idt_fix_gavx, :idt_fix_gavy, :idt_fix_ava, :idt_fix_dur,
-                   :idt_in_sacc, :idt_sacc_gstx, :idt_sacc_gsty, :idt_sacc_genx, :idt_sacc_geny, 
-                   :idt_sacc_dur, :idt_sacc_ampl, :idt_sacc_pvel])
-                   
+    sample_cols = Set([
+        :time,
+        :gxR,
+        :gyR,
+        :paR,
+        :gxL,
+        :gyL,
+        :paL,
+        :in_fix,
+        :fix_gavx,
+        :fix_gavy,
+        :fix_ava,
+        :fix_dur,
+        :in_sacc,
+        :sacc_gstx,
+        :sacc_gsty,
+        :sacc_genx,
+        :sacc_geny,
+        :sacc_dur,
+        :sacc_ampl,
+        :sacc_pvel,
+        :in_blink,
+        :blink_dur,
+        :message,
+        :time_rel,
+        :ivt_in_fix,
+        :ivt_fix_gavx,
+        :ivt_fix_gavy,
+        :ivt_fix_ava,
+        :ivt_fix_dur,
+        :ivt_in_sacc,
+        :ivt_sacc_gstx,
+        :ivt_sacc_gsty,
+        :ivt_sacc_genx,
+        :ivt_sacc_geny,
+        :ivt_sacc_dur,
+        :ivt_sacc_ampl,
+        :ivt_sacc_pvel,
+        :idt_in_fix,
+        :idt_fix_gavx,
+        :idt_fix_gavy,
+        :idt_fix_ava,
+        :idt_fix_dur,
+        :idt_in_sacc,
+        :idt_sacc_gstx,
+        :idt_sacc_gsty,
+        :idt_sacc_genx,
+        :idt_sacc_geny,
+        :idt_sacc_dur,
+        :idt_sacc_ampl,
+        :idt_sacc_pvel,
+    ])
+
     keep_cols = [c for c in propertynames(res) if c ∉ sample_cols]
     return select(res, keep_cols)
 end
-

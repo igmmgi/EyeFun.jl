@@ -40,7 +40,7 @@ function plot_fixations(
     n_panels == 0 && error("No non-missing values in :$facet for faceting.")
 
     title = _format_title("Fixations", selection)
-    
+
     aspect_ratio = (xlims[2] - xlims[1]) / (ylims[2] - ylims[1])
     panel_w = facet !== nothing ? 400 : round(Int, 650 * aspect_ratio)
     panel_h = facet !== nothing ? round(Int, panel_w / aspect_ratio) : 650
@@ -74,14 +74,17 @@ function plot_fixations(
             )
         end
 
-        fix_rows = filter(r -> r.in_fix == true && !isnan(r.fix_gavx) && !isnan(r.fix_gavy), sub)
+        fix_rows =
+            filter(r -> r.in_fix == true && !isnan(r.fix_gavx) && !isnan(r.fix_gavy), sub)
         if nrow(fix_rows) > 0
             # Deduplicate consecutive identical fixation centers
             fx, fy, fdur = Float64[], Float64[], Float64[]
             for r in eachrow(fix_rows)
                 gx, gy, dur = Float64(r.fix_gavx), Float64(r.fix_gavy), Float64(r.fix_dur)
                 if isempty(fx) || gx != fx[end] || gy != fy[end]
-                    push!(fx, gx); push!(fy, gy); push!(fdur, dur)
+                    push!(fx, gx);
+                    push!(fy, gy);
+                    push!(fdur, dur)
                 end
             end
 

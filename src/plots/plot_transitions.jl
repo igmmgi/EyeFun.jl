@@ -33,7 +33,8 @@ function transition_matrix(
     mat = zeros(Float64, n_aois, n_aois)
 
     # Build fixation sequence with AOI labels
-    hasproperty(samples, :fix_gavx) || error("No fixation columns. Run event detection first.")
+    hasproperty(samples, :fix_gavx) ||
+        error("No fixation columns. Run event detection first.")
 
     eye = _resolve_eye(samples, eye)
     ecols = _eye_columns(eye)
@@ -41,7 +42,7 @@ function transition_matrix(
     # Extract unique fixations
     fix_sequence = Int[]  # AOI index for each fixation (0 = outside all AOIs)
     prev_fx = NaN
-    for i in 1:nrow(samples)
+    for i = 1:nrow(samples)
         samples.in_fix[i] || continue
         fx = Float64(samples.fix_gavx[i])
         isnan(fx) && continue
@@ -61,7 +62,7 @@ function transition_matrix(
     end
 
     # Count transitions (skip fixations outside all AOIs)
-    for i in 2:length(fix_sequence)
+    for i = 2:length(fix_sequence)
         from = fix_sequence[i-1]
         to = fix_sequence[i]
         from == 0 && continue
@@ -71,7 +72,7 @@ function transition_matrix(
 
     # Normalize rows to probabilities
     if normalize
-        for r in 1:n_aois
+        for r = 1:n_aois
             row_sum = sum(mat[r, :])
             if row_sum > 0
                 mat[r, :] ./= row_sum
@@ -101,7 +102,8 @@ function plot_transitions(
     eye::Symbol = :auto,
     normalize::Bool = true,
 )
-    tm = transition_matrix(df, aois; selection = selection, eye = eye, normalize = normalize)
+    tm =
+        transition_matrix(df, aois; selection = selection, eye = eye, normalize = normalize)
     mat = tm.matrix
     labels = tm.labels
     n = length(labels)
@@ -118,16 +120,22 @@ function plot_transitions(
         yreversed = true,
     )
 
-    hm = Makie.heatmap!(ax, 1:n, 1:n, mat;
-                         colormap = :viridis, interpolate = false)
+    hm = Makie.heatmap!(ax, 1:n, 1:n, mat; colormap = :viridis, interpolate = false)
 
     # Annotate cells with values
-    for i in 1:n, j in 1:n
+    for i = 1:n, j = 1:n
         val = mat[i, j]
         txt = normalize ? string(round(val; digits = 2)) : string(Int(val))
         text_color = val > 0.5 * maximum(mat) ? :white : :black
-        Makie.text!(ax, j, i; text = txt, align = (:center, :center),
-                    fontsize = 14, color = text_color)
+        Makie.text!(
+            ax,
+            j,
+            i;
+            text = txt,
+            align = (:center, :center),
+            fontsize = 14,
+            color = text_color,
+        )
     end
 
     label = normalize ? "Probability" : "Count"

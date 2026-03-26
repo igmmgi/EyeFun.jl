@@ -63,8 +63,10 @@ function aoi_metrics(
 
         for aoi in aois
             # Compute in_aoi using contains() dispatch
-            in_aoi = Bool[!isnan(gx[i]) && !isnan(gy[i]) && contains(aoi, gx[i], gy[i])
-                          for i in eachindex(gx)]
+            in_aoi = Bool[
+                !isnan(gx[i]) && !isnan(gy[i]) && contains(aoi, gx[i], gy[i]) for
+                i in eachindex(gx)
+            ]
 
             # Dwell time in ms (using actual sample rate)
             dwell = round(sum(in_aoi) / sr * 1000.0; digits = 1)
