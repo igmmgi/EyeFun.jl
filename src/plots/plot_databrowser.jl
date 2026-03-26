@@ -77,7 +77,7 @@ function _extract_fixations(g::DataFrame)
     fixations = FixationInfo[]
     !hasproperty(g, :fix_gavx) && return fixations
     !hasproperty(g, :fix_gavy) && return fixations
-    
+
     i = 1
     n = length(g.fix_gavx)
     while i <= n
@@ -296,7 +296,7 @@ function _draw_spatial!(
         end
     end
 
-    sx, sy = state.screen_res
+
     if reset_zoom || isnothing(state.spatial_zoom)
         xlims!(ax, -50, sx + 50)
         ylims!(ax, sy + 50, -50)   # reversed: high at top → 0,0 at top-left
@@ -315,10 +315,11 @@ function _draw_xy_trace!(
     state,
     saccades::Vector{SaccadeInfo},
     fixations::Vector{FixationInfo},
+    cache::Dict{Symbol,Any},
 )
     empty!(ax)
 
-    eye_str = state.eye == :left ? "Left" : "Right"
+
     gx = Float64.(g[!, state.gx_col])
     gy = Float64.(g[!, state.gy_col])
     t = _trial_time(g)
@@ -330,23 +331,23 @@ function _draw_xy_trace!(
     first_valid = findfirst(i -> !isnan(gx[i]) && !isnan(t[i]), eachindex(gx))
     if !isnothing(first_valid)
         text!(ax, t[first_valid], gx[first_valid]; text="x", color=:dodgerblue,
-              fontsize=13, font=:bold, align=(:right, :center), offset=(5, 0))
+            fontsize=13, font=:bold, align=(:right, :center), offset=(5, 0))
     end
     first_valid_y = findfirst(i -> !isnan(gy[i]) && !isnan(t[i]), eachindex(gy))
     if !isnothing(first_valid_y)
         text!(ax, t[first_valid_y], gy[first_valid_y]; text="y", color=:darkorange,
-              fontsize=13, font=:bold, align=(:right, :center), offset=(5, 0))
+            fontsize=13, font=:bold, align=(:right, :center), offset=(5, 0))
     end
 
     sx, sy = state.screen_res
     hlines!(ax, [sx / 2.0]; color=:grey70, linewidth=0.5, linestyle=:dash)
     hlines!(ax, [sy / 2.0]; color=:grey80, linewidth=0.5, linestyle=:dash)
 
-    # Bar height = 5% of data range
-    valid_gx = filter(!isnan, gx)
-    valid_gy = filter(!isnan, gy)
-    y_max = max(maximum(valid_gx; init=1.0), maximum(valid_gy; init=1.0))
-    bar_h = max(2.0, y_max * 0.05)
+    # Bar height = 5% of visible axis extent
+    autolimits!(ax)
+    lims = ax.finallimits[]
+    bar_h = abs(lims.widths[2]) * 0.05
+    cache[:xy_bar_h] = bar_h
 
     # Fixation bars first (drawn below saccade markers)
     if state.show_fixations[]
@@ -397,6 +398,7 @@ function _draw_velocity!(
     state,
     saccades::Vector{SaccadeInfo},
     fixations::Vector{FixationInfo},
+    cache::Dict{Symbol,Any},
 )
     empty!(ax)
 
@@ -410,10 +412,11 @@ function _draw_velocity!(
     lines!(ax, t, speed; color=:black, linewidth=1)
     hlines!(ax, [0.0]; color=:grey70, linewidth=0.5)
 
-    # Bar height = 5% of data range
-    valid_speed = filter(!isnan, speed)
-    speed_max = isempty(valid_speed) ? 1.0 : maximum(valid_speed)
-    bar_h = max(2.0, speed_max * 0.05)
+    # Bar height = 5% of visible axis extent
+    autolimits!(ax)
+    lims = ax.finallimits[]
+    bar_h = abs(lims.widths[2]) * 0.05
+    cache[:vel_bar_h] = bar_h
 
     # Fixation bars first
     if state.show_fixations[] && hasproperty(g, :fix_gavx)
@@ -483,16 +486,12 @@ const _polar_plots = Any[]
 
 function _draw_saccade_polar!(
     ax,
-    g::DataFrame,
     state,
     saccades::Vector{SaccadeInfo},
 )
     # Remove only our previously added plots (not axis decorations)
     for p in _polar_plots
-        try
-            delete!(ax, p)
-        catch
-        end
+        delete!(ax, p)
     end
     empty!(_polar_plots)
 
@@ -517,19 +516,16 @@ function _draw_saccade_polar!(
     bin_centers = [(bin_edges[b] + bin_edges[b+1]) / 2 for b = 1:n_bins]
 
     maximum(counts) == 0 && return
-    try
-        p = barplot!(
-            ax,
-            bin_centers,
-            counts;
-            width=bin_width,
-            color=(:green, 0.7),
-            strokewidth=1.5,
-            strokecolor=:darkgreen,
-        )
-        push!(_polar_plots, p)
-    catch
-    end
+    p = barplot!(
+        ax,
+        bin_centers,
+        counts;
+        width=bin_width,
+        color=(:green, 0.7),
+        strokewidth=1.5,
+        strokecolor=:darkgreen,
+    )
+    push!(_polar_plots, p)
 end
 
 # ── Main draw function ─────────────────────────────────────────────────────── #
@@ -553,29 +549,19 @@ function _draw_all!(
     # Extract events from FULL data (heavy — cached for _redraw_window!)
     saccades_full = _extract_saccades(g_full)
     fixations_full = _extract_fixations(g_full)
-    t_full = _trial_time(g_full)
 
-    # Compute bar heights from full data
+    # Compute velocity for cursor tracking
     gx = Float64.(g_full[!, state.gx_col])
     gy = Float64.(g_full[!, state.gy_col])
-    valid_gx = filter(!isnan, gx)
-    valid_gy = filter(!isnan, gy)
-    y_max = max(maximum(valid_gx; init=1.0), maximum(valid_gy; init=1.0))
-
     vx, vy = _compute_velocity(gx, gy)
     spd = sqrt.(vx .^ 2 .+ vy .^ 2)
-    valid_spd = filter(!isnan, spd)
-    spd_max = isempty(valid_spd) ? 1.0 : maximum(valid_spd)
 
     # Cache full segment data
     cache[:g] = g_full
     cache[:saccades] = saccades_full
     cache[:fixations] = fixations_full
-    cache[:t] = t_full
     cache[:n_full] = n_full
     cache[:speed] = spd
-    cache[:xy_bar_h] = max(2.0, y_max * 0.05)
-    cache[:vel_bar_h] = max(2.0, spd_max * 0.05)
 
     # Draw windowed view
     _redraw_window!(
@@ -654,9 +640,9 @@ function _redraw_window!(
         fixations_draw;
         reset_zoom=reset_zoom,
     )
-    _draw_saccade_polar!(axes[2], g, state, saccades_draw)
-    _draw_xy_trace!(axes[3], g, state, saccades_draw, fixations_draw)
-    _draw_velocity!(axes[4], g, state, saccades_draw, fixations_draw)
+    _draw_saccade_polar!(axes[2], state, saccades_draw)
+    _draw_xy_trace!(axes[3], g, state, saccades_draw, fixations_draw, cache)
+    _draw_velocity!(axes[4], g, state, saccades_draw, fixations_draw, cache)
     _draw_pupil!(axes[5], g, state)
 end
 
@@ -911,12 +897,12 @@ function plot_databrowser(
             tellwidth=true,
         )
         col += 1
-        
+
         tog_win = Toggle(left_controls[1, col]; active=window_view_obs[], tellwidth=true)
         col += 1
         Label(left_controls[1, col], "Windowed"; fontsize=12, halign=:left, tellwidth=true)
         col += 1
-        
+
         on(tog_win.active) do val
             window_view_obs[] = val
         end
@@ -1032,30 +1018,30 @@ function plot_databrowser(
         snap=false,
         tellwidth=false,
     )
-    
+
     on(window_view_obs) do is_win
         lbl_scroll.blockscene.visible = is_win && isnothing(state.split_by)
         sl_scroll.blockscene.visible = is_win && isnothing(state.split_by)
-        
+
         state.window_samples = is_win ? 5000 : 0
         ws = state.window_samples
         n = max(1, nrow(_get_segment_data(df, state.segments[state.trial[]], state.split_by)))
-        
+
         frame_range = (ws > 0 && n > ws) ? ws : n
         sl_frame.range[] = 1:frame_range
-        
+
         if ws > 0 && n > ws
             sl_scroll.range[] = 1:max(1, n - ws + 1)
             # Avoid triggering the slider hook synchronously if possible, safely bypass set_close_to! cascade
             sl_scroll.value.val = 1
         end
-        
+
         _redraw_window!(axes, state, _cache; reset_zoom=true, window_start=1)
         _add_cursor_dots!(axes, cursor_obs)
         _update_cursor!(cursor_obs, _cache, state)
         _create_overlay_plots!()
     end
-    
+
     # Initialize visibility
     lbl_scroll.blockscene.visible = window_view_obs[] && isnothing(state.split_by)
     sl_scroll.blockscene.visible = window_view_obs[] && isnothing(state.split_by)
@@ -1199,7 +1185,7 @@ function plot_databrowser(
             elseif event.key == Keyboard.escape
                 state.selected_saccade[] = 0
                 state.selected_fixation[] = 0
-                _redraw_after_select!()
+                _update_highlight_overlay!()
                 return Consume(true)
             end
         end
@@ -1212,7 +1198,7 @@ function plot_databrowser(
     _hl_sacc_spatial_pts = Observable(Point2f[])
     _hl_sacc_xy_t = Observable(Float64[])
     _hl_sacc_vel_t = Observable(Float64[])
-    _hl_sacc_polar_pts = Observable(Point2f[])
+
     _hl_sacc_vis = Observable(false)
 
     _hl_fix_spatial_pts = Observable(Point2f[])
@@ -1260,9 +1246,8 @@ function plot_databrowser(
     end
 
     function _update_highlight_overlay!()
-        haskey(_cache, :g) || return
-        g = _cache[:g]::DataFrame
-        saccades = get(_cache, :saccades_win, SaccadeInfo[])::Vector{SaccadeInfo}
+        haskey(_cache, :saccades_win) || return
+        saccades = _cache[:saccades_win]::Vector{SaccadeInfo}
         fixations = get(_cache, :fixations_win, FixationInfo[])::Vector{FixationInfo}
 
         # Use cached windowed time (matches what's plotted on axes)
@@ -1273,10 +1258,7 @@ function plot_databrowser(
         sel_s = state.selected_saccade[]
         # Remove any previous polar highlight
         for p in filter(x -> x isa Lines, _polar_plots)
-            try
-                delete!(axes[2], p)
-            catch
-            end
+            delete!(axes[2], p)
         end
         filter!(x -> !(x isa Lines), _polar_plots)
 
@@ -1288,17 +1270,14 @@ function plot_databrowser(
             _hl_sacc_vel_t[] = [t[ti]]
             # Add polar highlight line
             r_max = max(3.0, length(saccades) * 0.5)
-            try
-                hl = lines!(
-                    axes[2],
-                    [s.angle, s.angle],
-                    [0.0, r_max];
-                    color=:red,
-                    linewidth=2,
-                )
-                push!(_polar_plots, hl)
-            catch
-            end
+            hl = lines!(
+                axes[2],
+                [s.angle, s.angle],
+                [0.0, r_max];
+                color=:red,
+                linewidth=2,
+            )
+            push!(_polar_plots, hl)
             _hl_sacc_vis[] = true
         else
             _hl_sacc_vis[] = false
@@ -1314,8 +1293,8 @@ function plot_databrowser(
             t_lo = t[clamp(f.time_start, 1, length(t))]
             t_hi = t[clamp(f.time_end, 1, length(t))]
 
-            xy_h = get(_cache, :xy_bar_h, 10.0)
-            vel_h = get(_cache, :vel_bar_h, 2.0)
+            xy_h = _cache[:xy_bar_h]
+            vel_h = _cache[:vel_bar_h]
             _hl_fix_xy_pts[] = Point2f[(t_lo, 0), (t_hi, 0), (t_hi, xy_h), (t_lo, xy_h)]
             _hl_fix_vel_pts[] = Point2f[(t_lo, 0), (t_hi, 0), (t_hi, vel_h), (t_lo, vel_h)]
 
@@ -1325,10 +1304,7 @@ function plot_databrowser(
         end
     end
 
-    # Helper: redraw after selection change (lightweight)
-    function _redraw_after_select!()
-        _update_highlight_overlay!()
-    end
+
 
     # Helper: select or clear fixation
     function _toggle_fixation!(idx::Int, within_threshold::Bool)
@@ -1340,7 +1316,7 @@ function plot_databrowser(
         else
             state.selected_fixation[] = 0
         end
-        _redraw_after_select!()
+        _update_highlight_overlay!()
     end
 
     # Helper: select or clear saccade
@@ -1353,7 +1329,7 @@ function plot_databrowser(
         else
             state.selected_saccade[] = 0
         end
-        _redraw_after_select!()
+        _update_highlight_overlay!()
     end
 
     # Spatial axis: click near fixation circle or saccade line
@@ -1398,7 +1374,7 @@ function plot_databrowser(
             else
                 state.selected_saccade[] = 0
                 state.selected_fixation[] = 0
-                _redraw_after_select!()
+                _update_highlight_overlay!()
             end
             return Consume(true)
         end
@@ -1451,7 +1427,7 @@ function plot_databrowser(
                 else
                     state.selected_saccade[] = 0
                     state.selected_fixation[] = 0
-                    _redraw_after_select!()
+                    _update_highlight_overlay!()
                 end
                 return Consume(true)
             end
@@ -1511,7 +1487,7 @@ function plot_databrowser(
         trial_label,
         _cache;
         reset_zoom=true,
-        window_start=isnothing(sl_scroll) ? 1 : 1,
+        window_start=1,
     )
     _add_cursor_dots!(axes, cursor_obs)
     _update_cursor!(cursor_obs, _cache, state)
