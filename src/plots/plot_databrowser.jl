@@ -205,7 +205,8 @@ end
 """Draw the spatial view (gaze on screen) for the current trial."""
 function _draw_spatial!(
     ax,
-    g::DataFrame,
+    gx::Vector{Float64},
+    gy::Vector{Float64},
     state,
     saccades::Vector{SaccadeInfo},
     fixations::Vector{FixationInfo};
@@ -230,8 +231,6 @@ function _draw_spatial!(
 
     empty!(ax)
 
-    gx = Float64.(g[!, state.gx_col])
-    gy = Float64.(g[!, state.gy_col])
     sx, sy = state.screen_res
 
     # Screen boundary
@@ -312,17 +311,15 @@ end
 function _draw_xy_trace!(
     ax,
     g::DataFrame,
+    gx::Vector{Float64},
+    gy::Vector{Float64},
+    t::Vector{Float64},
     state,
     saccades::Vector{SaccadeInfo},
     fixations::Vector{FixationInfo},
     cache::Dict{Symbol,Any},
 )
     empty!(ax)
-
-
-    gx = Float64.(g[!, state.gx_col])
-    gy = Float64.(g[!, state.gy_col])
-    t = _trial_time(g)
 
     lines!(ax, t, gx; color=:dodgerblue, linewidth=1)
     lines!(ax, t, gy; color=:darkorange, linewidth=1)
@@ -395,19 +392,14 @@ end
 function _draw_velocity!(
     ax,
     g::DataFrame,
+    t::Vector{Float64},
+    speed::Vector{Float64},
     state,
     saccades::Vector{SaccadeInfo},
     fixations::Vector{FixationInfo},
     cache::Dict{Symbol,Any},
 )
     empty!(ax)
-
-    gx = Float64.(g[!, state.gx_col])
-    gy = Float64.(g[!, state.gy_col])
-    t = _trial_time(g)
-
-    vx, vy = _compute_velocity(gx, gy)
-    speed = sqrt.(vx .^ 2 .+ vy .^ 2)
 
     lines!(ax, t, speed; color=:black, linewidth=1)
     hlines!(ax, [0.0]; color=:grey70, linewidth=0.5)
@@ -448,11 +440,8 @@ function _draw_velocity!(
 
     !isnan(t[1]) && !isnan(t[end]) && t[1] < t[end] && xlims!(ax, t[1], t[end])
 end
-function _draw_pupil!(ax, g::DataFrame, state)
+function _draw_pupil!(ax, g::DataFrame, pa::Vector{Float64}, t::Vector{Float64}, state)
     empty!(ax)
-
-    pa = Float64.(g[!, state.pa_col])
-    t = _trial_time(g)
 
     lines!(ax, t, pa; color=:black, linewidth=1)
 
@@ -599,6 +588,14 @@ function _redraw_window!(
     cache[:window_start] = w_start
     cache[:window_end] = w_end
 
+    # Pre-extract column data once (avoids repeated Float64.() copies in draw functions)
+    gx = Float64.(g[!, state.gx_col])
+    gy = Float64.(g[!, state.gy_col])
+    pa = Float64.(g[!, state.pa_col])
+    t = _trial_time(g)
+    speed_full = cache[:speed]::Vector{Float64}
+    speed_win = speed_full[w_start:w_end]
+
     # Filter events to visible window and remap indices
     saccades_win = filter(s -> w_start <= s.time_idx <= w_end, saccades_full)
     fixations_win = filter(
@@ -630,20 +627,21 @@ function _redraw_window!(
     # Cache windowed events and time for click handlers
     cache[:saccades_win] = saccades_draw
     cache[:fixations_win] = fixations_draw
-    cache[:t_win] = _trial_time(g)
+    cache[:t_win] = t
 
     _draw_spatial!(
         axes[1],
-        g,
+        gx,
+        gy,
         state,
         saccades_draw,
         fixations_draw;
         reset_zoom=reset_zoom,
     )
     _draw_saccade_polar!(axes[2], state, saccades_draw)
-    _draw_xy_trace!(axes[3], g, state, saccades_draw, fixations_draw, cache)
-    _draw_velocity!(axes[4], g, state, saccades_draw, fixations_draw, cache)
-    _draw_pupil!(axes[5], g, state)
+    _draw_xy_trace!(axes[3], g, gx, gy, t, state, saccades_draw, fixations_draw, cache)
+    _draw_velocity!(axes[4], g, t, speed_win, state, saccades_draw, fixations_draw, cache)
+    _draw_pupil!(axes[5], g, pa, t, state)
 end
 
 # ── Cursor dots ────────────────────────────────────────────────────────────── #
