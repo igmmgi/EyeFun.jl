@@ -171,7 +171,7 @@ function _segment_label(state)
 end
 
 """Draw blink shading bands on a time-series axis."""
-function _draw_blink_bands!(ax, g::DataFrame, t::Vector{Float64}, state)
+function _draw_blink_bands!(ax, g::AbstractDataFrame, t::Vector{Float64}, state)
     !state.show_blinks[] && return
     !hasproperty(g, :in_blink) && return
 
@@ -310,7 +310,7 @@ end
 """Draw the XY position trace panel."""
 function _draw_xy_trace!(
     ax,
-    g::DataFrame,
+    g::AbstractDataFrame,
     gx::Vector{Float64},
     gy::Vector{Float64},
     t::Vector{Float64},
@@ -391,7 +391,7 @@ function _draw_xy_trace!(
 end
 function _draw_velocity!(
     ax,
-    g::DataFrame,
+    g::AbstractDataFrame,
     t::Vector{Float64},
     speed::Vector{Float64},
     state,
@@ -440,7 +440,7 @@ function _draw_velocity!(
 
     !isnan(t[1]) && !isnan(t[end]) && t[1] < t[end] && xlims!(ax, t[1], t[end])
 end
-function _draw_pupil!(ax, g::DataFrame, pa::Vector{Float64}, t::Vector{Float64}, state)
+function _draw_pupil!(ax, g::AbstractDataFrame, pa::Vector{Float64}, t::Vector{Float64}, state)
     empty!(ax)
 
     lines!(ax, t, pa; color=:black, linewidth=1)
@@ -452,7 +452,7 @@ function _draw_pupil!(ax, g::DataFrame, pa::Vector{Float64}, t::Vector{Float64},
 end
 
 """Get time vector for a trial sub-DataFrame (uses time_rel if available, else time from 0)."""
-function _trial_time(g::DataFrame)
+function _trial_time(g::AbstractDataFrame)
     if hasproperty(g, :time_rel) && !all(ismissing, g.time_rel)
         t = Float64[ismissing(v) ? NaN : Float64(v) for v in g.time_rel]
         # Check if time is monotonically increasing (single trial)
@@ -584,7 +584,7 @@ function _redraw_window!(
         w_start = 1
         w_end = n_full
     end
-    g = g_full[w_start:w_end, :]
+    g = @view g_full[w_start:w_end, :]
     cache[:window_start] = w_start
     cache[:window_end] = w_end
 
