@@ -815,7 +815,7 @@ function plot_databrowser(
     )
 
     # ── Figure layout ──────────────────────────────────────────────────────── #
-    fig = Figure(size=(1600, 1000))
+    fig = Figure(size=(1920, 1080), padding=(0, 0, 0, 0))
 
     g_left = fig[1, 1] = GridLayout()
     g_right = fig[1, 2] = GridLayout()
@@ -823,13 +823,14 @@ function plot_databrowser(
     # Left column: spatial (top) + polar (bottom)
     ax_spatial = Axis(
         g_left[1:2, 1];
-        xlabel="X (pixels)",
-        ylabel="Y (pixels)",
+        xlabel="X (px)",
+        ylabel="Y (px)",
         aspect=DataAspect(),
         yreversed=true,
         title="Gaze Position",
         xgridvisible=false,
         ygridvisible=false,
+        halign=:left,
     )
 
     ax_polar = PolarAxis(
@@ -1492,8 +1493,10 @@ function plot_databrowser(
     _create_overlay_plots!()
 
     # Figure layout columns and UI rows
-    colsize!(fig.layout, 1, Relative(0.60))
-    colsize!(fig.layout, 2, Relative(0.40))
+    colsize!(fig.layout, 1, Relative(0.58))
+    colsize!(fig.layout, 2, Relative(0.42))
+    colgap!(fig.layout, 8)
+
     colsize!(slider_controls, 2, Relative(1.05))
 
     # Proportion main rows: 90% for plots, 10% for UI controls
