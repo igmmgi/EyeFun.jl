@@ -20,6 +20,11 @@ edf = read_eyelink("/home/ian/Desktop/EyeTracking/data_2016/edf/201.edf")
 # ── Build the wide DataFrame ──────────────────────────────────────────────── #
 df = create_eyelink_edf_dataframe(edf)
 
+plot_databrowser(df)
+plot_databrowser(df; split_by=nothing)
+
+
+
 plot_heatmap(df)
 plot_heatmap(df, facet=:itemtype)
 plot_databrowser(df)

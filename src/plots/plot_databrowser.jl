@@ -323,15 +323,20 @@ function _draw_xy_trace!(
     gy = Float64.(g[!, state.gy_col])
     t = _trial_time(g)
 
-    lines!(ax, t, gx; color=:dodgerblue, linewidth=1, label="X Pos ($eye_str)")
-    lines!(ax, t, gy; color=:darkorange, linewidth=1, label="Y Pos ($eye_str)")
-    axislegend(
-        ax;
-        position=:rt,
-        framevisible=false,
-        labelsize=11,
-        padding=(4, 4, 2, 2),
-    )
+    lines!(ax, t, gx; color=:dodgerblue, linewidth=1)
+    lines!(ax, t, gy; color=:darkorange, linewidth=1)
+
+    # Inline labels at start of each trace (replaces legend to avoid redraw accumulation)
+    first_valid = findfirst(i -> !isnan(gx[i]) && !isnan(t[i]), eachindex(gx))
+    if !isnothing(first_valid)
+        text!(ax, t[first_valid], gx[first_valid]; text="x", color=:dodgerblue,
+              fontsize=13, font=:bold, align=(:right, :center), offset=(5, 0))
+    end
+    first_valid_y = findfirst(i -> !isnan(gy[i]) && !isnan(t[i]), eachindex(gy))
+    if !isnothing(first_valid_y)
+        text!(ax, t[first_valid_y], gy[first_valid_y]; text="y", color=:darkorange,
+              fontsize=13, font=:bold, align=(:right, :center), offset=(5, 0))
+    end
 
     sx, sy = state.screen_res
     hlines!(ax, [sx / 2.0]; color=:grey70, linewidth=0.5, linestyle=:dash)
@@ -667,12 +672,17 @@ function _add_cursor_dots!(axes, cursor_obs)
         marker=:circle,
     )
     # axes[2] is PolarAxis — no cursor dot
-    scatter!(
+    text!(
         axes[3],
-        cursor_obs[:xy_pts];
-        color=[:dodgerblue, :darkorange],
-        markersize=10,
-        marker=:circle,
+        cursor_obs[:xy_x_pt];
+        text="x", color=:dodgerblue,
+        fontsize=18, font=:bold, align=(:center, :center),
+    )
+    text!(
+        axes[3],
+        cursor_obs[:xy_y_pt];
+        text="y", color=:darkorange,
+        fontsize=18, font=:bold, align=(:center, :center),
     )
     scatter!(
         axes[4],
@@ -711,8 +721,9 @@ function _update_cursor!(cursor_obs, cache::Dict{Symbol,Any}, state)
     # Spatial dot
     cursor_obs[:spatial_pts][] = Point2f[(gx, gy)]
 
-    # XY trace dots — show both X and Y position
-    cursor_obs[:xy_pts][] = Point2f[(t_val, gx), (t_val, gy)]
+    # XY trace text cursors — show both X and Y position
+    cursor_obs[:xy_x_pt][] = Point2f[(t_val, gx)]
+    cursor_obs[:xy_y_pt][] = Point2f[(t_val, gy)]
 
     # Velocity dot (use cached speed array)
     speed = cache[:speed]::Vector{Float64}
@@ -1075,7 +1086,8 @@ function plot_databrowser(
     # ── Cursor dot observables ─────────────────────────────────────────────── #
     cursor_obs = Dict(
         :spatial_pts => Observable(Point2f[(0, 0)]),
-        :xy_pts => Observable(Point2f[(0, 0), (0, 0)]),
+        :xy_x_pt => Observable(Point2f[(0, 0)]),
+        :xy_y_pt => Observable(Point2f[(0, 0)]),
         :vel_pts => Observable(Point2f[(0, 0)]),
         :pup_pts => Observable(Point2f[(0, 0)]),
     )
