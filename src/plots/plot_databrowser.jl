@@ -1007,8 +1007,8 @@ function plot_databrowser(
         tellwidth=false,
     )
 
-    # Row 3: scroll slider (visibility bound to window_view_obs)
-    lbl_scroll = Label(slider_controls[3, 1], "Scroll:"; fontsize=11, halign=:right, tellwidth=false)
+    # Row 3: scroll play button (col 1) + scroll slider (col 2)
+    btn_scroll_play = Button(slider_controls[3, 1]; label="▶", fontsize=11, tellwidth=false, halign=:right)
     scroll_max = max(1, n_samples_init - (window_view_obs[] ? 5000 : 10000) + 1)
     sl_scroll = Slider(
         slider_controls[3, 2];
@@ -1019,7 +1019,7 @@ function plot_databrowser(
     )
 
     on(window_view_obs) do is_win
-        lbl_scroll.blockscene.visible = is_win && isnothing(state.split_by)
+        btn_scroll_play.blockscene.visible = is_win && isnothing(state.split_by)
         sl_scroll.blockscene.visible = is_win && isnothing(state.split_by)
 
         state.window_samples = is_win ? 5000 : 0
@@ -1042,11 +1042,12 @@ function plot_databrowser(
     end
 
     # Initialize visibility
-    lbl_scroll.blockscene.visible = window_view_obs[] && isnothing(state.split_by)
+    btn_scroll_play.blockscene.visible = window_view_obs[] && isnothing(state.split_by)
     sl_scroll.blockscene.visible = window_view_obs[] && isnothing(state.split_by)
 
-    # Play/pause state — animates cursor within visible window
+    # Play/pause states
     _playing = Observable(false)
+    _scroll_playing = Observable(false)
 
     on(btn_play.clicks) do _
         _playing[] = !_playing[]
@@ -1061,6 +1062,27 @@ function plot_databrowser(
                     else
                         step = max(1, round(Int, sl_speed.value[]))
                         set_close_to!(sl_frame, min(current + step, n))
+                    end
+                    sleep(1 / 30)
+                end
+            end
+        end
+    end
+
+    # Scroll play button — advances window through data
+    on(btn_scroll_play.clicks) do _
+        _scroll_playing[] = !_scroll_playing[]
+        btn_scroll_play.label[] = _scroll_playing[] ? "||" : "▶"
+        if _scroll_playing[]
+            @async begin
+                while _scroll_playing[]
+                    current = round(Int, sl_scroll.value[])
+                    scroll_range = sl_scroll.range[]
+                    if current >= last(scroll_range)
+                        set_close_to!(sl_scroll, first(scroll_range))  # loop
+                    else
+                        step = max(1, round(Int, sl_speed.value[] * 10))
+                        set_close_to!(sl_scroll, min(current + step, last(scroll_range)))
                     end
                     sleep(1 / 30)
                 end
