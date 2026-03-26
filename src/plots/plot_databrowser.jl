@@ -471,18 +471,20 @@ function _trial_time(g::AbstractDataFrame)
 end
 
 """Draw a polar rose plot of saccade directions for the current trial."""
-const _polar_plots = Any[]
+
 
 function _draw_saccade_polar!(
     ax,
     state,
     saccades::Vector{SaccadeInfo},
+    cache::Dict{Symbol,Any},
 )
+    polar_plots = get!(cache, :polar_plots, Any[])
     # Remove only our previously added plots (not axis decorations)
-    for p in _polar_plots
+    for p in polar_plots
         delete!(ax, p)
     end
-    empty!(_polar_plots)
+    empty!(polar_plots)
 
     !state.show_saccades[] && return
     isempty(saccades) && return
@@ -514,7 +516,7 @@ function _draw_saccade_polar!(
         strokewidth=1.5,
         strokecolor=:darkgreen,
     )
-    push!(_polar_plots, p)
+    push!(polar_plots, p)
 end
 
 # ── Main draw function ─────────────────────────────────────────────────────── #
@@ -538,6 +540,7 @@ function _draw_all!(
     # Extract events from FULL data (heavy — cached for _redraw_window!)
     saccades_full = _extract_saccades(g_full)
     fixations_full = _extract_fixations(g_full)
+    t_full = _trial_time(g_full)
 
     # Compute velocity for cursor tracking
     gx = Float64.(g_full[!, state.gx_col])
@@ -549,6 +552,7 @@ function _draw_all!(
     cache[:g] = g_full
     cache[:saccades] = saccades_full
     cache[:fixations] = fixations_full
+    cache[:t_full] = t_full
     cache[:n_full] = n_full
     cache[:speed] = spd
 
@@ -592,7 +596,10 @@ function _redraw_window!(
     gx = Float64.(g[!, state.gx_col])
     gy = Float64.(g[!, state.gy_col])
     pa = Float64.(g[!, state.pa_col])
-    t = _trial_time(g)
+    
+    t_full = cache[:t_full]::Vector{Float64}
+    t = t_full[w_start:w_end]
+    
     speed_full = cache[:speed]::Vector{Float64}
     speed_win = speed_full[w_start:w_end]
 
@@ -638,7 +645,7 @@ function _redraw_window!(
         fixations_draw;
         reset_zoom=reset_zoom,
     )
-    _draw_saccade_polar!(axes[2], state, saccades_draw)
+    _draw_saccade_polar!(axes[2], state, saccades_draw, cache)
     _draw_xy_trace!(axes[3], g, gx, gy, t, state, saccades_draw, fixations_draw, cache)
     _draw_velocity!(axes[4], g, t, speed_win, state, saccades_draw, fixations_draw, cache)
     _draw_pupil!(axes[5], g, pa, t, state)
@@ -1105,6 +1112,8 @@ function plot_databrowser(
         idx = clamp(idx, 1, length(state.segments))
         _playing[] = false
         btn_play.label[] = "▶"
+        _scroll_playing[] = false
+        btn_scroll_play.label[] = "▶"
         state.trial[] = idx
         state.selected_saccade[] = 0
         state.selected_fixation[] = 0
@@ -1278,10 +1287,11 @@ function plot_databrowser(
         # Saccade highlight
         sel_s = state.selected_saccade[]
         # Remove any previous polar highlight
-        for p in filter(x -> x isa Lines, _polar_plots)
+        polar_plots = get!(_cache, :polar_plots, Any[])
+        for p in filter(x -> x isa Lines, polar_plots)
             delete!(axes[2], p)
         end
-        filter!(x -> !(x isa Lines), _polar_plots)
+        filter!(x -> !(x isa Lines), polar_plots)
 
         if sel_s > 0 && sel_s <= length(saccades)
             s = saccades[sel_s]
@@ -1298,7 +1308,7 @@ function plot_databrowser(
                 color=:red,
                 linewidth=2,
             )
-            push!(_polar_plots, hl)
+            push!(polar_plots, hl)
             _hl_sacc_vis[] = true
         else
             _hl_sacc_vis[] = false
