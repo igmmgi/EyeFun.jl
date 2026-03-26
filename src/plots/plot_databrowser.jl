@@ -1115,6 +1115,7 @@ function plot_databrowser(
         else
             sl_frame.range[] = 1:n
         end
+        set_close_to!(sl_frame, 1)
         state.frame[] = 1
         w_start = isnothing(sl_scroll) ? 1 : sl_scroll.value[]
         _draw_all!(
