@@ -288,10 +288,10 @@ function _draw_spatial!(
             push!(dys, (s.y2 - s.y1) * 0.1)
         end
         if !isempty(slx)
-            lines!(ax, slx, sly; color=(:green, 0.7), linewidth=2)
+            lines!(ax, slx, sly; color=(:green, 0.85), linewidth=2.5)
         end
         if !isempty(mxs)
-            arrows!(ax, mxs, mys, dxs, dys; color=(:green, 0.7), arrowsize=10, lengthscale=1.0)
+            arrows!(ax, mxs, mys, dxs, dys; color=(:green, 0.85), arrowsize=15, lengthscale=1.0)
         end
     end
 
