@@ -8,7 +8,7 @@
 
     if isfile(edf_path)
         edf = read_eyelink_edf(edf_path)
-        df = create_eyelink_edf_dataframe(edf)
+        df = EyeData(edf)
 
         @test df isa EyeData
         @test nrow(df.df) == nrow(edf.samples)

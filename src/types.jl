@@ -1,3 +1,22 @@
+# ── EyeFile abstract type ──────────────────────────────────────────────────── #
+
+"""
+    EyeFile
+
+Abstract supertype for raw eye-tracking file containers returned by format-specific
+readers (`read_eyelink`, `read_smi`, etc.).
+
+All subtypes must expose:
+- `.samples::DataFrame` — raw sample rows
+- `.sample_rate::Float64` — recording frequency in Hz
+- `.screen_res::Tuple{Int,Int}` — screen resolution `(width, height)` in px
+- `.screen_width_cm::Float64` — physical screen width in cm
+- `.viewing_distance_cm::Float64` — eye-to-screen distance in cm
+
+Pass to `EyeData(raw)` to obtain an analysis-ready container with event columns.
+"""
+abstract type EyeFile end
+
 # ── EyeData type ───────────────────────────────────────────────────────────── #
 
 """
@@ -17,9 +36,13 @@ with recording metadata (sample rate, screen geometry, etc.).
 # Example
 ```julia
 edf = read_eyelink("data.edf")
-ed = create_eyelink_edf_dataframe(edf)  # returns EyeData
+ed = EyeData(edf)              # EyeLink: uses tracker-native events
 
-ed.df.gxR      # access columns via .dataframe
+smi = read_smi("data.txt")
+ed = EyeData(smi)              # SMI: format conversion only
+detect_events!(ed)             # add fixations/saccades/blinks via I-VT
+
+ed.df.gxR      # access columns via .df
 nrow(ed.df)    # DataFrame functions on .df
 plot_gaze(ed)  # all plot/analysis functions accept EyeData
 ed.screen_res  # metadata fields directly
@@ -245,7 +268,7 @@ function fixations(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
 
     mask = df[!, mask_col]
     n = length(mask)
-    sttime, entime = UInt32[], UInt32[]
+    sttime, entime = Float64[], Float64[]
     gavx, gavy, ava = Float64[], Float64[], Float64[]
     dur = Int32[]
 
@@ -264,7 +287,7 @@ function fixations(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
             end
             push!(sttime, times[i])
             push!(entime, times[j-1])
-            push!(dur, has_dur ? df[i, col(:fix_dur)] : Int32(times[j-1] - times[i] + 1))
+            push!(dur, has_dur ? df[i, col(:fix_dur)] : round(Int32, times[j-1] - times[i] + 1))
             push!(gavx, has_gavx ? df[i, col(:fix_gavx)] : NaN)
             push!(gavy, has_gavy ? df[i, col(:fix_gavy)] : NaN)
             push!(ava, has_ava ? df[i, col(:fix_ava)] : NaN)
@@ -295,7 +318,7 @@ function saccades(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
 
     mask = df[!, mask_col]
     n = length(mask)
-    sttime, entime = UInt32[], UInt32[]
+    sttime, entime = Float64[], Float64[]
     gstx, gsty, genx, geny = Float64[], Float64[], Float64[], Float64[]
     ampl, pvel = Float64[], Float64[]
     dur = Int32[]
@@ -318,7 +341,7 @@ function saccades(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
             end
             push!(sttime, times[i])
             push!(entime, times[j-1])
-            push!(dur, has_dur ? df[i, col(:sacc_dur)] : Int32(times[j-1] - times[i] + 1))
+            push!(dur, has_dur ? df[i, col(:sacc_dur)] : round(Int32, times[j-1] - times[i] + 1))
             push!(gstx, has_gstx ? df[i, col(:sacc_gstx)] : NaN)
             push!(gsty, has_gsty ? df[i, col(:sacc_gsty)] : NaN)
             push!(genx, has_genx ? df[i, col(:sacc_genx)] : NaN)
@@ -355,7 +378,7 @@ function blinks(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
 
     mask = df[!, mask_col]
     n = length(mask)
-    sttime, entime = UInt32[], UInt32[]
+    sttime, entime = Float64[], Float64[]
     dur = Int32[]
 
     has_dur = hasproperty(df, col(:blink_dur))
@@ -370,7 +393,7 @@ function blinks(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
             end
             push!(sttime, times[i])
             push!(entime, times[j-1])
-            push!(dur, has_dur ? df[i, col(:blink_dur)] : Int32(times[j-1] - times[i] + 1))
+            push!(dur, has_dur ? df[i, col(:blink_dur)] : round(Int32, times[j-1] - times[i] + 1))
             i = j
         else
             i += 1
@@ -395,6 +418,8 @@ function variables(ed::EyeData)
     # Generic sample columns to drop
     sample_cols = Set([
         :time,
+        :participant,
+        :message,
         :gxR,
         :gyR,
         :paR,

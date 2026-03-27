@@ -25,7 +25,7 @@
         end
 
         @testset "create_edf_dataframe result independent of source" begin
-            df = create_eyelink_edf_dataframe(edf; trial_time_zero = nothing)
+            df = EyeData(edf; trial_time_zero = nothing)
             original_time_first = edf.samples.time[1]
 
             # Mutating the result should not corrupt the EDFFile

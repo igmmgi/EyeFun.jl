@@ -582,37 +582,31 @@ function parse_aois(events::DataFrame)
 end
 
 """
-    create_eyelink_edf_dataframe(edf::EDFFile) -> DataFrame
+    EyeData(edf::EDFFile; include_variables=true, trial_time_zero=nothing, screen_res=nothing) -> EyeData
 
-Build a wide, unified DataFrame with one row per sample timestamp.
-Each sample row is annotated with event membership (fixation, saccade, blink)
-by efficiently joining event intervals [sttime, entime] onto the sample timeline.
+Build an analysis-ready `EyeData` from an `EDFFile` (returned by `read_eyelink`).
 
-# Columns returned
-- `time`         — absolute timestamp (ms)
-- `trial`        — trial number, missing if not in a trial
-- `gxR`, `gyR`   — right-eye gaze x/y (NaN = missing data)
-- `gxL`, `gyL`   — left-eye gaze x/y (NaN = missing or monocular)
-- `paR`, `paL`   — pupil area, right/left eye
-- `in_fix`       — Bool: sample is inside a fixation interval
-- `fix_gavx`     — mean gaze x of the current fixation (NaN outside fixation)
-- `fix_gavy`     — mean gaze y of the current fixation
-- `fix_ava`      — mean pupil area of the current fixation
-- `fix_dur`      — duration of the current fixation (ms, inclusive)
-- `in_sacc`      — Bool: sample is inside a saccade interval
-- `sacc_gstx`    — saccade start gaze x (NaN outside saccade)
-- `sacc_gsty`    — saccade start gaze y
-- `sacc_genx`    — saccade end gaze x
-- `sacc_geny`    — saccade end gaze y
-- `sacc_dur`     — duration of the current saccade (ms, inclusive)
-- `in_blink`     — Bool: sample is inside a blink interval
+Joins tracker-native fixation, saccade, blink, and message events onto the
+sample timeline. Each sample row is annotated with event membership (`in_fix`,
+`in_sacc`, `in_blink`) and event attributes (`fix_gavx`, `sacc_gstx`, etc.).
 
-# Notes
-- Event intervals are joined via `searchsorted` (O(n log n)), not nested loops.
-- Samples with EDF missing-data value (-32768, stored as Float32) are left as-is;
-  downstream users can replace with `NaN` or `missing` as needed.
+# Keyword arguments
+- `include_variables=true` — join `!V TRIAL_VAR` messages as extra columns
+- `trial_time_zero=nothing` — message string that marks t=0 within each trial;
+  when set, a `time_rel` column (ms relative to that message) is added
+- `screen_res=nothing` — override screen resolution; auto-detected from
+  `DISPLAY_COORDS` message if `nothing`
+
+# Example
+```julia
+raw = read_eyelink("session.edf")
+ed  = EyeData(raw)          # uses tracker-native events
+fixations(ed)
+saccades(ed)
+blinks(ed)
+```
 """
-function create_eyelink_edf_dataframe(
+function EyeData(
     edf::EDFFile;
     include_variables::Bool = true,
     trial_time_zero::Union{String,Nothing} = nothing,
@@ -836,3 +830,4 @@ function create_eyelink_edf_dataframe(
 
     return EyeData(result; source = :eyelink, sample_rate = sr, screen_res = screen_res)
 end
+

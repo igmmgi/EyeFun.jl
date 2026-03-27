@@ -48,7 +48,7 @@ function batch_read_eyelink(
 
     for (i, file) in enumerate(files)
         verbose && @info "Reading $file ($(labels[i]))"
-        ed_i = create_eyelink_edf_dataframe(
+        ed_i = EyeData(
             read_eyelink(file; kwargs...);
             trial_time_zero = trial_time_zero,
         )

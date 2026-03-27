@@ -32,7 +32,7 @@ Access sub-tables via functions rather than fields:
 - `messages(edf)`, `aois(edf)`
 - `variables(edf)`
 """
-mutable struct EDFFile
+mutable struct EDFFile <: EyeFile
     filename::String
     preamble::String
     events::DataFrame

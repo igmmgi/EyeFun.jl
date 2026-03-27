@@ -12,17 +12,19 @@ using Statistics
 
 # Types
 export EyeData
+export EyeFile
+export EDFFile, SMIFile, TobiiFile
 export AOI, RectAOI, CircleAOI, EllipseAOI, PolygonAOI
-export contains
 
 # I/O
 export read_eyelink
 export read_eyelink_edf
 export read_eyelink_asc
 export write_eyelink_edf_to_ascii
-export create_eyelink_edf_dataframe
 export batch_read_eyelink
 export read_smi
+export write_smi_to_txt
+export read_tobii
 
 # Event accessors
 export saccades
@@ -99,7 +101,13 @@ include("eyelink_edf/ascii_exporter.jl")
 include("eyelink_edf/eyelink.jl")
 
 # SMI support
+include("smi/types.jl")
 include("smi/smi_reader.jl")
+include("smi/smi_exporter.jl")
+
+# Tobii support
+include("tobii/types.jl")
+include("tobii/tobii_reader.jl")
 
 include("analysis/analysis.jl")
 include("analysis/aoi.jl")

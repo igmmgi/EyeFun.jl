@@ -233,6 +233,7 @@ function _write_event_columns!(
     pa::AbstractVector{<:AbstractFloat},
     vel::Vector{Float64},
     ppd::Float64,
+    sample_rate::Float64,
     prefix::Union{Nothing,Symbol},
 )
     n = length(labels)
@@ -285,11 +286,11 @@ function _write_event_columns!(
                 cx = sum_x / cnt
                 cy = sum_y / cnt
                 ca = sum_pa / cnt
-                dur = Int32(length(run))  # at sample rate, 1 sample ≈ 1/sample_rate * 1000 ms
+                dur_ms = round(Int32, length(run) / sample_rate * 1000.0)
                 fix_gavx[run] .= cx
                 fix_gavy[run] .= cy
                 fix_ava[run] .= ca
-                fix_dur[run] .= dur
+                fix_dur[run] .= dur_ms
             end
             i = j
         else
@@ -308,7 +309,7 @@ function _write_event_columns!(
             # Saccade from i to j-1
             run = i:(j-1)
             in_sacc[run] .= true
-            dur = Int32(length(run))
+            dur_ms = round(Int32, length(run) / sample_rate * 1000.0)
 
             # Find first and last valid gaze sample in the saccade
             first_valid = 0
@@ -338,7 +339,7 @@ function _write_event_columns!(
                 sacc_ampl[run] .= amp
                 sacc_pvel[run] .= peak_v
             end
-            sacc_dur[run] .= dur
+            sacc_dur[run] .= dur_ms
             i = j
         else
             i += 1
@@ -380,6 +381,7 @@ to prefixed columns instead (e.g. `ivt_in_fix`), preserving originals for compar
 - `dispersion_threshold=1.0`: Spatial dispersion threshold in ° (I-DT only)
 - `min_fixation_ms=60`: Minimum fixation duration in ms
 - `min_saccade_ms=10`: Minimum saccade duration in ms
+- `min_blink_ms=80`: Minimum NaN-run duration to classify as a blink (SMI/NaN-encoded data only)
 - `pixels_per_degree=nothing`: Override automatic ppd calculation
 - `prefix=nothing`: `nothing` → overwrite columns; `:ivt`/`:idt` → prefix columns
 
@@ -407,6 +409,7 @@ function detect_events!(
     dispersion_threshold::Real = 1.0,
     min_fixation_ms::Int = 60,
     min_saccade_ms::Int = 10,
+    min_blink_ms::Int = 80,
     pixels_per_degree::Union{Nothing,Real} = nothing,
     prefix::Union{Nothing,Symbol} = nothing,
 )
@@ -451,7 +454,64 @@ function detect_events!(
     end
 
     # Write columns
-    _write_event_columns!(df, all_labels, gx, gy, pa, all_vel, ppd, prefix)
+    _write_event_columns!(df, all_labels, gx, gy, pa, all_vel, ppd, sample_rate, prefix)
+
+    # For NaN-encoded sources (SMI, Tobii), auto-detect blinks from contiguous NaN runs
+    if df.source in (:smi, :tobii)
+        _detect_nan_blinks!(df, min_blink_ms)
+    end
 
     return df
+end
+
+# ── Generic NaN Blink padding ──────────────────────────────────────────────── #
+
+"""
+    _detect_nan_blinks!(ed::EyeData, min_blink_ms::Int)
+
+Detect blinks as contiguous NaN runs in the gaze signal. Populates `in_blink`
+and `blink_dur` columns in `ed.df` using the same schema as the EyeLink pipeline.
+"""
+function _detect_nan_blinks!(ed::EyeData, min_blink_ms::Int)
+    df = ed.df
+    n  = nrow(df)
+
+    # Determine which eye's gaze column to use for NaN detection
+    gx_col = if hasproperty(df, :gxL) && any(!isnan, df.gxL)
+        :gxL
+    elseif hasproperty(df, :gxR) && any(!isnan, df.gxR)
+        :gxR
+    else
+        return  # no valid gaze — cannot detect blinks
+    end
+
+    gx = df[!, gx_col]
+    sr = ed.sample_rate
+    min_blink_samples = max(1, round(Int, min_blink_ms * sr / 1000.0))
+
+    in_blink = falses(n)
+    blink_dur = fill(Int32(0), n)
+
+    i = 1
+    while i <= n
+        if isnan(gx[i])
+            j = i
+            while j <= n && isnan(gx[j])
+                j += 1
+            end
+            run_len = j - i
+            if run_len >= min_blink_samples
+                run = i:(j-1)
+                in_blink[run] .= true
+                blink_dur[run] .= round(Int32, run_len / sr * 1000.0)
+            end
+            i = j
+        else
+            i += 1
+        end
+    end
+
+    df[!, :in_blink]  = in_blink
+    df[!, :blink_dur] = blink_dur
+    return
 end

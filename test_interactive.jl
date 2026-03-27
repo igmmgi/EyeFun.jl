@@ -6,19 +6,63 @@ using DataFrames
 using GLMakie
 using BenchmarkTools
 
-# ── Read the EDF file ─────────────────────────────────────────────────────── #
-# edf = read_eyelink("/home/ian/Documents/Julia/oA_1.edf")
+# ─────────────────────────────────────────────────────────────────────────────
+# SMI data — new unified API
+# ─────────────────────────────────────────────────────────────────────────────
+
+smi_txt = read_smi("resources/data/smi/pp23671_rest1_samples.txt")
+
+smi_idf = read_smi("resources/data/smi/pp31237_rest1.idf")
+write_smi_to_txt(smi_idf)
+
+smi_idf = read_smi("resources/data/smi/pp23671_task1.idf")
+write_smi_to_txt(smi_idf)
+
+
+# Both return SMIFile <: EyeFile
+smi_txt isa SMIFile   # true
+smi_idf isa SMIFile   # true
+smi_txt isa EyeFile   # true
+
+# Convert to analysis-ready EyeData (format conversion only, no events yet)
+ed_txt = EyeData(smi_txt)
+ed_idf = EyeData(smi_idf)
+
+# Run event detection (adds in_fix, in_sacc, in_blink)
+detect_events!(ed_txt)
+detect_events!(ed_idf)
+
+# High-level accessors
+fixations(ed_txt)
+saccades(ed_txt)
+blinks(ed_txt)
+
+# Sanity-check IDF vs TXT agreement
+nrow(ed_txt.df)       # should be ~30443
+nrow(ed_idf.df)       # should be ~30442
+
+# Write IDF back to TXT for side-by-side comparison with BeGaze export
+write_smi_to_txt(smi_idf)
+rt = read_smi("/tmp/pp23671_from_idf.txt")
+nrow(rt.samples)                       # should match smi_idf
+rt.samples.time[1:5]                   # timestamps in ms
+smi_idf.samples.time[1:5]
+
+# Quick gaze comparison (IDF reader vs TXT export)
+n = min(nrow(smi_idf.samples), nrow(smi_txt.samples))
+maximum(abs.(smi_idf.samples.time[1:n] .- smi_txt.samples.time[1:n]))  # Δts (ms)
+maximum(abs.(smi_idf.samples.gxL[1:n] .- smi_txt.samples.gxL[1:n]))   # Δgx (px)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EyeLink data — new unified API
+# ─────────────────────────────────────────────────────────────────────────────
+
 edf = read_eyelink("/home/ian/Desktop/EyeTracking/data_2016/edf/201.edf")
+edf isa EDFFile    # true
+edf isa EyeFile    # true
 
-# # ── Inspect the data (just type the variable — show methods do the work) ──── #
-# edf                       # summary: samples, trials, events
-# first(fixations(edf), 5)  # peek at fixation events
-# first(saccades(edf), 5)   # peek at saccade events
-# first(blinks(edf), 5)     # peek at blink events
-# variables(edf)            # trial conditions (wide pivot)
-
-# ── Build the wide DataFrame ──────────────────────────────────────────────── #
-df = create_eyelink_edf_dataframe(edf)
+# Single constructor call — uses tracker-native events
+df = EyeData(edf)
 
 plot_databrowser(df)
 plot_databrowser(df; split_by=nothing)

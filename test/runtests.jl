@@ -23,6 +23,7 @@ println("=" ^ 40)
     include("tests/ascii_exporter.jl")
     include("tests/safety.jl")
     include("tests/smi.jl")
+    include("tests/tobii.jl")
 
 end
 

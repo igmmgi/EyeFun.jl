@@ -31,7 +31,7 @@ end
     asc_path = joinpath(DATA_DIR, "test1.asc")
 
     if isfile(edf_path)
-        df = create_eyelink_edf_dataframe(read_eyelink(edf_path))
+        df = EyeData(read_eyelink(edf_path))
         @test df isa EyeData
         @test nrow(df.df) > 0
         @test hasproperty(df.df, :sacc_ampl)
@@ -40,7 +40,7 @@ end
     end
 
     if isfile(asc_path)
-        df = create_eyelink_edf_dataframe(read_eyelink(asc_path))
+        df = EyeData(read_eyelink(asc_path))
         @test df isa EyeData
         @test nrow(df.df) > 0
     end
