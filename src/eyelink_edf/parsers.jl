@@ -2,6 +2,22 @@
 Data parsing and conversion functions.
 """
 
+"""
+    _estimate_sample_rate(df::DataFrame) -> Float64
+
+Estimate sample rate from the data by looking at median inter-sample interval.
+Used as a fallback when recording metadata does not contain sample rate.
+"""
+function _estimate_sample_rate(df::DataFrame)
+    n = min(nrow(df), 1000)
+    times = Float64.(df.time[1:n])
+    diffs = diff(times)
+    valid_diffs = filter(d -> d > 0, diffs)
+    isempty(valid_diffs) && return 1000.0  # fallback
+    median_dt_ms = Statistics.median(valid_diffs)
+    return round(1000.0 / median_dt_ms)
+end
+
 function events_to_dataframe(events::Vector{EDFEvent})
     isempty(events) && return DataFrame()
     return DataFrame(
@@ -741,12 +757,18 @@ function EyeData(
     result = DataFrame(
         time = times,
         trial = trial,
-        gxR = gxR,
-        gyR = gyR,
-        paR = paR,
+        participant = fill("", n),
         gxL = gxL,
         gyL = gyL,
         paL = paL,
+        gxR = gxR,
+        gyR = gyR,
+        paR = paR,
+        pupxL = fill(NaN, n),
+        pupyL = fill(NaN, n),
+        pupxR = fill(NaN, n),
+        pupyR = fill(NaN, n),
+        message = message,
         in_fix = in_fix,
         fix_gavx = fix_gavx,
         fix_gavy = fix_gavy,
@@ -761,8 +783,7 @@ function EyeData(
         sacc_ampl = sacc_ampl,
         sacc_pvel = sacc_pvel,
         in_blink = in_blink,
-        blink_dur = blink_dur,
-        message = message;
+        blink_dur = blink_dur;
         copycols = false,
     )
 
@@ -827,7 +848,15 @@ function EyeData(
             end
         end
     end
-
     return EyeData(result; source = :eyelink, sample_rate = sr, screen_res = screen_res)
 end
 
+"""
+    create_eyefun_data(edf::EDFFile; kwargs...) -> EyeData
+
+Convert an `EDFFile` into an analysis-ready `EyeData` container.
+Delegates to the `EyeData` constructor.
+"""
+function create_eyefun_data(edf::EDFFile; kwargs...)
+    return EyeData(edf; kwargs...)
+end

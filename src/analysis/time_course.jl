@@ -35,10 +35,9 @@ function time_bin(
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
-    group_cols = _resolve_group_cols(samples, group_by)
-    valid_df = filter(r -> all(s -> !ismissing(r[s]), group_cols), samples)
+    grouped, group_cols = _valid_groups(samples, group_by)
 
-    eye = _resolve_eye(valid_df, eye)
+    eye = _resolve_eye(samples, eye)
     ecols = _eye_columns(eye)
 
     # Select measure column
@@ -54,16 +53,10 @@ function time_bin(
 
     rows = NamedTuple[]
 
-    for g in groupby(valid_df, group_cols)
+    for g in grouped
         label = _group_labels(g, group_cols)
 
-        # Get time relative to trial start
-        if hasproperty(g, :time_rel) && !all(ismissing, g.time_rel)
-            t = Float64[ismissing(v) ? NaN : Float64(v) for v in g.time_rel]
-        else
-            t_raw = Float64.(g.time)
-            t = t_raw .- t_raw[1]
-        end
+        t = _trial_relative_time(g)
 
         vals = Float64.(g[!, val_col])
 
@@ -79,8 +72,7 @@ function time_bin(
             center = (lo + hi) / 2.0
 
             mask = lo .<= t .< hi
-            bin_vals = vals[mask]
-            valid_vals = filter(!isnan, bin_vals)
+            bin_vals = filter(!isnan, vals[mask])
 
             push!(
                 rows,
@@ -88,8 +80,8 @@ function time_bin(
                     label,
                     (
                         time_bin = center,
-                        value = isempty(valid_vals) ? NaN : mean(valid_vals),
-                        n = length(valid_vals),
+                        value = isempty(bin_vals) ? NaN : mean(bin_vals),
+                        n = length(bin_vals),
                     ),
                 ),
             )
@@ -130,10 +122,9 @@ function proportion_of_looks(
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
-    group_cols = _resolve_group_cols(samples, group_by)
-    valid_df = filter(r -> all(s -> !ismissing(r[s]), group_cols), samples)
+    grouped, group_cols = _valid_groups(samples, group_by)
 
-    eye = _resolve_eye(valid_df, eye)
+    eye = _resolve_eye(samples, eye)
     ecols = _eye_columns(eye)
     gx_col, gy_col = ecols.gx, ecols.gy
 
@@ -142,16 +133,10 @@ function proportion_of_looks(
 
     rows = NamedTuple[]
 
-    for g in groupby(valid_df, group_cols)
+    for g in grouped
         label = _group_labels(g, group_cols)
 
-        # Time
-        if hasproperty(g, :time_rel) && !all(ismissing, g.time_rel)
-            t = Float64[ismissing(v) ? NaN : Float64(v) for v in g.time_rel]
-        else
-            t_raw = Float64.(g.time)
-            t = t_raw .- t_raw[1]
-        end
+        t = _trial_relative_time(g)
 
         gx = Float64.(g[!, gx_col])
         gy = Float64.(g[!, gy_col])
@@ -166,20 +151,16 @@ function proportion_of_looks(
             hi = bin_edges[b+1]
             center = (lo + hi) / 2.0
 
-            mask = lo .<= t .< hi
-            bin_gx = gx[mask]
-            bin_gy = gy[mask]
-
-            # Count valid samples and hits per AOI
             n_valid = 0
-            counts = zeros(Int, n_aois)
-            for j in eachindex(bin_gx)
-                isnan(bin_gx[j]) && continue
-                isnan(bin_gy[j]) && continue
+            aoi_counts = zeros(Int, n_aois)
+            for j in eachindex(t)
+                (t[j] < lo || t[j] >= hi) && continue
+                isnan(gx[j]) && continue
+                isnan(gy[j]) && continue
                 n_valid += 1
                 for ai = 1:n_aois
-                    if contains(aois[ai], bin_gx[j], bin_gy[j])
-                        counts[ai] += 1
+                    if contains(aois[ai], gx[j], gy[j])
+                        aoi_counts[ai] += 1
                         break
                     end
                 end
@@ -187,9 +168,9 @@ function proportion_of_looks(
 
             # Build row with per-AOI proportions
             props = NamedTuple{Tuple(Symbol.(aoi_names))}(
-                Tuple(n_valid > 0 ? counts[ai] / n_valid : NaN for ai = 1:n_aois),
+                Tuple(n_valid > 0 ? aoi_counts[ai] / n_valid : NaN for ai = 1:n_aois),
             )
-            outside = n_valid > 0 ? (n_valid - sum(counts)) / n_valid : NaN
+            outside = n_valid > 0 ? (n_valid - sum(aoi_counts)) / n_valid : NaN
 
             push!(rows, merge(label, (time_bin = center,), props, (outside = outside,)))
         end

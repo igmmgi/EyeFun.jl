@@ -38,8 +38,9 @@ function interpolate_blinks!(
     pa = collect(df.df[!, pa_col])
     n = length(pa)
 
-    # Find blink intervals, extend by margin, and merge overlapping
-    intervals = _blink_intervals(df.df.in_blink, margin_ms, n)
+    # Find blink intervals, extend by margin (converted to samples), and merge overlapping
+    margin_samples = max(1, round(Int, margin_ms * df.sample_rate / 1000.0))
+    intervals = _blink_intervals(df.df.in_blink, margin_samples, n)
 
     # Interpolate each merged interval
     for (lo, hi) in intervals
@@ -174,10 +175,9 @@ function baseline_correct_pupil!(
     eye = _resolve_eye(df, eye; cols = :pupil)
     pa_col = _eye_columns(eye).pa
 
-    group_cols = _resolve_group_cols(df, group_by)
-    valid_df = filter(r -> all(s -> !ismissing(r[s]), group_cols), df.df)
+    grouped, group_cols = _valid_groups(df, group_by)
 
-    for g in groupby(valid_df, group_cols)
+    for g in grouped
         idxs = parentindices(g)[1]
         tr = g.time_rel
         pa = g[!, pa_col]
@@ -221,12 +221,12 @@ function smooth_pupil!(df::EyeData; eye::Symbol = :auto, window_ms::Int = 50)
 
     pa = collect(df.df[!, pa_col])
     n = length(pa)
-    half = div(window_ms, 2)
+    half_samples = max(1, div(round(Int, window_ms * df.sample_rate / 1000.0), 2))
     smoothed = similar(pa)
 
     # Initialize running sum for first window
     s, c = 0.0, 0
-    for j = 1:min(n, half)
+    for j = 1:min(n, half_samples)
         if !isnan(pa[j])
             s += pa[j];
             c += 1
@@ -235,13 +235,13 @@ function smooth_pupil!(df::EyeData; eye::Symbol = :auto, window_ms::Int = 50)
 
     for i = 1:n
         # Add sample entering the window (right edge)
-        add = i + half
+        add = i + half_samples
         if add <= n && !isnan(pa[add])
             s += pa[add];
             c += 1
         end
         # Remove sample leaving the window (left edge)
-        rem = i - half - 1
+        rem = i - half_samples - 1
         if rem >= 1 && !isnan(pa[rem])
             s -= pa[rem];
             c -= 1

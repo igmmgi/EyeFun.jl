@@ -1,5 +1,8 @@
 # ── Tobii TSV Reader ───────────────────────────────────────────────────────── #
 
+# Helper: parse a float from a string, returning NaN on empty or unparseable input
+_tobii_parse_float(s) = isempty(s) ? NaN : (tryparse(Float64, s) === nothing ? NaN : parse(Float64, s))
+
 """
     read_tobii(path::String; kwargs...) -> TobiiFile
 
@@ -74,18 +77,18 @@ function read_tobii(
                 continue
             end
             
-            # Helper to get column value or empty string
-            get_val(col_name) = haskey(col_map, col_name) && col_map[col_name] <= length(parts) ? strip(parts[col_map[col_name]]) : ""
+            # Helper to get column value or empty string (captures col_map and parts from loop scope)
+            _get(col_name) = haskey(col_map, col_name) && col_map[col_name] <= length(parts) ? strip(parts[col_map[col_name]]) : ""
             
             # Time is mandatory for samples
-            t_str = get_val("Recording timestamp [ms]")
+            t_str = _get("Recording timestamp [ms]")
             isempty(t_str) && continue
             t_ms = parse(Float64, t_str)
             
             # Events
-            evt_type = get_val("Event")
-            evt_val = get_val("Event value")
-            stim_name = get_val("Presented Stimulus name")
+            evt_type = _get("Event")
+            evt_val = _get("Event value")
+            stim_name = _get("Presented Stimulus name")
             
             msg = ""
             if !isempty(evt_type)
@@ -100,21 +103,19 @@ function read_tobii(
             end
 
             # Check if this row represents a gaze sample (has valid left OR right eye validity or pupil data) Let's just blindly push all rows as samples to maintain timeline
-            valL = get_val("Validity left")
-            valR = get_val("Validity right")
+            valL = _get("Validity left")
+            valR = _get("Validity right")
             
-            # Sometimes parsing fails or is empty, fallback to NaN
-            parse_float(s) = isempty(s) ? NaN : (tryparse(Float64, s) === nothing ? NaN : parse(Float64, s))
+            # Parse gaze and pupil values
+            gxL = _tobii_parse_float(_get("Gaze point left X [DACS px]"))
+            gyL = _tobii_parse_float(_get("Gaze point left Y [DACS px]"))
+            paL = _tobii_parse_float(_get("Pupil diameter left [mm]"))
             
-            gxL = parse_float(get_val("Gaze point left X [DACS px]"))
-            gyL = parse_float(get_val("Gaze point left Y [DACS px]"))
-            paL = parse_float(get_val("Pupil diameter left [mm]"))
+            gxR = _tobii_parse_float(_get("Gaze point right X [DACS px]"))
+            gyR = _tobii_parse_float(_get("Gaze point right Y [DACS px]"))
+            paR = _tobii_parse_float(_get("Pupil diameter right [mm]"))
             
-            gxR = parse_float(get_val("Gaze point right X [DACS px]"))
-            gyR = parse_float(get_val("Gaze point right Y [DACS px]"))
-            paR = parse_float(get_val("Pupil diameter right [mm]"))
-            
-            participant = get_val("Participant name")
+            participant = _get("Participant name")
             if isempty(tob.subject) && !isempty(participant)
                 tob.subject = participant
             end
@@ -139,15 +140,21 @@ function read_tobii(
         end
     end
 
+    n = length(times)
     df = DataFrame(
         time = times,
+        trial = fill(1, n),
         participant = participants,
         gxL = gxLs,
         gyL = gyLs,
+        paL = paLs,
         gxR = gxRs,
         gyR = gyRs,
-        paL = paLs,
         paR = paRs,
+        pupxL = fill(NaN, n),
+        pupyL = fill(NaN, n),
+        pupxR = fill(NaN, n),
+        pupyR = fill(NaN, n),
         message = messages
     )
     

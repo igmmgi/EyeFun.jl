@@ -612,6 +612,18 @@ function write_eyelink_edf_to_ascii(
 end
 
 """
+    write_eyelink_to_asc(edf::EDFFile, asc_path::String = replace(edf.filename, r"\\.edf\$"i => "_exported.asc"))
+
+Write an `EDFFile` object to an ASCII format identical to SR Research's edf2asc tool.
+"""
+function write_eyelink_to_asc(edf::EDFFile, asc_path::String = replace(edf.filename, r"\.edf$"i => "_exported.asc"))
+    @info "Writing EDF to $(asc_path)"
+    export_to_ascii(edf, asc_path)
+    return nothing
+end
+
+
+"""
     write_eyelink_edf_to_ascii(dir::String)
 
 Convert all `.edf` files in `dir` to ASC format. Each output file is written

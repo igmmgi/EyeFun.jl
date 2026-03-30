@@ -21,3 +21,24 @@ plot_scanpath(edf::EDFFile; kwargs...) = plot_scanpath(EyeData(edf); kwargs...)
 Plot heatmap from an EDFFile.
 """
 plot_heatmap(edf::EDFFile; kwargs...) = plot_heatmap(EyeData(edf); kwargs...)
+
+"""
+    plot_fixations(edf::EDFFile; kwargs...)
+
+Plot fixations from an EDFFile.
+"""
+plot_fixations(edf::EDFFile; kwargs...) = plot_fixations(EyeData(edf); kwargs...)
+
+"""
+    plot_pupil(edf::EDFFile; kwargs...)
+
+Plot pupil trace from an EDFFile.
+"""
+plot_pupil(edf::EDFFile; kwargs...) = plot_pupil(EyeData(edf); kwargs...)
+
+"""
+    plot_velocity(edf::EDFFile; kwargs...)
+
+Plot saccade velocity from an EDFFile.
+"""
+plot_velocity(edf::EDFFile; kwargs...) = plot_velocity(EyeData(edf); kwargs...)

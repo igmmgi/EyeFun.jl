@@ -6,12 +6,14 @@ module EyeFun
 
 using DataFrames
 using Makie
+using Printf
 using Statistics
 
 # ── Public API ─────────────────────────────────────────────────────────────── #
 
 # Types
 export EyeData
+export create_eyefun_data
 export EyeFile
 export EDFFile, SMIFile, TobiiFile
 export AOI, RectAOI, CircleAOI, EllipseAOI, PolygonAOI
@@ -21,6 +23,7 @@ export read_eyelink
 export read_eyelink_edf
 export read_eyelink_asc
 export write_eyelink_edf_to_ascii
+export write_eyelink_to_asc
 export batch_read_eyelink
 export read_smi
 export write_smi_to_txt
@@ -31,7 +34,6 @@ export saccades
 export fixations
 export blinks
 export messages
-export aois
 export variables
 export counts
 

@@ -27,7 +27,7 @@ function detect_microsaccades!(
     max_amplitude::Real = 2.0,
     group_by = :trial,
 )
-    group_cols = _resolve_group_cols(df, group_by)
+
 
     eye = _resolve_eye(df, eye)
     ecols = _eye_columns(eye)
@@ -41,19 +41,22 @@ function detect_microsaccades!(
     msacc_pvel = fill(NaN, n)
 
     # Compute pixels per degree from metadata
-    ppd = df.screen_res[1] / (2.0 * atand(df.screen_width_cm / 2.0, df.viewing_distance_cm))
+    ppd = pixels_per_degree(df)
     min_dur_samples = max(1, round(Int, min_duration_ms * df.sample_rate / 1000.0))
 
-    valid_df = filter(r -> all(s -> !ismissing(r[s]), group_cols), df.df)
+    grouped, group_cols = _valid_groups(df, group_by)
 
-    for g in groupby(valid_df, group_cols)
+    for g in grouped
         idxs = parentindices(g)[1]
         gx = collect(g[!, gx_col])
         gy = collect(g[!, gy_col])
         nt = length(gx)
         nt < 5 && continue
 
-        # ── Compute 2D velocity using central difference ──
+        # ── Compute 2D velocity using shared central difference ──
+        vel_deg = _compute_velocity_deg(gx, gy, ppd, df.sample_rate)
+        # Convert °/s back to px/sample for threshold computation
+        dt = 1.0 / df.sample_rate
         vx = fill(NaN, nt)
         vy = fill(NaN, nt)
         for i = 3:(nt-2)

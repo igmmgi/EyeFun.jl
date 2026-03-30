@@ -57,12 +57,14 @@ function Base.show(io::IO, ::MIME"text/plain", smi::SMIFile)
         ns = nrow(smi.samples)
         sr = smi.sample_rate
         dur_min = ns / sr / 60.0
+        sr_str = string(round(sr; digits=2))
         print(io, "  $ns samples")
-        sr > 0 && print(io, " ($(Int(sr)) Hz")
+        sr > 0 && print(io, " ($(sr_str) Hz")
 
-        # Eye presence
-        has_left  = hasproperty(smi.samples, :gxL) && any(!isnan, smi.samples.gxL)
-        has_right = hasproperty(smi.samples, :gxR) && any(!isnan, smi.samples.gxR)
+        # Eye presence (limit to first 1000 samples to avoid O(N) scan on missing eyes)
+        check_eye(col) = hasproperty(smi.samples, col) && any(!isnan, view(smi.samples[!, col], 1:min(1000, nrow(smi.samples))))
+        has_left  = check_eye(:gxL)
+        has_right = check_eye(:gxR)
         eye_str   = has_left && has_right ? "binocular" :
                     has_left              ? "left eye"  :
                     has_right             ? "right eye" : ""
@@ -95,8 +97,9 @@ end
 
 _smi_event_error(fn) = error(
     "Cannot call $fn on a SMIFile — events have not been detected yet.\n" *
-    "Call create_smi_dataframe(smi) first:\n\n" *
-    "    ed = create_smi_dataframe(smi)\n" *
+    "Call create_eyefun_data(smi) first:\n\n" *
+    "    ed = create_eyefun_data(smi)\n" *
+    "    detect_events!(ed)\n" *
     "    $(fn)(ed)\n"
 )
 
@@ -134,6 +137,12 @@ function EyeData(smi::SMIFile)
     # Work on a copy so the raw SMIFile is left intact
     df = copy(samples)
 
+    # Core standardized analysis framework does not include raw SMI hardware diagnostics (Dia/CR)
+    cols_to_drop = intersect(names(df), ["diaxL", "diayL", "diaxR", "diayR", "crxL", "cryL", "crxR", "cryR"])
+    if !isempty(cols_to_drop)
+        select!(df, Not(cols_to_drop))
+    end
+
     return EyeData(
         df;
         source              = :smi,
@@ -142,6 +151,16 @@ function EyeData(smi::SMIFile)
         screen_width_cm     = smi.screen_width_cm,
         viewing_distance_cm = smi.viewing_distance_cm,
     )
+end
+
+"""
+    create_eyefun_data(smi::SMIFile) -> EyeData
+
+Convert a raw `SMIFile` into an analysis-ready `EyeData` container.
+Delegates to the `EyeData` constructor.
+"""
+function create_eyefun_data(smi::SMIFile)
+    return EyeData(smi)
 end
 
 

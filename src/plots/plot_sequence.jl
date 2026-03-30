@@ -23,9 +23,8 @@ function plot_sequence(
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
-    group_cols = _resolve_group_cols(samples, group_by)
-    valid_df = filter(r -> all(s -> !ismissing(r[s]), group_cols), samples)
-    groups = collect(groupby(valid_df, group_cols))
+    grouped, group_cols = _valid_groups(samples, group_by)
+    groups = collect(grouped)
 
     n_groups = min(length(groups), max_trials)
     sr = df.sample_rate

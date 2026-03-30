@@ -88,11 +88,11 @@ end
 # ── Event accessor stubs ────────────────────────────────────────────────────── #
 
 _tobii_event_error(fn) = error(
-    "Cannot call $fn on a TobiiFile — events have not been detected yet.\\n" *
-    "Call EyeData(tob) first, then detect_events!(ed):\\n\\n" *
-    "    ed = EyeData(tob)\\n" *
-    "    detect_events!(ed)\\n" *
-    "    $(fn)(ed)\\n"
+    "Cannot call $fn on a TobiiFile — events have not been detected yet.\n" *
+    "Call create_eyefun_data(tob) first, then detect_events!(ed):\n\n" *
+    "    ed = create_eyefun_data(tob)\n" *
+    "    detect_events!(ed)\n" *
+    "    $(fn)(ed)\n"
 )
 
 fixations(tob::TobiiFile; kwargs...) = _tobii_event_error("fixations")
@@ -130,4 +130,14 @@ function EyeData(tob::TobiiFile)
         screen_width_cm     = tob.screen_width_cm,
         viewing_distance_cm = tob.viewing_distance_cm,
     )
+end
+
+"""
+    create_eyefun_data(tob::TobiiFile) -> EyeData
+
+Convert a raw `TobiiFile` into an analysis-ready `EyeData` container.
+Delegates to the `EyeData` constructor.
+"""
+function create_eyefun_data(tob::TobiiFile)
+    return EyeData(tob)
 end

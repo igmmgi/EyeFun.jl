@@ -29,7 +29,7 @@ function drift_correct!(
     window_ms::Int = 200,
     group_by = :trial,
 )
-    group_cols = _resolve_group_cols(df, group_by)
+    grouped, group_cols = _valid_groups(df, group_by)
 
     eye = _resolve_eye(df, eye)
     ecols = _eye_columns(eye)
@@ -38,9 +38,7 @@ function drift_correct!(
     tx, ty = Float64(target[1]), Float64(target[2])
     win_samples = round(Int, window_ms / 1000.0 * df.sample_rate)
 
-    valid_df = filter(r -> all(s -> !ismissing(r[s]), group_cols), df.df)
-
-    for g in groupby(valid_df, group_cols)
+    for g in grouped
         idxs = parentindices(g)[1]
         gx = collect(g[!, gx_col])
         gy = collect(g[!, gy_col])

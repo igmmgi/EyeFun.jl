@@ -1,0 +1,595 @@
+     Testing EyeFun
+      Status `/tmp/jl_KbpSgd/Project.toml`
+  [6e4b80f9] BenchmarkTools v1.6.3
+  [a93c6f00] DataFrames v1.8.1
+  [12345678] EyeFun v0.1.0 `~/Documents/Julia/EyeFun.jl`
+⌅ [e9467ef8] GLMakie v0.11.11
+⌅ [ee78f7c6] Makie v0.22.10
+  [10745b16] Statistics v1.11.1
+  [ade2ca70] Dates v1.11.0
+  [de0858da] Printf v1.11.0
+  [8dfed614] Test v1.11.0
+      Status `/tmp/jl_KbpSgd/Manifest.toml`
+  [621f4979] AbstractFFTs v1.5.0
+  [1520ce14] AbstractTrees v0.4.5
+  [79e6a3ab] Adapt v4.5.0
+  [35492f91] AdaptivePredicates v1.2.0
+  [66dad0bd] AliasTables v1.1.3
+  [27a7e980] Animations v0.4.2
+  [67c07d97] Automa v1.1.0
+  [13072b0f] AxisAlgorithms v1.1.0
+  [39de3d68] AxisArrays v0.4.8
+  [18cc8868] BaseDirs v1.3.2
+  [6e4b80f9] BenchmarkTools v1.6.3
+  [fa961155] CEnum v0.5.0
+  [96374032] CRlibm v1.0.2
+  [d360d2e6] ChainRulesCore v1.26.0
+  [a2cac450] ColorBrewer v0.4.2
+  [35d6a980] ColorSchemes v3.31.0
+  [3da002f7] ColorTypes v0.12.1
+  [c3611d14] ColorVectorSpace v0.11.0
+  [5ae59095] Colors v0.13.1
+  [34da2185] Compat v4.18.1
+  [187b0558] ConstructionBase v1.6.0
+  [d38c429a] Contour v0.6.3
+  [a8cc5b0e] Crayons v4.1.1
+  [9a962f9c] DataAPI v1.16.0
+  [a93c6f00] DataFrames v1.8.1
+  [864edb3b] DataStructures v0.19.3
+  [e2d170a0] DataValueInterfaces v1.0.0
+  [927a84f5] DelaunayTriangulation v1.6.6
+  [31c24e10] Distributions v0.25.123
+  [ffbed154] DocStringExtensions v0.9.5
+  [4e289a0a] EnumX v1.0.7
+  [429591f6] ExactPredicates v2.2.9
+  [411431e0] Extents v0.1.6
+  [12345678] EyeFun v0.1.0 `~/Documents/Julia/EyeFun.jl`
+  [b86e33f2] FFTA v0.3.1
+  [5789e2e9] FileIO v1.18.0
+⌅ [8fc22ac5] FilePaths v0.8.3
+  [48062228] FilePathsBase v0.9.24
+  [1a297f60] FillArrays v1.16.0
+  [53c48c17] FixedPointNumbers v0.8.5
+  [1fa38f19] Format v1.3.7
+  [b38be410] FreeType v4.1.1
+  [663a7486] FreeTypeAbstraction v0.10.8
+  [f7f18e0c] GLFW v3.4.6
+⌅ [e9467ef8] GLMakie v0.11.11
+  [5c1252a2] GeometryBasics v0.5.10
+  [3955a311] GridLayoutBase v0.11.2
+  [42e2da0e] Grisu v1.0.2
+  [34004b35] HypergeometricFunctions v0.3.28
+  [2803e5a7] ImageAxes v0.6.12
+  [c817782e] ImageBase v0.1.7
+  [a09fc81d] ImageCore v0.10.5
+  [82e4d734] ImageIO v0.6.9
+  [bc367c6b] ImageMetadata v0.9.10
+  [9b13fd28] IndirectArrays v1.0.0
+  [d25df0c9] Inflate v0.1.5
+  [842dd82b] InlineStrings v1.4.5
+  [18e54dd8] IntegerMathUtils v0.1.3
+⌅ [a98d9a8b] Interpolations v0.15.1
+  [d1acc4aa] IntervalArithmetic v1.0.3
+  [8197267c] IntervalSets v0.7.13
+  [3587e190] InverseFunctions v0.1.17
+  [41ab1584] InvertedIndices v1.3.1
+  [92d709cd] IrrationalConstants v0.2.6
+  [f1662d9f] Isoband v0.1.1
+  [c8e1da08] IterTools v1.10.0
+  [82899510] IteratorInterfaceExtensions v1.0.0
+  [692b3bcd] JLLWrappers v1.7.1
+  [682c06a0] JSON v1.4.0
+  [b835a17e] JpegTurbo v0.1.6
+  [5ab0869b] KernelDensity v0.6.11
+  [b964fa9f] LaTeXStrings v1.4.0
+  [8cdb02fc] LazyModules v0.3.1
+  [2ab3a3ac] LogExpFunctions v0.3.29
+  [1914dd2f] MacroTools v0.5.16
+⌅ [ee78f7c6] Makie v0.22.10
+⌅ [20f20a25] MakieCore v0.9.5
+  [dbb5928d] MappedArrays v0.4.3
+  [0a4f8689] MathTeXEngine v0.6.7
+  [7269a6da] MeshIO v0.5.3
+  [e1d29d7a] Missings v1.2.0
+  [66fc600b] ModernGL v1.1.8
+  [e94cdb99] MosaicViews v0.3.4
+  [46d2c3a1] MuladdMacro v0.2.4
+  [f09324ee] Netpbm v1.1.1
+  [510215fc] Observables v0.5.5
+  [6fe1bfb0] OffsetArrays v1.17.0
+  [52e1d378] OpenEXR v0.3.3
+  [bac558e1] OrderedCollections v1.8.1
+  [90014a1f] PDMats v0.11.37
+  [f57f5aa1] PNGFiles v0.4.4
+  [19eb6ba3] Packing v0.5.1
+  [5432bcbf] PaddedViews v0.5.12
+  [69de0a69] Parsers v2.8.3
+  [eebad327] PkgVersion v0.3.3
+  [995b91a9] PlotUtils v1.4.4
+  [647866c9] PolygonOps v0.1.2
+  [2dfb63ee] PooledArrays v1.4.3
+  [aea7be01] PrecompileTools v1.3.3
+  [21216c6a] Preferences v1.5.2
+  [08abe8d2] PrettyTables v3.3.2
+  [27ebfcd6] Primes v0.5.7
+  [92933f4c] ProgressMeter v1.11.0
+  [43287f4e] PtrArrays v1.4.0
+  [4b34888f] QOI v1.0.2
+  [1fd47b50] QuadGK v2.11.2
+  [b3c3ace0] RangeArrays v0.3.2
+  [c84ed2f1] Ratios v0.4.5
+  [189a3867] Reexport v1.2.2
+  [05181044] RelocatableFolders v1.0.1
+  [ae029012] Requires v1.3.1
+  [79098fc4] Rmath v0.9.0
+  [5eaf0fd0] RoundingEmulator v0.2.1
+  [fdea26ae] SIMD v3.7.2
+  [6c6a2e73] Scratch v1.3.0
+  [91c51154] SentinelArrays v1.4.9
+  [65257c39] ShaderAbstractions v0.5.0
+  [992d4aef] Showoff v1.0.3
+  [73760f76] SignedDistanceFields v0.4.1
+  [699a6c99] SimpleTraits v0.9.5
+  [45858cf5] Sixel v0.1.5
+  [a2af1166] SortingAlgorithms v1.2.2
+  [276daf66] SpecialFunctions v2.7.1
+  [860ef19b] StableRNGs v1.0.4
+  [cae243ae] StackViews v0.1.2
+  [90137ffa] StaticArrays v1.9.18
+  [1e83bf80] StaticArraysCore v1.4.4
+  [10745b16] Statistics v1.11.1
+  [82ae8749] StatsAPI v1.8.0
+  [2913bbd2] StatsBase v0.34.10
+  [4c63d2b9] StatsFuns v1.5.2
+  [892a3eda] StringManipulation v0.4.4
+  [09ab397b] StructArrays v0.7.3
+  [ec057cc2] StructUtils v2.7.1
+  [3783bdb8] TableTraits v1.0.1
+  [bd369af6] Tables v1.12.1
+  [62fd8b95] TensorCore v0.1.1
+  [731e570b] TiffImages v0.11.8
+  [3bb67fe8] TranscodingStreams v0.11.3
+  [981d1d27] TriplotBase v0.1.0
+  [1cfade01] UnicodeFun v0.4.1
+  [1986cc42] Unitful v1.28.0
+  [e3aaa7dc] WebP v0.1.3
+  [efce3f68] WoodburyMatrices v1.1.0
+  [6e34b625] Bzip2_jll v1.0.9+0
+  [4e9b3aee] CRlibm_jll v1.0.1+0
+  [83423d85] Cairo_jll v1.18.5+1
+  [ee1fde0b] Dbus_jll v1.16.2+0
+  [5ae413db] EarCut_jll v2.2.4+0
+  [2702e6a9] EpollShim_jll v0.0.20230411+1
+  [2e619515] Expat_jll v2.7.3+0
+⌅ [b22a6f82] FFMPEG_jll v6.1.3+0
+  [a3f928ae] Fontconfig_jll v2.17.1+0
+  [d7e528f0] FreeType2_jll v2.14.3+1
+  [559328eb] FriBidi_jll v1.0.17+0
+  [0656b61e] GLFW_jll v3.4.1+0
+⌅ [b0724c58] GettextRuntime_jll v0.22.4+0
+  [59f7168a] Giflib_jll v5.2.3+0
+  [7746bdde] Glib_jll v2.86.3+0
+  [3b182d85] Graphite2_jll v1.3.15+0
+  [2e76f6c2] HarfBuzz_jll v8.5.1+0
+  [905a6f67] Imath_jll v3.2.2+0
+  [aacddb02] JpegTurbo_jll v3.1.4+0
+  [c1c5ebd0] LAME_jll v3.100.3+0
+  [88015f11] LERC_jll v4.0.1+0
+  [1d63c593] LLVMOpenMP_jll v18.1.8+0
+  [dd4b983a] LZO_jll v2.10.3+0
+⌅ [e9f186c6] Libffi_jll v3.4.7+0
+  [7e76a0d4] Libglvnd_jll v1.7.1+1
+  [94ce4f54] Libiconv_jll v1.18.0+0
+  [4b2f31a3] Libmount_jll v2.41.3+0
+  [89763e89] Libtiff_jll v4.7.2+0
+  [38a345b3] Libuuid_jll v2.41.3+0
+  [e7412a2a] Ogg_jll v1.3.6+0
+  [6cdc7f73] OpenBLASConsistentFPCSR_jll v0.3.30+0
+  [18a262bb] OpenEXR_jll v3.4.8+0
+  [efe28fd5] OpenSpecFun_jll v0.5.6+0
+  [91d4177d] Opus_jll v1.6.1+0
+  [36c8627f] Pango_jll v1.57.0+0
+⌅ [30392449] Pixman_jll v0.44.2+0
+  [f50d1b31] Rmath_jll v0.5.1+0
+  [a2964d1f] Wayland_jll v1.24.0+0
+  [ffd25f8a] XZ_jll v5.8.2+0
+  [4f6342f7] Xorg_libX11_jll v1.8.13+0
+  [0c0b7dd1] Xorg_libXau_jll v1.0.13+0
+  [935fb764] Xorg_libXcursor_jll v1.2.4+0
+  [a3789734] Xorg_libXdmcp_jll v1.1.6+0
+  [1082639a] Xorg_libXext_jll v1.3.8+0
+  [d091e8ba] Xorg_libXfixes_jll v6.0.2+0
+  [a51aa0fd] Xorg_libXi_jll v1.8.3+0
+  [d1454406] Xorg_libXinerama_jll v1.1.7+0
+  [ec84b674] Xorg_libXrandr_jll v1.5.6+0
+  [ea2f1a96] Xorg_libXrender_jll v0.9.12+0
+  [c7cfdc94] Xorg_libxcb_jll v1.17.1+0
+  [cc61e674] Xorg_libxkbfile_jll v1.2.0+0
+  [35661453] Xorg_xkbcomp_jll v1.4.7+0
+  [33bec58e] Xorg_xkeyboard_config_jll v2.44.0+0
+  [c5fb5394] Xorg_xtrans_jll v1.6.0+0
+  [3161d3a3] Zstd_jll v1.5.7+1
+  [9a68df92] isoband_jll v0.2.3+0
+  [a4ae2306] libaom_jll v3.13.1+0
+  [0ac62f75] libass_jll v0.17.4+0
+  [1183f4f0] libdecor_jll v0.2.2+0
+  [f638f0a6] libfdk_aac_jll v2.0.4+0
+  [b53b4c65] libpng_jll v1.6.55+0
+  [075b6546] libsixel_jll v1.10.5+0
+  [f27f6e37] libvorbis_jll v1.3.8+0
+  [c5f90fcd] libwebp_jll v1.6.0+0
+⌅ [1270edf5] x264_jll v10164.0.1+0
+  [dfaa095f] x265_jll v4.1.0+0
+  [d8fb68d0] xkbcommon_jll v1.13.0+0
+  [0dad84c5] ArgTools v1.1.2
+  [56f22d72] Artifacts v1.11.0
+  [2a0f44e3] Base64 v1.11.0
+  [8bf52ea8] CRC32c v1.11.0
+  [ade2ca70] Dates v1.11.0
+  [8ba89e20] Distributed v1.11.0
+  [f43a241f] Downloads v1.7.0
+  [7b1f6079] FileWatching v1.11.0
+  [9fa8497b] Future v1.11.0
+  [b77e0a4c] InteractiveUtils v1.11.0
+  [ac6e5ff7] JuliaSyntaxHighlighting v1.12.0
+  [b27032c2] LibCURL v0.6.4
+  [76f85450] LibGit2 v1.11.0
+  [8f399da3] Libdl v1.11.0
+  [37e2e46d] LinearAlgebra v1.12.0
+  [56ddb016] Logging v1.11.0
+  [d6f4376e] Markdown v1.11.0
+  [a63ad114] Mmap v1.11.0
+  [ca575930] NetworkOptions v1.3.0
+  [44cfe95a] Pkg v1.12.1
+  [de0858da] Printf v1.11.0
+  [9abbd945] Profile v1.11.0
+  [3fa0cd96] REPL v1.11.0
+  [9a3f8284] Random v1.11.0
+  [ea8e919c] SHA v0.7.0
+  [9e88b42a] Serialization v1.11.0
+  [1a1011a3] SharedArrays v1.11.0
+  [6462fe0b] Sockets v1.11.0
+  [2f01184e] SparseArrays v1.12.0
+  [f489334b] StyledStrings v1.11.0
+  [4607b0f0] SuiteSparse
+  [fa267f1f] TOML v1.0.3
+  [a4e569a6] Tar v1.10.0
+  [8dfed614] Test v1.11.0
+  [cf7118a7] UUIDs v1.11.0
+  [4ec0a83e] Unicode v1.11.0
+  [e66e0078] CompilerSupportLibraries_jll v1.3.0+1
+  [deac9b47] LibCURL_jll v8.15.0+0
+  [e37daf67] LibGit2_jll v1.9.0+0
+  [29816b5a] LibSSH2_jll v1.11.3+1
+  [14a3606d] MozillaCACerts_jll v2025.11.4
+  [4536629a] OpenBLAS_jll v0.3.29+0
+  [05823500] OpenLibm_jll v0.8.7+0
+  [458c3c95] OpenSSL_jll v3.5.4+0
+  [efcefdf7] PCRE2_jll v10.44.0+1
+  [bea87d4a] SuiteSparse_jll v7.8.3+2
+  [83775a58] Zlib_jll v1.3.1+2
+  [8e850b90] libblastrampoline_jll v5.15.0+0
+  [8e850ede] nghttp2_jll v1.64.0+1
+  [3f19e933] p7zip_jll v17.7.0+0
+        Info Packages marked with ⌅ have new versions available but compatibility constraints restrict them from upgrading.
+     Testing Running tests...
+[ Info: Writing /home/ian/Documents/Julia/EyeFun.jl/resources/data/eyelink/test1.edf to /tmp/jl_ER87W7WPqb.asc
+[ Info: Read preamble (262 bytes)
+[ Info: Loaded 2680828 binary bytes
+[ Info: Parsing complete: 574 events, 124736 samples
+[ Info: Loaded 124736 samples into DataFrame
+[ Info: Writing /home/ian/Documents/Julia/EyeFun.jl/resources/data/eyelink/test2.edf to /tmp/jl_6b2JCZmTIV.asc
+[ Info: Read preamble (262 bytes)
+[ Info: Loaded 1431922 binary bytes
+[ Info: Parsing complete: 211 events, 66827 samples
+[ Info: Loaded 66827 samples into DataFrame
+[ Info: Writing /home/ian/Documents/Julia/EyeFun.jl/resources/data/eyelink/test3.edf to /tmp/jl_SFGZCB8LQ7.asc
+[ Info: Read preamble (274 bytes)
+[ Info: Loaded 4848935 binary bytes
+[ Info: Parsing complete: 19242 events, 99822 samples
+[ Info: Loaded 99822 samples into DataFrame
+[ Info: Parsed 125324 lines from /home/ian/Documents/Julia/EyeFun.jl/resources/data/eyelink/test1_julia.asc
+[ Info: ASC read complete: 310 events, 124736 samples
+[ Info: Parsed 67057 lines from /home/ian/Documents/Julia/EyeFun.jl/resources/data/eyelink/test2_julia.asc
+[ Info: ASC read complete: 155 events, 66827 samples
+[ Info: Parsed 118930 lines from /home/ian/Documents/Julia/EyeFun.jl/resources/data/eyelink/test3_julia.asc
+[ Info: ASC read complete: 16914 events, 99822 samples
+[ Info: Reading /home/ian/Documents/Julia/EyeFun.jl/resources/data/eyelink/test1.edf
+[ Info: Read preamble (262 bytes)
+[ Info: Loaded 2680828 binary bytes
+[ Info: Parsing complete: 574 events, 124736 samples
+[ Info: Loaded 124736 samples into DataFrame
+[ Info: Reading /home/ian/Documents/Julia/EyeFun.jl/resources/data/eyelink/test1.asc
+[ Info: Parsed 125328 lines from /home/ian/Documents/Julia/EyeFun.jl/resources/data/eyelink/test1.asc
+[ Info: ASC read complete: 310 events, 124740 samples
+[ Info: Reading file.xyz
+[ Info: Reading /home/ian/Documents/Julia/EyeFun.jl/resources/data/eyelink/test1.edf
+[ Info: Read preamble (262 bytes)
+[ Info: Loaded 2680828 binary bytes
+[ Info: Parsing complete: 574 events, 124736 samples
+[ Info: Loaded 124736 samples into DataFrame
+[ Info: Reading /home/ian/Documents/Julia/EyeFun.jl/resources/data/eyelink/test1.asc
+[ Info: Parsed 125328 lines from /home/ian/Documents/Julia/EyeFun.jl/resources/data/eyelink/test1.asc
+[ Info: ASC read complete: 310 events, 124740 samples
+[ Info: Read preamble (262 bytes)
+[ Info: Loaded 2680828 binary bytes
+[ Info: Parsing complete: 574 events, 124736 samples
+[ Info: Loaded 124736 samples into DataFrame
+[ Info: Read preamble (262 bytes)
+[ Info: Loaded 2680828 binary bytes
+[ Info: Parsing complete: 574 events, 124736 samples
+[ Info: Loaded 124736 samples into DataFrame
+[ Info: Read preamble (262 bytes)
+[ Info: Loaded 2680828 binary bytes
+[ Info: Parsing complete: 574 events, 124736 samples
+[ Info: Loaded 124736 samples into DataFrame
+[ Info: Read preamble (262 bytes)
+[ Info: Loaded 2680828 binary bytes
+[ Info: Parsing complete: 574 events, 124736 samples
+[ Info: Loaded 124736 samples into DataFrame
+[ Info: Reading /home/ian/Documents/Julia/EyeFun.jl/resources/data/eyelink/test1.edf
+[ Info: Read preamble (262 bytes)
+[ Info: Loaded 2680828 binary bytes
+[ Info: Parsing complete: 574 events, 124736 samples
+[ Info: Loaded 124736 samples into DataFrame
+[ Info: Reading /home/ian/Documents/Julia/EyeFun.jl/resources/data/eyelink/test1.edf
+[ Info: Read preamble (262 bytes)
+[ Info: Loaded 2680828 binary bytes
+[ Info: Parsing complete: 574 events, 124736 samples
+[ Info: Loaded 124736 samples into DataFrame
+[ Info: Read preamble (262 bytes)
+[ Info: Loaded 2680828 binary bytes
+[ Info: Parsing complete: 574 events, 124736 samples
+[ Info: Loaded 124736 samples into DataFrame
+[ Info: Read preamble (262 bytes)
+[ Info: Loaded 2680828 binary bytes
+[ Info: Parsing complete: 574 events, 124736 samples
+[ Info: Loaded 124736 samples into DataFrame
+[ Info: Read preamble (262 bytes)
+[ Info: Loaded 2680828 binary bytes
+[ Info: Parsing complete: 574 events, 124736 samples
+[ Info: Loaded 124736 samples into DataFrame
+[ Info: Parsed 125324 lines from /tmp/jl_afoLcbgdwp.asc
+[ Info: ASC read complete: 310 events, 124736 samples
+[ Info: Read preamble (274 bytes)
+[ Info: Loaded 4848935 binary bytes
+[ Info: Parsing complete: 19242 events, 99822 samples
+[ Info: Loaded 99822 samples into DataFrame
+[ Info: Read preamble (262 bytes)
+[ Info: Loaded 2680828 binary bytes
+[ Info: Parsing complete: 574 events, 124736 samples
+[ Info: Loaded 124736 samples into DataFrame
+[ Info: SMI TXT: 30443 samples, 50.0 Hz, left eye, subject=pp23671
+[ Info: SMI TXT: 30443 samples, 50.0 Hz, left eye, subject=pp23671
+[ Info: SMI IDF: 30443 samples (30443 sub-records) at 50.0 Hz
+[ Info: SMI IDF Events: 1237 hardware triggers parsed.
+[ Info: SMI IDF: 30443 samples (30443 sub-records) at 50.0 Hz
+[ Info: SMI IDF Events: 1237 hardware triggers parsed.
+[ Info: SMI TXT: wrote 30443 samples → /tmp/jl_6j6Dq9kpCx.txt
+[ Info: SMI TXT: 30443 samples, 50.0 Hz, left eye, subject=pp23671_rest1
+[ Info: SMI IDF: 30443 samples (30443 sub-records) at 50.0 Hz
+[ Info: SMI IDF Events: 1237 hardware triggers parsed.
+[ Info: SMI TXT: wrote 30443 samples → /tmp/jl_IBUT0Fufi5.txt
+[ Info: SMI IDF: 30909 samples (30909 sub-records) at 50.0 Hz
+[ Info: SMI IDF Events: 2292 hardware triggers parsed.
+[ Info: SMI TXT: wrote 30909 samples → /tmp/jl_2zMFglUZIx.txt
+[ Info: SMI IDF: 30346 samples (30346 sub-records) at 50.0 Hz
+[ Info: SMI IDF Events: 1234 hardware triggers parsed.
+[ Info: SMI TXT: wrote 30346 samples → /tmp/jl_OZGbaNGrW1.txt
+[ Info: SMI IDF: 29910 samples (29910 sub-records) at 50.0 Hz
+[ Info: SMI IDF Events: 2029 hardware triggers parsed.
+[ Info: SMI TXT: wrote 29910 samples → /tmp/jl_sjy3OfeXsj.txt
+ERROR: LoadError: Some tests did not pass: 452 passed, 0 failed, 4 errored, 0 broken.
+in expression starting at /home/ian/Documents/Julia/EyeFun.jl/test/runtests.jl:12
+Running EyeFun.jl Test Suite
+========================================
+time_bin: Error During Test at /home/ian/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:157
+  Got exception outside of a @test
+  UndefVarError: `valid_df` not defined in `EyeFun`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] time_bin(df::EyeData; selection::@NamedTuple{trial::UnitRange{Int64}}, bin_ms::Int64, measure::Symbol, eye::Symbol, group_by::Symbol)
+      @ EyeFun ~/Documents/Julia/EyeFun.jl/src/analysis/time_course.jl:40
+    [2] macro expansion
+      @ ~/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:158 [inlined]
+    [3] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1776 [inlined]
+    [4] macro expansion
+      @ ~/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:158 [inlined]
+    [5] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1776 [inlined]
+    [6] top-level scope
+      @ ~/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:6
+    [7] include(mapexpr::Function, mod::Module, _path::String)
+      @ Base ./Base.jl:307
+    [8] top-level scope
+      @ ~/Documents/Julia/EyeFun.jl/test/runtests.jl:14
+    [9] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1776 [inlined]
+   [10] macro expansion
+      @ ~/Documents/Julia/EyeFun.jl/test/runtests.jl:21 [inlined]
+   [11] include(mapexpr::Function, mod::Module, _path::String)
+      @ Base ./Base.jl:307
+   [12] top-level scope
+      @ none:6
+   [13] eval(m::Module, e::Any)
+      @ Core ./boot.jl:489
+   [14] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:283
+   [15] _start()
+      @ Base ./client.jl:550
+proportion_of_looks: Error During Test at /home/ian/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:166
+  Got exception outside of a @test
+  UndefVarError: `valid_df` not defined in `EyeFun`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] proportion_of_looks(df::EyeData, aois::Vector{RectAOI}; selection::@NamedTuple{trial::UnitRange{Int64}}, bin_ms::Int64, eye::Symbol, group_by::Symbol)
+      @ EyeFun ~/Documents/Julia/EyeFun.jl/src/analysis/time_course.jl:127
+    [2] macro expansion
+      @ ~/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:167 [inlined]
+    [3] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1776 [inlined]
+    [4] macro expansion
+      @ ~/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:167 [inlined]
+    [5] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1776 [inlined]
+    [6] top-level scope
+      @ ~/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:6
+    [7] include(mapexpr::Function, mod::Module, _path::String)
+      @ Base ./Base.jl:307
+    [8] top-level scope
+      @ ~/Documents/Julia/EyeFun.jl/test/runtests.jl:14
+    [9] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1776 [inlined]
+   [10] macro expansion
+      @ ~/Documents/Julia/EyeFun.jl/test/runtests.jl:21 [inlined]
+   [11] include(mapexpr::Function, mod::Module, _path::String)
+      @ Base ./Base.jl:307
+   [12] top-level scope
+      @ none:6
+   [13] eval(m::Module, e::Any)
+      @ Core ./boot.jl:489
+   [14] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:283
+   [15] _start()
+      @ Base ./client.jl:550
+prepare_analysis_data: Error During Test at /home/ian/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:249
+  Got exception outside of a @test
+  DataFrame does not contain recognized eye columns.
+  Stacktrace:
+    [1] error(s::String)
+      @ Base ./error.jl:44
+    [2] #_resolve_eye#98
+      @ ~/Documents/Julia/EyeFun.jl/src/analysis/analysis.jl:31 [inlined]
+    [3] _resolve_eye
+      @ ~/Documents/Julia/EyeFun.jl/src/analysis/analysis.jl:8 [inlined]
+    [4] prepare_analysis_data(df::EyeData; selection::@NamedTuple{trial::UnitRange{Int64}}, eye::Symbol, group_by::Symbol, measures::Vector{Symbol})
+      @ EyeFun ~/Documents/Julia/EyeFun.jl/src/analysis/statistics.jl:44
+    [5] macro expansion
+      @ ~/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:250 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1776 [inlined]
+    [7] macro expansion
+      @ ~/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:250 [inlined]
+    [8] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1776 [inlined]
+    [9] top-level scope
+      @ ~/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:6
+   [10] include(mapexpr::Function, mod::Module, _path::String)
+      @ Base ./Base.jl:307
+   [11] top-level scope
+      @ ~/Documents/Julia/EyeFun.jl/test/runtests.jl:14
+   [12] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1776 [inlined]
+   [13] macro expansion
+      @ ~/Documents/Julia/EyeFun.jl/test/runtests.jl:21 [inlined]
+   [14] include(mapexpr::Function, mod::Module, _path::String)
+      @ Base ./Base.jl:307
+   [15] top-level scope
+      @ none:6
+   [16] eval(m::Module, e::Any)
+      @ Core ./boot.jl:489
+   [17] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:283
+   [18] _start()
+      @ Base ./client.jl:550
+growth_curve_data: Error During Test at /home/ian/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:264
+  Got exception outside of a @test
+  UndefVarError: `valid_df` not defined in `EyeFun`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] time_bin(df::EyeData; selection::@NamedTuple{trial::UnitRange{Int64}}, bin_ms::Int64, measure::Symbol, eye::Symbol, group_by::Symbol)
+      @ EyeFun ~/Documents/Julia/EyeFun.jl/src/analysis/time_course.jl:40
+    [2] macro expansion
+      @ ~/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:265 [inlined]
+    [3] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1776 [inlined]
+    [4] macro expansion
+      @ ~/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:265 [inlined]
+    [5] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1776 [inlined]
+    [6] top-level scope
+      @ ~/Documents/Julia/EyeFun.jl/test/tests/analysis.jl:6
+    [7] include(mapexpr::Function, mod::Module, _path::String)
+      @ Base ./Base.jl:307
+    [8] top-level scope
+      @ ~/Documents/Julia/EyeFun.jl/test/runtests.jl:14
+    [9] macro expansion
+      @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1776 [inlined]
+   [10] macro expansion
+      @ ~/Documents/Julia/EyeFun.jl/test/runtests.jl:21 [inlined]
+   [11] include(mapexpr::Function, mod::Module, _path::String)
+      @ Base ./Base.jl:307
+   [12] top-level scope
+      @ none:6
+   [13] eval(m::Module, e::Any)
+      @ Core ./boot.jl:489
+   [14] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:283
+   [15] _start()
+      @ Base ./client.jl:550
+Test Summary:                              | Pass  Error  Total     Time
+EyeFun                                     |  452      4    456  1m17.1s
+  ASC output: Julia vs edf2asc             |   30            30     1.3s
+  EDF → ASC round-trip                     |   15            15    14.8s
+  ASC reader reads Julia output            |   15            15     1.9s
+  read_eyelink dispatcher                  |    5             5     0.6s
+  create_eyelink_edf_dataframe (from file) |    7             7     6.9s
+  create_eyelink_edf_dataframe             |   29            29     0.6s
+  Event accessors                          |   13            13     0.1s
+  Plotting functions                       |   19            19    24.0s
+  Analysis functions                       |   72      4     76    10.7s
+    data_quality                           |    8             8     1.5s
+    interpolate_blinks!                    |    1             1     0.2s
+    smooth_pupil!                          |    2             2     0.2s
+    drift_correct!                         |    1             1     0.8s
+    aoi_metrics                            |   10            10     1.0s
+    coordinates                            |    6             6     0.0s
+    exclude_trials!                        |    3             3     0.5s
+    transition_matrix                      |    3             3     0.0s
+    fixation_metrics                       |    9             9     0.6s
+    scanpath_similarity                    |    5             5     0.2s
+    time_bin                               |           1      1     1.3s
+    proportion_of_looks                    |           1      1     0.3s
+    velocity_filter!                       |    2             2     0.1s
+    outlier_filter!                        |    2             2     0.1s
+    interpolate_gaps!                      |    2             2     0.1s
+    group_summary                          |    8             8     1.0s
+    detect_microsaccades!                  |    6             6     0.6s
+    prepare_analysis_data                  |           1      1     0.4s
+    growth_curve_data                      |           1      1     0.0s
+    batch_read_eyelink                     |    4             4     1.7s
+  detect_events!                           |   36            36     2.4s
+  Buffer digit writers                     |   24            24     0.2s
+  copycols=false safety                    |   11            11     0.4s
+  export_to_ascii                          |   13            13     0.8s
+  Edge cases                               |   57            57     1.0s
+  SMI reader                               |   67            67     5.1s
+  Tobii TSV reader                         |   39            39     0.4s
+RNG of the outermost testset: Random.Xoshiro(0xdec9891331f87606, 0x02a574757ec1570c, 0x9051058a9b27d5be, 0xc597eabc767dd15f, 0x1f766d4ff3746179)
+ERROR: Package EyeFun errored during testing
+Stacktrace:
+  [1] pkgerror(msg::String)
+    @ Pkg.Types ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/Types.jl:68
+  [2] test(ctx::Pkg.Types.Context, pkgs::Vector{PackageSpec}; coverage::Bool, julia_args::Cmd, test_args::Cmd, test_fn::Nothing, force_latest_compatible_version::Bool, allow_earlier_backwards_compatible_versions::Bool, allow_reresolve::Bool)
+    @ Pkg.Operations ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2535
+  [3] test
+    @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2384 [inlined]
+  [4] test(ctx::Pkg.Types.Context, pkgs::Vector{PackageSpec}; coverage::Bool, test_fn::Nothing, julia_args::Cmd, test_args::Cmd, force_latest_compatible_version::Bool, allow_earlier_backwards_compatible_versions::Bool, allow_reresolve::Bool, kwargs::@Kwargs{io::IOContext{IO}})
+    @ Pkg.API ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/API.jl:538
+  [5] test(pkgs::Vector{PackageSpec}; io::IOContext{IO}, kwargs::@Kwargs{})
+    @ Pkg.API ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/API.jl:169
+  [6] test(pkgs::Vector{PackageSpec})
+    @ Pkg.API ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/API.jl:158
+  [7] test(; name::Nothing, uuid::Nothing, version::Nothing, url::Nothing, rev::Nothing, path::Nothing, mode::PackageMode, subdir::Nothing, kwargs::@Kwargs{})
+    @ Pkg.API ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/API.jl:186
+  [8] test()
+    @ Pkg.API ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Pkg/src/API.jl:175
+  [9] top-level scope
+    @ none:1
+ [10] eval(m::Module, e::Any)
+    @ Core ./boot.jl:489
+ [11] exec_options(opts::Base.JLOptions)
+    @ Base ./client.jl:283
+ [12] _start()
+    @ Base ./client.jl:550

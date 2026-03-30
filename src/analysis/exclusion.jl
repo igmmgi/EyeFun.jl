@@ -55,14 +55,22 @@ function exclude_trials!(
 
     # Build exclusion filter
     if n_excluded > 0
-        # Remove matching rows from ed.df
+        # Build a single combined mask over all excluded trials, then delete once
+        combined_mask = falses(nrow(ed.df))
         for row in eachrow(excluded_rows)
-            mask = trues(nrow(ed.df))
-            for col in group_cols
-                mask .&= .!ismissing.(ed.df[!, col]) .& (ed.df[!, col] .== row[col])
+            for i in 1:nrow(ed.df)
+                combined_mask[i] && continue  # already marked
+                match = true
+                for col in group_cols
+                    if ismissing(ed.df[i, col]) || ed.df[i, col] != row[col]
+                        match = false
+                        break
+                    end
+                end
+                match && (combined_mask[i] = true)
             end
-            deleteat!(ed.df, findall(mask))
         end
+        deleteat!(ed.df, findall(combined_mask))
     end
 
     result = (

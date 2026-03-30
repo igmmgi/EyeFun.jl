@@ -29,12 +29,14 @@ function velocity_filter!(df::EyeData; eye::Symbol = :auto, threshold_deg_s::Rea
     n_removed = 0
     for i in eachindex(vel)
         if !isnan(vel[i]) && vel[i] > threshold_deg_s
-            df.df[i, gx_col] = NaN
-            df.df[i, gy_col] = NaN
+            gx[i] = NaN
+            gy[i] = NaN
             n_removed += 1
         end
     end
 
+    df.df[!, gx_col] = gx
+    df.df[!, gy_col] = gy
     return n_removed
 end
 
@@ -79,14 +81,14 @@ function outlier_filter!(
     end
 
     n_removed = 0
-    for i = 1:nrow(df.df)
-        gx = df.df[i, gx_col]
-        gy = df.df[i, gy_col]
-        isnan(gx) && continue
+    gx = df.df[!, gx_col]
+    gy = df.df[!, gy_col]
+    for i in eachindex(gx)
+        isnan(gx[i]) && continue
 
-        if gx < x_lo || gx > x_hi || gy < y_lo || gy > y_hi
-            df.df[i, gx_col] = NaN
-            df.df[i, gy_col] = NaN
+        if gx[i] < x_lo || gx[i] > x_hi || gy[i] < y_lo || gy[i] > y_hi
+            gx[i] = NaN
+            gy[i] = NaN
             n_removed += 1
         end
     end

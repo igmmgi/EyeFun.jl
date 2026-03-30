@@ -52,7 +52,7 @@ function batch_read_eyelink(
             read_eyelink(file; kwargs...);
             trial_time_zero = trial_time_zero,
         )
-        insertcols!(ed_i.df, 1, :participant => fill(labels[i], nrow(ed_i.df)))
+        ed_i.df.participant .= labels[i]
         push!(eds, ed_i)
     end
 

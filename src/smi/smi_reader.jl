@@ -189,16 +189,10 @@ function _read_smi_txt(path::String)
                   parse(Float64, strip(fields[idx_ldy])) : pdx
             pa_l = (pdx + pdy) / 2.0
         end
-        # SMI encodes tracking loss / blinks as all-zero → NaN
-        if lx == 0.0 && ly == 0.0 && pa_l == 0.0
-            gxL[row] = NaN
-            gyL[row] = NaN
-            paL[row] = NaN
-        else
-            gxL[row] = lx
-            gyL[row] = ly
-            paL[row] = pa_l
-        end
+        # SMI encodes missing data as explicitly zero. Decouple gaze validity from pupil.
+        gxL[row] = (lx == 0.0 && ly == 0.0) ? NaN : lx
+        gyL[row] = (lx == 0.0 && ly == 0.0) ? NaN : ly
+        paL[row] = pa_l == 0.0 ? NaN : pa_l
 
         # Right raw pupil position
         rrx, rry = NaN, NaN
@@ -229,15 +223,9 @@ function _read_smi_txt(path::String)
                   parse(Float64, strip(fields[idx_rdy])) : rdx
             pa_r = (rdx + rdy) / 2.0
         end
-        if rx == 0.0 && ry == 0.0 && pa_r == 0.0
-            gxR[row] = NaN
-            gyR[row] = NaN
-            paR[row] = NaN
-        else
-            gxR[row] = rx
-            gyR[row] = ry
-            paR[row] = pa_r
-        end
+        gxR[row] = (rx == 0.0 && ry == 0.0) ? NaN : rx
+        gyR[row] = (rx == 0.0 && ry == 0.0) ? NaN : ry
+        paR[row] = pa_r == 0.0 ? NaN : pa_r
     end
 
     # ── Trim and build DataFrame ──────────────────────────────────────────── #
@@ -457,29 +445,30 @@ function _read_smi_idf(path::String)
             msg_vec[row] = string(trig_val)
         end
 
-        # True tracking loss: gaze AND pupil both zero
-        tracking_loss = (gx == 0.0 && gy == 0.0 && pa == 0.0)
+        # Decouple missing gaze coords from missing pupil attributes
+        gaze_missing = (gx == 0.0 && gy == 0.0)
+        pupil_missing = (pa == 0.0)
 
         # Alternating sub-records: even indices → left eye, odd → right (if binocular)
         to_left = (s % 2 == 0) || !has_right_cols
         if to_left
-            gxL[row] = tracking_loss ? NaN : gx
-            gyL[row] = tracking_loss ? NaN : gy
-            paL[row] = tracking_loss ? NaN : pa
-            pupxL[row] = (tracking_loss || px == 0.0) ? NaN : px
-            pupyL[row] = (tracking_loss || py == 0.0) ? NaN : py
-            diaxL[row] = tracking_loss ? NaN : pupdx
-            diayL[row] = tracking_loss ? NaN : pupdy
+            gxL[row] = gaze_missing ? NaN : gx
+            gyL[row] = gaze_missing ? NaN : gy
+            paL[row] = pupil_missing ? NaN : pa
+            pupxL[row] = (pupil_missing || px == 0.0) ? NaN : px
+            pupyL[row] = (pupil_missing || py == 0.0) ? NaN : py
+            diaxL[row] = pupil_missing ? NaN : pupdx
+            diayL[row] = pupil_missing ? NaN : pupdy
             crxL[row] = cx == 0.0 ? NaN : cx
             cryL[row] = cy == 0.0 ? NaN : cy
         else
-            gxR[row] = tracking_loss ? NaN : gx
-            gyR[row] = tracking_loss ? NaN : gy
-            paR[row] = tracking_loss ? NaN : pa
-            pupxR[row] = (tracking_loss || px == 0.0) ? NaN : px
-            pupyR[row] = (tracking_loss || py == 0.0) ? NaN : py
-            diaxR[row] = tracking_loss ? NaN : pupdx
-            diayR[row] = tracking_loss ? NaN : pupdy
+            gxR[row] = gaze_missing ? NaN : gx
+            gyR[row] = gaze_missing ? NaN : gy
+            paR[row] = pupil_missing ? NaN : pa
+            pupxR[row] = (pupil_missing || px == 0.0) ? NaN : px
+            pupyR[row] = (pupil_missing || py == 0.0) ? NaN : py
+            diaxR[row] = pupil_missing ? NaN : pupdx
+            diayR[row] = pupil_missing ? NaN : pupdy
             crxR[row] = cx == 0.0 ? NaN : cx
             cryR[row] = cy == 0.0 ? NaN : cy
         end
@@ -516,7 +505,7 @@ function _read_smi_idf(path::String)
             ts_diffs = diff(unique_ts)
             valid_diffs = filter(>(0.0), ts_diffs)
             if !isempty(valid_diffs)
-                sample_rate = round(1000.0 / median(valid_diffs), digits=2)
+                sample_rate = round(1000.0 / median(valid_diffs))
             else
                 sample_rate = 50.0
                 @warn "Could not detect IDF sample rate from timestamps, defaulting to 50 Hz"

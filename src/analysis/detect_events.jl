@@ -4,24 +4,6 @@
 # and I-DT (dispersion threshold) algorithms. Writes to the same column schema
 # as the EyeLink parser so all downstream plots and analysis work automatically.
 
-# ── Pixel-to-degree conversion ─────────────────────────────────────────────── #
-
-"""
-    _pixels_per_degree(screen_res, screen_width_cm, viewing_distance_cm) -> Float64
-
-Compute the number of pixels per degree of visual angle.
-Uses the full horizontal extent: ppd = screen_width_px / (2 * atan(screen_width_cm/2 / distance) * 180/π).
-"""
-function _pixels_per_degree(
-    screen_res::Tuple{Int,Int},
-    screen_width_cm::Real,
-    viewing_distance_cm::Real,
-)
-    screen_width_px = screen_res[1]
-    fov_deg = 2.0 * atand(screen_width_cm / 2.0 / viewing_distance_cm)
-    return screen_width_px / fov_deg
-end
-
 # ── Velocity computation ───────────────────────────────────────────────────── #
 
 """
@@ -54,21 +36,6 @@ function _compute_velocity_deg(
         vel[i] = sqrt(dx^2 + dy^2) / ppd / dt
     end
     return vel
-end
-
-"""
-    _estimate_sample_rate(df) -> Float64
-
-Estimate sample rate from the data by looking at median inter-sample interval.
-"""
-function _estimate_sample_rate(df::DataFrame)
-    n = min(nrow(df), 1000)  # look at first 1000 samples
-    times = Float64.(df.time[1:n])
-    diffs = diff(times)
-    valid_diffs = filter(d -> d > 0, diffs)
-    isempty(valid_diffs) && return 1000.0  # fallback
-    median_dt_ms = Statistics.median(valid_diffs)
-    return round(1000.0 / median_dt_ms)
 end
 
 # ── I-VT Algorithm ─────────────────────────────────────────────────────────── #
@@ -410,16 +377,11 @@ function detect_events!(
     min_fixation_ms::Int = 60,
     min_saccade_ms::Int = 10,
     min_blink_ms::Int = 80,
-    pixels_per_degree::Union{Nothing,Real} = nothing,
+    pixels_per_degree_override::Union{Nothing,Real} = nothing,
     prefix::Union{Nothing,Symbol} = nothing,
 )
 
     method ∈ (:ivt, :idt) || error("Invalid method=:$method. Use :ivt or :idt.")
-
-    # Pull metadata from EyeData wrapper
-    screen_res = df.screen_res
-    viewing_distance_cm = df.viewing_distance_cm
-    screen_width_cm = df.screen_width_cm
 
     # Resolve eye and column names
     eye = _resolve_eye(df, eye)
@@ -427,10 +389,10 @@ function detect_events!(
     gx_col, gy_col, pa_col = ecols.gx, ecols.gy, ecols.pa
 
     # Compute pixels per degree
-    ppd = if pixels_per_degree !== nothing
-        Float64(pixels_per_degree)
+    ppd = if pixels_per_degree_override !== nothing
+        Float64(pixels_per_degree_override)
     else
-        _pixels_per_degree(screen_res, screen_width_cm, viewing_distance_cm)
+        pixels_per_degree(df)
     end
 
     sample_rate = df.sample_rate
@@ -476,38 +438,44 @@ function _detect_nan_blinks!(ed::EyeData, min_blink_ms::Int)
     df = ed.df
     n  = nrow(df)
 
-    # Determine which eye's gaze column to use for NaN detection
-    gx_col = if hasproperty(df, :gxL) && any(!isnan, df.gxL)
+    # Determine which eye column to use for NaN detection (preferred: gaze, fallback: pupil)
+    detect_col = if hasproperty(df, :gxL) && any(!isnan, df.gxL)
         :gxL
     elseif hasproperty(df, :gxR) && any(!isnan, df.gxR)
         :gxR
+    elseif hasproperty(df, :paL) && any(!isnan, df.paL)
+        :paL
+    elseif hasproperty(df, :paR) && any(!isnan, df.paR)
+        :paR
     else
-        return  # no valid gaze — cannot detect blinks
+        nothing # 100% missing data
     end
 
-    gx = df[!, gx_col]
     sr = ed.sample_rate
     min_blink_samples = max(1, round(Int, min_blink_ms * sr / 1000.0))
 
     in_blink = falses(n)
     blink_dur = fill(Int32(0), n)
 
-    i = 1
-    while i <= n
-        if isnan(gx[i])
-            j = i
-            while j <= n && isnan(gx[j])
-                j += 1
+    if detect_col !== nothing
+        track = df[!, detect_col]
+        i = 1
+        while i <= n
+            if isnan(track[i])
+                j = i
+                while j <= n && isnan(track[j])
+                    j += 1
+                end
+                run_len = j - i
+                if run_len >= min_blink_samples
+                    run = i:(j-1)
+                    in_blink[run] .= true
+                    blink_dur[run] .= round(Int32, run_len / sr * 1000.0)
+                end
+                i = j
+            else
+                i += 1
             end
-            run_len = j - i
-            if run_len >= min_blink_samples
-                run = i:(j-1)
-                in_blink[run] .= true
-                blink_dur[run] .= round(Int32, run_len / sr * 1000.0)
-            end
-            i = j
-        else
-            i += 1
         end
     end
 

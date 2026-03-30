@@ -81,17 +81,27 @@ function EyeData(
     )
 end
 
+"""
+    create_eyefun_data(df::DataFrame; kwargs...) -> EyeData
+
+Create an analysis-ready `EyeData` wrapper from a plain `DataFrame`.
+This delegates to the underlying `EyeData` constructor.
+"""
+function create_eyefun_data(df::DataFrame; kwargs...)
+    return EyeData(df; kwargs...)
+end
+
 # ── Show ───────────────────────────────────────────────────────────────────── #
 
 function Base.show(io::IO, ed::EyeData)
-    sr = Int(ed.sample_rate)
+    sr = round(ed.sample_rate; digits=2)
     w, h = ed.screen_res
     print(io, "EyeData($(ed.source), $(sr) Hz, $(w)×$(h))")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", ed::EyeData)
     df = ed.df
-    sr = Int(ed.sample_rate)
+    sr = round(ed.sample_rate; digits=2)
     w, h = ed.screen_res
     println(io, "EyeData ($(ed.source), $(sr) Hz, $(w)×$(h))")
 
@@ -113,11 +123,10 @@ function Base.show(io::IO, ::MIME"text/plain", ed::EyeData)
     end
 
     # Event counts
-    _count_onsets(v) = count(i -> v[i] && (i == 1 || !v[i-1]), eachindex(v))
     parts = String[]
-    hasproperty(df, :in_fix) && push!(parts, "$(_count_onsets(df.in_fix)) fixations")
-    hasproperty(df, :in_sacc) && push!(parts, "$(_count_onsets(df.in_sacc)) saccades")
-    hasproperty(df, :in_blink) && push!(parts, "$(_count_onsets(df.in_blink)) blinks")
+    hasproperty(df, :in_fix) && push!(parts, "$(counts(df.in_fix)) fixations")
+    hasproperty(df, :in_sacc) && push!(parts, "$(counts(df.in_sacc)) saccades")
+    hasproperty(df, :in_blink) && push!(parts, "$(counts(df.in_blink)) blinks")
     !isempty(parts) && println(io, "  ", join(parts, ", "))
 
     # Columns
@@ -426,6 +435,10 @@ function variables(ed::EyeData)
         :gxL,
         :gyL,
         :paL,
+        :pupxL,
+        :pupyL,
+        :pupxR,
+        :pupyR,
         :in_fix,
         :fix_gavx,
         :fix_gavy,
@@ -441,7 +454,6 @@ function variables(ed::EyeData)
         :sacc_pvel,
         :in_blink,
         :blink_dur,
-        :message,
         :time_rel,
         :ivt_in_fix,
         :ivt_fix_gavx,

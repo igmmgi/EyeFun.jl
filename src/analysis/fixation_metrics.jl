@@ -38,17 +38,15 @@ function fixation_metrics(
     hasproperty(samples, :fix_gavx) ||
         error("No fixation columns. Run event detection first.")
 
-    group_cols = _resolve_group_cols(samples, group_by)
-    valid_df = filter(r -> all(s -> !ismissing(r[s]), group_cols), samples)
+    grouped, group_cols = _valid_groups(samples, group_by)
 
-    sr = df.sample_rate
     rows = NamedTuple[]
 
-    for g in groupby(valid_df, group_cols)
+    for g in grouped
         label = _group_labels(g, group_cols)
 
         # Extract ordered fixation sequence for this trial
-        fixations = _extract_trial_fixations(g, aois, sr)
+        fixations = _extract_trial_fixations(g, aois)
 
         # Compute metrics per AOI
         for (ai, aoi) in enumerate(aois)
@@ -133,7 +131,7 @@ function fixation_metrics(
 end
 
 """Extract ordered fixation list with AOI assignments for a trial group."""
-function _extract_trial_fixations(g::AbstractDataFrame, aois::Vector{<:AOI}, sr::Float64)
+function _extract_trial_fixations(g::AbstractDataFrame, aois::Vector{<:AOI})
     fixations = NamedTuple{(:aoi_idx, :dur_ms, :onset_ms),Tuple{Int,Float64,Float64}}[]
 
     t0 = Float64(g.time[1])
@@ -147,7 +145,7 @@ function _extract_trial_fixations(g::AbstractDataFrame, aois::Vector{<:AOI}, sr:
         prev_fx = fx
 
         fy = Float64(g.fix_gavy[i])
-        dur_ms = Float64(g.fix_dur[i]) / sr * 1000.0
+        dur_ms = Float64(g.fix_dur[i])
         onset_ms = Float64(g.time[i]) - t0
 
         # Find AOI (0 = outside all AOIs)

@@ -1,33 +1,12 @@
 # ── Shared plotting helpers ────────────────────────────────────────────────── #
 
-"""Select gaze columns based on eye keyword and data availability."""
+"""Select gaze columns based on eye keyword and data availability.
+Thin wrapper around `_resolve_eye` + `_eye_columns` for convenience in plot code."""
 function _select_eye(samples::DataFrame, eye::Symbol)
-    has_left = hasproperty(samples, :gxL) && !all(isnan, samples.gxL)
-    has_right = hasproperty(samples, :gxR) && !all(isnan, samples.gxR)
-
-    # Normalize short forms
-    eye in (:L, :l) && (eye = :left)
-    eye in (:R, :r) && (eye = :right)
-
-    if eye == :auto
-        eye =
-            has_left ? :left :
-            (has_right ? :right : error("No valid gaze data found in either eye"))
-    end
-
-    if eye == :left
-        has_left || error(
-            "No left-eye gaze data available (gxL is all NaN). This may be a right-eye recording.",
-        )
-        return samples.gxL, samples.gyL, "Left eye"
-    elseif eye == :right
-        has_right || error(
-            "No right-eye gaze data available (gxR is all NaN). This may be a left-eye recording.",
-        )
-        return samples.gxR, samples.gyR, "Right eye"
-    else
-        error("Invalid eye=:$eye. Use :left, :right, :L, :R, or :auto.")
-    end
+    resolved = _resolve_eye(samples, eye)
+    ecols = _eye_columns(resolved)
+    label = resolved == :left ? "Left eye" : "Right eye"
+    return samples[!, ecols.gx], samples[!, ecols.gy], label
 end
 
 # ── Selection filter ───────────────────────────────────────────────────────── #
@@ -192,27 +171,51 @@ function _gaussian_smooth(data::Matrix{Float64}, sigma::Real)
     out = zeros(Float64, nx, ny)
 
     # Smooth along dim 1 (rows)
-    for j = 1:ny, i = 1:nx
-        s = 0.0
-        w = 0.0
-        for di = (-k):k
-            ii = clamp(i + di, 1, nx)
-            s += kernel_1d[di+k+1] * data[ii, j]
-            w += kernel_1d[di+k+1]
+    for j = 1:ny
+        # Interior pixels: kernel is fully in bounds, w == 1.0
+        for i = (k+1):(nx-k)
+            s = 0.0
+            for di = (-k):k
+                s += kernel_1d[di+k+1] * data[i+di, j]
+            end
+            tmp[i, j] = s
         end
-        tmp[i, j] = s / w
+        # Edge pixels: need weight normalization
+        for i in Iterators.flatten((1:k, (nx-k+1):nx))
+            (i < 1 || i > nx) && continue
+            s = 0.0
+            w = 0.0
+            for di = (-k):k
+                ii = clamp(i + di, 1, nx)
+                s += kernel_1d[di+k+1] * data[ii, j]
+                w += kernel_1d[di+k+1]
+            end
+            tmp[i, j] = s / w
+        end
     end
 
     # Smooth along dim 2 (cols)
-    for j = 1:ny, i = 1:nx
-        s = 0.0
-        w = 0.0
-        for dj = (-k):k
-            jj = clamp(j + dj, 1, ny)
-            s += kernel_1d[dj+k+1] * tmp[i, jj]
-            w += kernel_1d[dj+k+1]
+    for i = 1:nx
+        # Interior pixels
+        for j = (k+1):(ny-k)
+            s = 0.0
+            for dj = (-k):k
+                s += kernel_1d[dj+k+1] * tmp[i, j+dj]
+            end
+            out[i, j] = s
         end
-        out[i, j] = s / w
+        # Edge pixels
+        for j in Iterators.flatten((1:k, (ny-k+1):ny))
+            (j < 1 || j > ny) && continue
+            s = 0.0
+            w = 0.0
+            for dj = (-k):k
+                jj = clamp(j + dj, 1, ny)
+                s += kernel_1d[dj+k+1] * tmp[i, jj]
+                w += kernel_1d[dj+k+1]
+            end
+            out[i, j] = s / w
+        end
     end
 
     return out

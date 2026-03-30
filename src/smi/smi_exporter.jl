@@ -4,8 +4,6 @@ produced by SMI's own BeGaze software, so that the Julia IDF binary reader
 can be sanity-checked against the native software export.
 """
 
-using Printf
-
 """
     write_smi_to_txt(smi::SMIFile, path::String)
 

@@ -16,10 +16,19 @@ function _resolve_eye(df, eye::Symbol; cols::Symbol = :gaze)
         else
             has_left = hasproperty(d, :gxL) && any(!isnan, d.gxL)
             has_right = hasproperty(d, :gxR) && any(!isnan, d.gxR)
+            if !has_left && !has_right
+                has_left = hasproperty(d, :paL) && any(!isnan, d.paL)
+                has_right = hasproperty(d, :paR) && any(!isnan, d.paR)
+            end
         end
         has_left && return :left
         has_right && return :right
-        error("No valid eye data found in either eye.")
+        
+        # If all data is entirely NaN, gracefully default to whatever columns exist so plot functions can render empty warning axes
+        hasproperty(d, :gxL) && return :left
+        hasproperty(d, :gxR) && return :right
+        
+        error("DataFrame does not contain recognized eye columns.")
     end
     error("Invalid eye=:$eye. Use :left, :right, :L, :R, or :auto.")
 end
@@ -55,6 +64,20 @@ end
 """Extract group column values as a NamedTuple from a grouped sub-DataFrame."""
 function _group_labels(g::SubDataFrame, group_cols::Vector{Symbol})
     NamedTuple{Tuple(group_cols)}(Tuple(first(g[!, s]) for s in group_cols))
+end
+
+"""
+    _valid_groups(df_or_samples, group_by) -> (grouped, group_cols)
+
+Resolve group columns, filter rows with missing group values, and return
+a grouped DataFrame and the resolved column list. This eliminates the
+repeated 3-line boilerplate pattern found in most analysis functions.
+"""
+function _valid_groups(df_or_samples, group_by)
+    d = df_or_samples isa EyeData ? df_or_samples.df : df_or_samples
+    group_cols = _resolve_group_cols(d, group_by)
+    valid_df = filter(r -> all(s -> !ismissing(r[s]), group_cols), d)
+    return groupby(valid_df, group_cols), group_cols
 end
 
 """
@@ -100,8 +123,6 @@ dq = data_quality(df; group_by=[:block, :trial])
 ```
 """
 function data_quality(df::EyeData; eye::Symbol = :auto, group_by = :trial)
-    group_cols = _resolve_group_cols(df, group_by)
-
     eye = _resolve_eye(df, eye)
     ecols = _eye_columns(eye)
     gx_col, pa_col = ecols.gx, ecols.pa
@@ -109,9 +130,9 @@ function data_quality(df::EyeData; eye::Symbol = :auto, group_by = :trial)
 
     rows = NamedTuple[]
 
-    valid_df = filter(r -> all(s -> !ismissing(r[s]), group_cols), df.df)
+    grouped, group_cols = _valid_groups(df, group_by)
 
-    for g in groupby(valid_df, group_cols)
+    for g in grouped
         label = _group_labels(g, group_cols)
         n = nrow(g)
 
@@ -194,10 +215,10 @@ function group_summary(df::EyeData; group_by = :trial, by = nothing, eye::Symbol
         all_group_cols = vcat(by_syms, base_cols)
     end
 
-    valid_df = filter(r -> all(s -> !ismissing(r[s]), all_group_cols), df.df)
+    grouped, _ = _valid_groups(df, all_group_cols)
     rows = NamedTuple[]
 
-    for g in groupby(valid_df, all_group_cols)
+    for g in grouped
         label = _group_labels(g, all_group_cols)
 
         gx = g[!, gx_col]
@@ -277,4 +298,21 @@ function group_summary(df::EyeData; group_by = :trial, by = nothing, eye::Symbol
     end
 
     return DataFrame(rows)
+end
+
+# ── Shared time helper ─────────────────────────────────────────────────────── #
+
+"""
+    _trial_relative_time(g::AbstractDataFrame) -> Vector{Float64}
+
+Extract sample times relative to trial start. Uses `time_rel` column if
+available; otherwise computes `time .- time[1]`.
+"""
+function _trial_relative_time(g::AbstractDataFrame)
+    if hasproperty(g, :time_rel) && !all(ismissing, g.time_rel)
+        return Float64[ismissing(v) ? NaN : Float64(v) for v in g.time_rel]
+    else
+        t_raw = Float64.(g.time)
+        return t_raw .- t_raw[1]
+    end
 end

@@ -35,31 +35,22 @@ function aoi_metrics(
 )
     samples = selection !== nothing ? _apply_selection(df, selection) : df.df
     nrow(samples) == 0 && error("No samples found.")
-    group_cols = _resolve_group_cols(samples, group_by)
+    grouped, group_cols = _valid_groups(samples, group_by)
 
     eye = _resolve_eye(samples, eye)
     ecols = _eye_columns(eye)
     gx_col, gy_col = ecols.gx, ecols.gy
 
-    has_rel = hasproperty(samples, :time_rel)
     sr = df.sample_rate
 
     rows = NamedTuple[]
 
-    valid_df = filter(r -> all(s -> !ismissing(r[s]), group_cols), samples)
-
-    for g in groupby(valid_df, group_cols)
+    for g in grouped
         label = _group_labels(g, group_cols)
         gx = g[!, gx_col]
         gy = g[!, gy_col]
 
-        # Time reference
-        if has_rel && !all(ismissing, g.time_rel)
-            t = Float64[ismissing(v) ? NaN : Float64(v) for v in g.time_rel]
-        else
-            t_raw = Float64.(g.time)
-            t = t_raw .- t_raw[1]
-        end
+        t = _trial_relative_time(g)
 
         for aoi in aois
             # Compute in_aoi using contains() dispatch

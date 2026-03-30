@@ -39,54 +39,49 @@ function prepare_analysis_data(
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
-    group_cols = _resolve_group_cols(samples, group_by)
-    valid_df = filter(r -> all(s -> !ismissing(r[s]), group_cols), samples)
+    grouped, group_cols = _valid_groups(samples, group_by)
 
-    eye = _resolve_eye(valid_df, eye)
+    eye = _resolve_eye(samples, eye)
     ecols = _eye_columns(eye)
+
+    # Pre-resolve measure columns
+    measure_cols = Symbol[]
+    for m in measures
+        col = if m == :pupil
+            ecols.pa
+        elseif m == :gaze_x
+            ecols.gx
+        elseif m == :gaze_y
+            ecols.gy
+        else
+            error("Unknown measure :$m. Use :pupil, :gaze_x, or :gaze_y.")
+        end
+        push!(measure_cols, col)
+    end
 
     rows = NamedTuple[]
 
-    for g in groupby(valid_df, group_cols)
+    for g in grouped
         label = _group_labels(g, group_cols)
-
-        # Time relative to trial start
-        if hasproperty(g, :time_rel) && !all(ismissing, g.time_rel)
-            t = Float64[ismissing(v) ? NaN : Float64(v) for v in g.time_rel]
-        else
-            t_raw = Float64.(g.time)
-            t = t_raw .- t_raw[1]
-        end
+        t = _trial_relative_time(g)
 
         for i = 1:nrow(g)
             isnan(t[i]) && continue
 
-            # Build measure values
-            vals = Dict{Symbol,Float64}()
+            # Check all measure columns for validity
             skip = false
-            for m in measures
-                col = if m == :pupil
-                    ecols.pa
-                elseif m == :gaze_x
-                    ecols.gx
-                elseif m == :gaze_y
-                    ecols.gy
-                else
-                    error("Unknown measure :$m. Use :pupil, :gaze_x, or :gaze_y.")
-                end
-                v = Float64(g[i, col])
-                if isnan(v)
+            for mc in measure_cols
+                if isnan(Float64(g[i, mc]))
                     skip = true
                     break
                 end
-                vals[m] = v
             end
             skip && continue
 
             row = merge(
                 label,
                 (time = t[i], sample = i),
-                NamedTuple{Tuple(measures)}(Tuple(vals[m] for m in measures)),
+                NamedTuple{Tuple(measures)}(Tuple(Float64(g[i, mc]) for mc in measure_cols)),
             )
 
             # Add event flags if present
@@ -179,11 +174,11 @@ function _orthogonal_polynomials(x::Vector{<:Real}, degree::Int)
     for d = 1:(degree+1)
         v = raw[:, d]
         for j = 1:(d-1)
-            proj = dot(v, ortho[:, j]) / dot(ortho[:, j], ortho[:, j])
+            proj = _dot(v, ortho[:, j]) / _dot(ortho[:, j], ortho[:, j])
             v = v .- proj .* ortho[:, j]
         end
         # Normalize
-        norm_v = sqrt(dot(v, v))
+        norm_v = sqrt(_dot(v, v))
         ortho[:, d] = norm_v > 0 ? v ./ norm_v : v
     end
 
@@ -191,5 +186,5 @@ function _orthogonal_polynomials(x::Vector{<:Real}, degree::Int)
     return ortho[:, 2:(degree+1)]
 end
 
-# Dot product helper (avoids LinearAlgebra dependency)
-dot(a, b) = sum(a .* b)
+# Dot product helper (non-allocating, avoids LinearAlgebra dependency)
+_dot(a, b) = sum(a[i] * b[i] for i in eachindex(a))
