@@ -420,7 +420,7 @@ function detect_events!(
 
     # For NaN-encoded sources (SMI, Tobii), auto-detect blinks from contiguous NaN runs
     if df.source in (:smi, :tobii)
-        _detect_nan_blinks!(df, min_blink_ms)
+        _detect_nan_blinks!(df, min_blink_ms, eye)
     end
 
     return df
@@ -429,24 +429,23 @@ end
 # ── Generic NaN Blink padding ──────────────────────────────────────────────── #
 
 """
-    _detect_nan_blinks!(ed::EyeData, min_blink_ms::Int)
+    _detect_nan_blinks!(ed::EyeData, min_blink_ms::Int, eye::Symbol)
 
-Detect blinks as contiguous NaN runs in the gaze signal. Populates `in_blink`
-and `blink_dur` columns in `ed.df` using the same schema as the EyeLink pipeline.
+Detect blinks as contiguous NaN runs in the gaze signal for the selected `eye`.
+Populates `in_blink` and `blink_dur` columns in `ed.df` using the same schema
+as the EyeLink pipeline.
 """
-function _detect_nan_blinks!(ed::EyeData, min_blink_ms::Int)
+function _detect_nan_blinks!(ed::EyeData, min_blink_ms::Int, eye::Symbol)
     df = ed.df
     n  = nrow(df)
 
+    ecols = _eye_columns(eye)
+    
     # Determine which eye column to use for NaN detection (preferred: gaze, fallback: pupil)
-    detect_col = if hasproperty(df, :gxL) && any(!isnan, df.gxL)
-        :gxL
-    elseif hasproperty(df, :gxR) && any(!isnan, df.gxR)
-        :gxR
-    elseif hasproperty(df, :paL) && any(!isnan, df.paL)
-        :paL
-    elseif hasproperty(df, :paR) && any(!isnan, df.paR)
-        :paR
+    detect_col = if hasproperty(df, ecols.gx) && any(!isnan, df[!, ecols.gx])
+        ecols.gx
+    elseif hasproperty(df, ecols.pa) && any(!isnan, df[!, ecols.pa])
+        ecols.pa
     else
         nothing # 100% missing data
     end

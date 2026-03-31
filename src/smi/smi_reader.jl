@@ -118,8 +118,6 @@ function _read_smi_txt(path::String)
     idx_rdx = find_col("R Dia X [px]")
     idx_rdy = find_col("R Dia Y [px]")
 
-    has_left = idx_lpx !== nothing || idx_lrx !== nothing
-    has_right = idx_rpx !== nothing || idx_rrx !== nothing
 
     # ── Pre-allocate sample arrays ────────────────────────────────────────── #
     n_samples = length(lines) - header_end
@@ -261,8 +259,7 @@ function _read_smi_txt(path::String)
         message=msg_vec,
     )
 
-    eye_str = has_left && has_right ? "binocular" : has_left ? "left" : "right"
-    @info "SMI TXT: $n samples, $sample_rate Hz, $eye_str eye, subject=$subject"
+    @info "SMI TXT: $n samples, $sample_rate Hz, subject=$subject"
 
     # ── Build and return SMIFile ──────────────────────────────────────────── #
     smi = SMIFile(path)

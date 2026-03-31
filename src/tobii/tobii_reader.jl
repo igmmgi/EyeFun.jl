@@ -60,6 +60,12 @@ function read_tobii(
     # Column mapping indices
     col_map = Dict{String, Int}()
     
+    # Pre-computed indices for hot path
+    idx_time = idx_evt = idx_evt_val = idx_stim = idx_valL = idx_valR = 0
+    idx_gxL = idx_gyL = idx_paL = idx_gxR = idx_gyR = idx_paR = idx_subj = 0
+    
+    _get_val(parts, idx) = idx > 0 && idx <= length(parts) ? strip(parts[idx]) : ""
+
     open(path, "r") do io
         header_parsed = false
         
@@ -74,21 +80,32 @@ function read_tobii(
                     col_map[strip(c)] = i
                 end
                 header_parsed = true
+                
+                idx_time = get(col_map, "Recording timestamp [ms]", 0)
+                idx_evt  = get(col_map, "Event", 0)
+                idx_evt_val = get(col_map, "Event value", 0)
+                idx_stim = get(col_map, "Presented Stimulus name", 0)
+                idx_valL = get(col_map, "Validity left", 0)
+                idx_valR = get(col_map, "Validity right", 0)
+                idx_gxL  = get(col_map, "Gaze point left X [DACS px]", 0)
+                idx_gyL  = get(col_map, "Gaze point left Y [DACS px]", 0)
+                idx_paL  = get(col_map, "Pupil diameter left [mm]", 0)
+                idx_gxR  = get(col_map, "Gaze point right X [DACS px]", 0)
+                idx_gyR  = get(col_map, "Gaze point right Y [DACS px]", 0)
+                idx_paR  = get(col_map, "Pupil diameter right [mm]", 0)
+                idx_subj = get(col_map, "Participant name", 0)
                 continue
             end
             
-            # Helper to get column value or empty string (captures col_map and parts from loop scope)
-            _get(col_name) = haskey(col_map, col_name) && col_map[col_name] <= length(parts) ? strip(parts[col_map[col_name]]) : ""
-            
             # Time is mandatory for samples
-            t_str = _get("Recording timestamp [ms]")
+            t_str = _get_val(parts, idx_time)
             isempty(t_str) && continue
             t_ms = parse(Float64, t_str)
             
             # Events
-            evt_type = _get("Event")
-            evt_val = _get("Event value")
-            stim_name = _get("Presented Stimulus name")
+            evt_type = _get_val(parts, idx_evt)
+            evt_val = _get_val(parts, idx_evt_val)
+            stim_name = _get_val(parts, idx_stim)
             
             msg = ""
             if !isempty(evt_type)
@@ -103,19 +120,19 @@ function read_tobii(
             end
 
             # Check if this row represents a gaze sample (has valid left OR right eye validity or pupil data) Let's just blindly push all rows as samples to maintain timeline
-            valL = _get("Validity left")
-            valR = _get("Validity right")
+            valL = _get_val(parts, idx_valL)
+            valR = _get_val(parts, idx_valR)
             
             # Parse gaze and pupil values
-            gxL = _tobii_parse_float(_get("Gaze point left X [DACS px]"))
-            gyL = _tobii_parse_float(_get("Gaze point left Y [DACS px]"))
-            paL = _tobii_parse_float(_get("Pupil diameter left [mm]"))
+            gxL = _tobii_parse_float(_get_val(parts, idx_gxL))
+            gyL = _tobii_parse_float(_get_val(parts, idx_gyL))
+            paL = _tobii_parse_float(_get_val(parts, idx_paL))
             
-            gxR = _tobii_parse_float(_get("Gaze point right X [DACS px]"))
-            gyR = _tobii_parse_float(_get("Gaze point right Y [DACS px]"))
-            paR = _tobii_parse_float(_get("Pupil diameter right [mm]"))
+            gxR = _tobii_parse_float(_get_val(parts, idx_gxR))
+            gyR = _tobii_parse_float(_get_val(parts, idx_gyR))
+            paR = _tobii_parse_float(_get_val(parts, idx_paR))
             
-            participant = _get("Participant name")
+            participant = _get_val(parts, idx_subj)
             if isempty(tob.subject) && !isempty(participant)
                 tob.subject = participant
             end

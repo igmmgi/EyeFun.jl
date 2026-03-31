@@ -2,119 +2,116 @@
     smi_dir = joinpath(dirname(dirname(@__DIR__)), "resources", "data", "smi")
 
     @testset "read_smi (txt) — returns SMIFile" begin
-        txt_path = joinpath(smi_dir, "pp23671_rest1_samples.txt")
-        if isfile(txt_path)
-            raw = read_smi(txt_path)
-            @test raw isa SMIFile
-            @test raw.sample_rate == 50.0
-            @test raw.screen_res == (1280, 1024)
-            @test raw.screen_width_cm ≈ 30.0
-            @test raw.viewing_distance_cm ≈ 50.0
-            @test raw.subject == "pp23671"
-            @test nrow(raw.samples) > 0
-
-            # Raw samples have gaze columns but no event columns
-            @test hasproperty(raw.samples, :gxL)
-            @test hasproperty(raw.samples, :time)
-            @test hasproperty(raw.samples, :trial)
-            @test hasproperty(raw.samples, :participant)
-            @test hasproperty(raw.samples, :message)
-            @test !hasproperty(raw.samples, :in_fix)    # not yet detected
-            
-            # The test files are uncalibrated mock recordings: 0.0 is successfully cast to NaN
-            @test all(isnan, raw.samples.gxL)
-            @test all(==("pp23671"), raw.samples.participant)
-        else
-            @warn "SMI test data not found, skipping txt SMIFile test"
+        if !isdefined(Main, :TEST_SMI_TXT)
+            @warn "Global SMI TXT fixture not found."
+            return
         end
+        raw = Main.TEST_SMI_TXT
+        @test raw isa SMIFile
+        @test raw.sample_rate == 50.0
+        @test raw.screen_res == (1280, 1024)
+        @test raw.screen_width_cm ≈ 30.0
+        @test raw.viewing_distance_cm ≈ 50.0
+        @test raw.subject == "pp23671"
+        @test nrow(raw.samples) > 0
+
+        # Raw samples have gaze columns but no event columns
+        @test hasproperty(raw.samples, :gxL)
+        @test hasproperty(raw.samples, :time)
+        @test hasproperty(raw.samples, :trial)
+        @test hasproperty(raw.samples, :participant)
+        @test hasproperty(raw.samples, :message)
+        @test !hasproperty(raw.samples, :in_fix)    # not yet detected
+        
+        # The test files are uncalibrated mock recordings: 0.0 is successfully cast to NaN
+        @test all(isnan, raw.samples.gxL)
+        @test all(==("pp23671"), raw.samples.participant)
     end
 
     @testset "create_smi_dataframe (txt) — returns EyeData with events" begin
-        txt_path = joinpath(smi_dir, "pp23671_rest1_samples.txt")
-        if isfile(txt_path)
-            raw = read_smi(txt_path)
-            ed  = EyeData(raw)
-
-            @test ed isa EyeData
-            @test ed.source == :smi
-            @test ed.sample_rate == 50.0
-            @test ed.screen_res == (1280, 1024)
-            @test nrow(ed.df) == nrow(raw.samples)
-
-            # Before detect_events!: event columns are absent
-            @test !hasproperty(ed.df, :in_fix)
-            @test !hasproperty(ed.df, :in_sacc)
-            @test !hasproperty(ed.df, :in_blink)
-
-            # Run event detection
-            detect_events!(ed)
-
-            # Event columns populated
-            @test hasproperty(ed.df, :in_fix)
-            @test hasproperty(ed.df, :in_sacc)
-            @test hasproperty(ed.df, :in_blink)
-            @test hasproperty(ed.df, :fix_gavx)
-            @test hasproperty(ed.df, :sacc_gstx)
-            @test hasproperty(ed.df, :blink_dur)
-
-            # High-level accessors work
-            fix = fixations(ed)
-            @test fix isa DataFrame
-            # Zero fixations expected since the file entirely lacks calibrated gaze coords
-            @test nrow(fix) == 0
-
-            sacc = saccades(ed)
-            @test sacc isa DataFrame
-
-            blk = blinks(ed)
-            @test blk isa DataFrame
-        else
-            @warn "SMI test data not found, skipping create_smi_dataframe test"
+        if !isdefined(Main, :TEST_SMI_TXT)
+            @warn "Global SMI TXT fixture not found."
+            return
         end
+        raw = Main.TEST_SMI_TXT
+        # Create fresh DataFrame
+        ed  = EyeData(deepcopy(raw))
+
+        @test ed isa EyeData
+        @test ed.source == :smi
+        @test ed.sample_rate == 50.0
+        @test ed.screen_res == (1280, 1024)
+        @test nrow(ed.df) == nrow(raw.samples)
+
+        # Before detect_events!: event columns are absent
+        @test !hasproperty(ed.df, :in_fix)
+        @test !hasproperty(ed.df, :in_sacc)
+        @test !hasproperty(ed.df, :in_blink)
+
+        # Run event detection
+        detect_events!(ed)
+
+        # Event columns populated
+        @test hasproperty(ed.df, :in_fix)
+        @test hasproperty(ed.df, :in_sacc)
+        @test hasproperty(ed.df, :in_blink)
+        @test hasproperty(ed.df, :fix_gavx)
+        @test hasproperty(ed.df, :sacc_gstx)
+        @test hasproperty(ed.df, :blink_dur)
+
+        # High-level accessors work
+        fix = fixations(ed)
+        @test fix isa DataFrame
+        # Zero fixations expected since the file entirely lacks calibrated gaze coords
+        @test nrow(fix) == 0
+
+        sacc = saccades(ed)
+        @test sacc isa DataFrame
+
+        blk = blinks(ed)
+        @test blk isa DataFrame
     end
 
     @testset "read_smi (idf) — returns SMIFile" begin
-        idf_path = joinpath(smi_dir, "pp23671_rest1.idf")
-        if isfile(idf_path)
-            raw = read_smi(idf_path)
-            @test raw isa SMIFile
-            @test nrow(raw.samples) > 0
-            @test hasproperty(raw.samples, :gxL)
-            @test hasproperty(raw.samples, :time)
-            @test all(isnan, raw.samples.gxL)
-        else
-            @warn "SMI IDF test data not found, skipping idf test"
+        if !isdefined(Main, :TEST_SMI_IDF)
+            @warn "Global SMI IDF fixture not found."
+            return
         end
+        raw = Main.TEST_SMI_IDF
+        @test raw isa SMIFile
+        @test nrow(raw.samples) > 0
+        @test hasproperty(raw.samples, :gxL)
+        @test hasproperty(raw.samples, :time)
+        @test all(isnan, raw.samples.gxL)
     end
 
     @testset "export_ascii — IDF round-trip" begin
-        idf_path = joinpath(smi_dir, "pp23671_rest1.idf")
-        if isfile(idf_path)
-            raw = read_smi(idf_path)
-            out = tempname() * ".txt"
-            try
-                export_ascii(raw, out)
-                @test isfile(out)
+        if !isdefined(Main, :TEST_SMI_IDF)
+            @warn "Global SMI IDF fixture not found."
+            return
+        end
+        raw = Main.TEST_SMI_IDF
+        out = tempname() * ".txt"
+        try
+            export_ascii(raw, out)
+            @test isfile(out)
 
-                # Round-trip: read the written file back via the TXT reader
-                rt = read_smi(out)
-                @test rt isa SMIFile
-                @test nrow(rt.samples) == nrow(raw.samples)
-                @test rt.sample_rate == raw.sample_rate
+            # Round-trip: read the written file back via the TXT reader
+            rt = read_smi(out)
+            @test rt isa SMIFile
+            @test nrow(rt.samples) == nrow(raw.samples)
+            @test rt.sample_rate == raw.sample_rate
 
-                # Timestamps preserved to within 1 µs (round-trip through µs integers)
-                @test maximum(abs.(rt.samples.time .- raw.samples.time)) < 0.001
+            # Timestamps preserved to within 1 µs (round-trip through µs integers)
+            @test maximum(abs.(rt.samples.time .- raw.samples.time)) < 0.001
 
-                # Gaze values preserved to 2 decimal places (export_ascii uses %.2f)
-                valid = .!isnan.(raw.samples.gxL) .& .!isnan.(rt.samples.gxL)
-                if any(valid)
-                    @test maximum(abs.(raw.samples.gxL[valid] .- rt.samples.gxL[valid])) < 0.01
-                end
-            finally
-                isfile(out) && rm(out)
+            # Gaze values preserved to 2 decimal places (export_ascii uses %.2f)
+            valid = .!isnan.(raw.samples.gxL) .& .!isnan.(rt.samples.gxL)
+            if any(valid)
+                @test maximum(abs.(raw.samples.gxL[valid] .- rt.samples.gxL[valid])) < 0.01
             end
-        else
-            @warn "SMI IDF test data not found, skipping export_ascii test"
+        finally
+            isfile(out) && rm(out)
         end
     end
 
