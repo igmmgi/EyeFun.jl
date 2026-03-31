@@ -53,24 +53,11 @@ function exclude_trials!(
     n_before = nrow(dq)
     n_excluded = nrow(excluded_rows)
 
-    # Build exclusion filter
+    # Build exclusion filter: keep only rows whose group keys are NOT in excluded_rows
     if n_excluded > 0
-        # Build a single combined mask over all excluded trials, then delete once
-        combined_mask = falses(nrow(ed.df))
-        for row in eachrow(excluded_rows)
-            for i in 1:nrow(ed.df)
-                combined_mask[i] && continue  # already marked
-                match = true
-                for col in group_cols
-                    if ismissing(ed.df[i, col]) || ed.df[i, col] != row[col]
-                        match = false
-                        break
-                    end
-                end
-                match && (combined_mask[i] = true)
-            end
-        end
-        deleteat!(ed.df, findall(combined_mask))
+        keep = antijoin(ed.df, excluded_rows[:, group_cols]; on=group_cols)
+        empty!(ed.df)
+        append!(ed.df, keep)
     end
 
     result = (

@@ -5,6 +5,7 @@ EyeFun.jl — Eye-tracking data analysis and visualisation in Julia.
 module EyeFun
 
 using DataFrames
+using LinearAlgebra
 using Makie
 using Printf
 using Statistics

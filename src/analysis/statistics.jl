@@ -174,11 +174,11 @@ function _orthogonal_polynomials(x::Vector{<:Real}, degree::Int)
     for d = 1:(degree+1)
         v = raw[:, d]
         for j = 1:(d-1)
-            proj = _dot(v, ortho[:, j]) / _dot(ortho[:, j], ortho[:, j])
+            proj = dot(v, ortho[:, j]) / dot(ortho[:, j], ortho[:, j])
             v = v .- proj .* ortho[:, j]
         end
         # Normalize
-        norm_v = sqrt(_dot(v, v))
+        norm_v = sqrt(dot(v, v))
         ortho[:, d] = norm_v > 0 ? v ./ norm_v : v
     end
 
@@ -186,5 +186,3 @@ function _orthogonal_polynomials(x::Vector{<:Real}, degree::Int)
     return ortho[:, 2:(degree+1)]
 end
 
-# Dot product helper (non-allocating, avoids LinearAlgebra dependency)
-_dot(a, b) = sum(a[i] * b[i] for i in eachindex(a))

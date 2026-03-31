@@ -1,7 +1,7 @@
 # ── Tobii TSV Reader ───────────────────────────────────────────────────────── #
 
 # Helper: parse a float from a string, returning NaN on empty or unparseable input
-_tobii_parse_float(s) = isempty(s) ? NaN : (isnothing(tryparse(Float64, s)) ? NaN : parse(Float64, s))
+_tobii_parse_float(s) = something(tryparse(Float64, s), NaN)
 
 """
     read_tobii(path::String; kwargs...) -> TobiiFile

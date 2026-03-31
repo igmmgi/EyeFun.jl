@@ -232,7 +232,6 @@ function group_summary(df::EyeData; group_by = :trial, by = nothing, eye::Symbol
         # Fixation stats (column vectors instead of eachrow)
         n_fix = 0
         fix_durs = Float64[]
-        sizehint!(fix_durs, 32)
         if hasproperty(g, :fix_gavx)
             col_in_fix = g.in_fix
             col_fx = g.fix_gavx
@@ -250,8 +249,6 @@ function group_summary(df::EyeData; group_by = :trial, by = nothing, eye::Symbol
         n_sacc = 0
         sacc_ampls = Float64[]
         sacc_pvels = Float64[]
-        sizehint!(sacc_ampls, 16)
-        sizehint!(sacc_pvels, 16)
         if hasproperty(g, :sacc_pvel)
             col_in_sacc = g.in_sacc
             col_spvel = g.sacc_pvel

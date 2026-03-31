@@ -28,9 +28,7 @@ function scanpath_similarity(
     selection1,
     selection2,
     eye::Symbol = :auto,
-    method::Symbol = :levenshtein,
 )
-    method == :levenshtein || error("Only :levenshtein method is currently supported.")
 
     seq1 = _aoi_sequence(df, aois, selection1, eye)
     seq2 = _aoi_sequence(df, aois, selection2, eye)
