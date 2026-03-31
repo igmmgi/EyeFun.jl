@@ -1,17 +1,17 @@
 # EyeFun.jl
 
-A Julia package for Eye Tracking analysis and visualization. 
+A Julia package for Eye Tracking analysis and visualization.
 
 ## Features
 
-- **Pure Julia binary reader** — no SR Research EDF Access API needed
+- Parses data files directly using pure Julia
+- Built-in support for **EyeLink** (`.edf`, `.asc`), **SMI** (`.idf`, `.txt`), and **Tobii** (`.tsv`)
 - Parses fixations, saccades, blinks, messages, input events, and recording metadata
 - Extracts continuous gaze/pupil samples at full recording resolution
 - Outputs tidy `DataFrame`s ready for analysis
-- `create_eyelink_edf_dataframe` — wide per-timestamp DataFrame with event annotations
+- `create_eyefun_data` — wide per-timestamp DataFrame combining continuous samples with event annotations
 - Trial-based data organisation (start/end message markers)
 - Monocular and binocular recordings
-- Also reads `.asc` files produced by `edf2asc`
 
 ## Installation
 
@@ -25,50 +25,42 @@ Pkg.add(url="https://github.com/igmmgi/EyeFun.jl")
 ```julia
 using EyeFun
 
-# Read an EDF file 
-edf = read_eyelink_edf("path/to/file.edf")
-
-# Or use the specific readers directly
-edf = read_eyelink_edf_binary("path/to/file.edf")
-edf = read_eyelink_edf_asc("path/to/file.asc")
+# Read data from your eye tracker 
+et = read_eyelink("path/to/file.edf") # EyeLink (.edf or .asc)
+# et = read_smi("path/to/file.idf")   # SMI (.idf or .txt)
+# et = read_tobii("path/to/file.tsv") # Tobii Pro Lab (.tsv)
 
 # Parsed event tables
-edf.fixations    # DataFrame: sttime, entime, duration, gavx, gavy, ava, …
-edf.saccades     # DataFrame: sttime, entime, duration, gstx, gsty, genx, geny, …
-edf.blinks       # DataFrame: sttime, entime, duration
-edf.messages     # DataFrame: time, message
+fixations(et)   # DataFrame: sttime, entime, duration, gavx, gavy, ava, …
+saccades(et)    # DataFrame: sttime, entime, duration, gstx, gsty, genx, geny, …
+blinks(et)      # DataFrame: sttime, entime, duration
+messages(et)    # DataFrame: time, message
 
 # Continuous sample data
-edf.samples      # DataFrame: time, gxR, gyR, paR, gxL, gyL, paL, trial, time_rel, …
+et.samples      # DataFrame: time, gxR, gyR, paR, gxL, gyL, paL, trial, time_rel, …
 
-# Recording blocks
-edf.recordings   # DataFrame: time, sample_rate, eye, state, …
+# Recording blocks (depending on hardware)
+et.recordings   # DataFrame: time, sample_rate, eye, state, …
 ```
 
-## ASC export
-
-Convert an EDF file to ASC format (equivalent to `edf2asc`):
-
-```julia
-write_eyelink_edf_to_ascii("recording.edf")  # → recording.asc
-```
-
-## create_eyelink_edf_dataframe
+## create_eyefun_data
 
 Combines sample data and event annotations into a single wide DataFrame — one row per millisecond:
 
 ```julia
-df = create_eyelink_edf_dataframe(edf)
-# Columns: time, trial, time_rel,
-#          gxR, gyR, paR, gxL, gyL, paL,
-#          in_fix, fix_gavx, fix_gavy, fix_ava, fix_dur,
-#          in_sacc, sacc_gstx, sacc_gsty, sacc_genx, sacc_geny, sacc_dur,
-#          in_blink
+df = create_eyefun_data(et)
+# Columns include:
+#  time, trial, participant, message
+#  gxL, gyL, paL, gxR, gyR, paR                  (calibrated gaze & pupil)
+#  pupxL, pupyL, pupxR, pupyR                    (raw camera pupil position)
+#  in_fix, fix_gavx, fix_gavy, fix_dur...        (fixation annotations)
+#  in_sacc, sacc_gstx, sacc_gsty, sacc_pvel...   (saccade annotations)
+#  in_blink, blink_dur                           (blink annotations)
 ```
 
 ## Data Reference
 
-### Fixations (`edf.fixations`)
+### Fixations (`fixations(et)`)
 
 | Column | Description |
 |--------|-------------|
@@ -76,10 +68,9 @@ df = create_eyelink_edf_dataframe(edf)
 | `duration` | Duration in ms |
 | `gavx` / `gavy` | Average gaze x/y |
 | `ava` | Average pupil area |
-| `eye` | 0=left, 1=right |
-| `sttime_rel` / `entime_rel` | Trial-relative times |
+| `eye` | 0=Left, 1=Right (EyeLink) |
 
-### Saccades (`edf.saccades`)
+### Saccades (`saccades(et)`)
 
 | Column | Description |
 |--------|-------------|
@@ -88,8 +79,9 @@ df = create_eyelink_edf_dataframe(edf)
 | `gstx` / `gsty` | Start gaze coordinates |
 | `genx` / `geny` | End gaze coordinates |
 | `pvel` | Peak velocity (°/s) |
+| `eye` | 0=Left, 1=Right (EyeLink) |
 
-### Samples (`edf.samples`)
+### Samples (`et.samples`)
 
 | Column | Description |
 |--------|-------------|
@@ -97,22 +89,16 @@ df = create_eyelink_edf_dataframe(edf)
 | `gxR` / `gyR` | Right-eye gaze x/y (NaN if missing) |
 | `paR` | Right pupil area |
 | `gxL` / `gyL` | Left-eye gaze x/y (NaN if missing) |
-| `paL` | Left pupil area |
+| `paL` | Left pupil area/diameter |
 | `trial` | Trial number |
-| `time_rel` | ms since trial start |
 
-## Accuracy vs edf2asc
+## EyeLink ASC export
 
-The binary reader has been validated (non exhaustively) against SR Research's `edf2asc` tool:
+If you specifically use EyeLink, you can manually convert an EDF file to ASC format (equivalent to the `edf2asc` tool):
 
-| | oA_1 binary | oA_1 asc | Δ |
-|--|--|--|--|
-| Fixations | 4357 | 4357 | **0** |
-| Saccades | 3569 | 3567 | +2 |
-| Blinks | 111 | 107 | +4 |
-| Samples | 2,174,180 | ~2,174,198 | −18 |
-
-values (gaze coordinates, pupil area, duration) seem to match edf2asc for all verified events.
+```julia
+export_ascii("recording.edf")  # → recording.asc
+```
 
 ## License
 
