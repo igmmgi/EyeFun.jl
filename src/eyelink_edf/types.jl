@@ -64,7 +64,7 @@ function Base.show(io::IO, ::MIME"text/plain", edf::EDFFile)
     println(io, "EDFFile(\"$(basename(edf.filename))\")")
 
     # Samples info
-    if edf.samples !== nothing && nrow(edf.samples) > 0
+    if !isnothing(edf.samples) && nrow(edf.samples) > 0
         ns = nrow(edf.samples)
         print(io, "  $(_comma(ns)) samples")
 

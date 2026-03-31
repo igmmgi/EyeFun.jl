@@ -108,7 +108,7 @@ function plot_heatmap(
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
     # ── Faceted multi-panel heatmap ──
-    if facet !== nothing
+    if !isnothing(facet)
         hasproperty(samples, facet) || error("Column :$facet not found for faceting.")
         groups = filter(r -> !ismissing(r[facet]), samples)
         facet_vals = sort(unique(groups[!, facet]))
@@ -158,7 +158,7 @@ function plot_heatmap(
             Makie.xlims!(ax, xlims...)
             Makie.ylims!(ax, ylims...)
 
-            if background !== nothing
+            if !isnothing(background)
                 img = Makie.FileIO.load(background)
                 Makie.image!(ax, xlims[1]..xlims[2], ylims[1]..ylims[2], Makie.rotr90(img))
             end
@@ -173,7 +173,7 @@ function plot_heatmap(
                 colorrange = (vmin, vmax),
             )
 
-            aois !== nothing && _draw_aois!(ax, aois)
+            !isnothing(aois) && _draw_aois!(ax, aois)
         end
         Colorbar(fig[1, n_panels+1], hm_ref; label = panel_data[1].cb_label)
         return fig
@@ -202,13 +202,13 @@ function plot_heatmap(
     Makie.xlims!(ax, xlims...)
     Makie.ylims!(ax, ylims...)
 
-    if background !== nothing
+    if !isnothing(background)
         img = Makie.FileIO.load(background)
         Makie.image!(ax, xlims[1]..xlims[2], ylims[1]..ylims[2], Makie.rotr90(img))
     end
 
     hm = Makie.heatmap!(ax, x_c, y_c, vals; colormap = colormap, interpolate = true)
-    aois !== nothing && _draw_aois!(ax, aois)
+    !isnothing(aois) && _draw_aois!(ax, aois)
     Colorbar(fig[1, 2], hm; label = cb_label)
 
     return fig

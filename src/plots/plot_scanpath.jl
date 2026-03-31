@@ -21,7 +21,7 @@ function plot_scanpath(
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
-    if facet !== nothing
+    if !isnothing(facet)
         hasproperty(samples, facet) || error("Column :$facet not found for faceting.")
         groups = filter(r -> !ismissing(r[facet]), samples)
         facet_vals = sort(unique(groups[!, facet]))
@@ -35,27 +35,27 @@ function plot_scanpath(
     title = _format_title("Scanpath", selection)
 
     aspect_ratio = (xlims[2] - xlims[1]) / (ylims[2] - ylims[1])
-    panel_w = facet !== nothing ? 400 : round(Int, 600 * aspect_ratio)
-    panel_h = facet !== nothing ? round(Int, panel_w / aspect_ratio) : 600
-    fig_w = facet !== nothing ? (panel_w * n_panels + 50) : panel_w
-    fig_h = facet !== nothing ? panel_h + 80 : panel_h
+    panel_w = !isnothing(facet) ? 400 : round(Int, 600 * aspect_ratio)
+    panel_h = !isnothing(facet) ? round(Int, panel_w / aspect_ratio) : 600
+    fig_w = !isnothing(facet) ? (panel_w * n_panels + 50) : panel_w
+    fig_h = !isnothing(facet) ? panel_h + 80 : panel_h
     fig = Figure(size = (fig_w, fig_h))
 
     for (idx, fval) in enumerate(facet_vals)
-        sub = fval === nothing ? groups : filter(r -> r[facet] == fval, groups)
+        sub = isnothing(fval) ? groups : filter(r -> r[facet] == fval, groups)
 
         ax = Axis(
             fig[1, idx];
             xlabel = "X (px)",
             ylabel = idx == 1 ? "Y (px)" : "",
-            title = fval === nothing ? title : "$fval",
+            title = isnothing(fval) ? title : "$fval",
             aspect = DataAspect(),
         )
         Makie.xlims!(ax, xlims...)
         Makie.ylims!(ax, ylims...)
         ax.yreversed = (ydir == :down)
 
-        if screen !== nothing
+        if !isnothing(screen)
             w, h = screen
             lines!(
                 ax,
@@ -125,7 +125,7 @@ function plot_scanpath(
             end
         end
 
-        aois !== nothing && _draw_aois!(ax, aois)
+        !isnothing(aois) && _draw_aois!(ax, aois)
     end
 
     return fig

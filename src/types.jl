@@ -270,7 +270,7 @@ Reconstruct a fixations DataFrame by extracting contiguous blocks from the `in_f
 (or `[prefix]_in_fix` if specified).
 """
 function fixations(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
-    col(name) = prefix === nothing ? name : Symbol(string(prefix) * "_" * string(name))
+    col(name) = isnothing(prefix) ? name : Symbol(string(prefix) * "_" * string(name))
     df = ed.df
     mask_col = col(:in_fix)
     !hasproperty(df, mask_col) && return DataFrame()
@@ -320,7 +320,7 @@ Reconstruct a saccades DataFrame by extracting contiguous blocks from the `in_sa
 (or `[prefix]_in_sacc` if specified).
 """
 function saccades(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
-    col(name) = prefix === nothing ? name : Symbol(string(prefix) * "_" * string(name))
+    col(name) = isnothing(prefix) ? name : Symbol(string(prefix) * "_" * string(name))
     df = ed.df
     mask_col = col(:in_sacc)
     !hasproperty(df, mask_col) && return DataFrame()
@@ -380,7 +380,7 @@ end
 Reconstruct a blinks DataFrame by extracting contiguous blocks from the `in_blink` column.
 """
 function blinks(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
-    col(name) = prefix === nothing ? name : Symbol(string(prefix) * "_" * string(name))
+    col(name) = isnothing(prefix) ? name : Symbol(string(prefix) * "_" * string(name))
     df = ed.df
     mask_col = col(:in_blink)
     !hasproperty(df, mask_col) && return DataFrame()

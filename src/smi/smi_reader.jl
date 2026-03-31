@@ -92,7 +92,7 @@ function _read_smi_txt(path::String)
     function find_col(names...)
         for n in names
             idx = findfirst(h -> strip(h) == n, col_header)
-            idx !== nothing && return idx
+            !isnothing(idx) && return idx
         end
         return nothing
     end
@@ -151,7 +151,7 @@ function _read_smi_txt(path::String)
         trial_vec[row] = parse(Int, strip(fields[idx_trial]))
 
         # Trigger → message
-        if idx_trigger !== nothing && idx_trigger <= length(fields)
+        if !isnothing(idx_trigger) && idx_trigger <= length(fields)
             trig = strip(fields[idx_trigger])
             if trig != "0" && !isempty(trig)
                 msg_vec[row] = trig
@@ -160,7 +160,7 @@ function _read_smi_txt(path::String)
 
         # Left raw pupil position (camera coords) — always capture if present
         lrx, lry = NaN, NaN
-        if idx_lrx !== nothing && idx_lrx <= length(fields)
+        if !isnothing(idx_lrx) && idx_lrx <= length(fields)
             lrx = parse(Float64, strip(fields[idx_lrx]))
             lry = parse(Float64, strip(fields[idx_lry]))
             if lrx == 0.0 && lry == 0.0
@@ -173,17 +173,17 @@ function _read_smi_txt(path::String)
 
         # Left calibrated gaze (POR); fall back to raw if POR absent
         lx, ly = 0.0, 0.0
-        if idx_lpx !== nothing && idx_lpx <= length(fields)
+        if !isnothing(idx_lpx) && idx_lpx <= length(fields)
             lx = parse(Float64, strip(fields[idx_lpx]))
             ly = parse(Float64, strip(fields[idx_lpy]))
-        elseif idx_lrx !== nothing
+        elseif !isnothing(idx_lrx)
             lx = isnan(lrx) ? 0.0 : lrx
             ly = isnan(lry) ? 0.0 : lry
         end
         pa_l = 0.0
-        if idx_ldx !== nothing && idx_ldx <= length(fields)
+        if !isnothing(idx_ldx) && idx_ldx <= length(fields)
             pdx = parse(Float64, strip(fields[idx_ldx]))
-            pdy = (idx_ldy !== nothing && idx_ldy <= length(fields)) ?
+            pdy = (!isnothing(idx_ldy) && idx_ldy <= length(fields)) ?
                   parse(Float64, strip(fields[idx_ldy])) : pdx
             pa_l = (pdx + pdy) / 2.0
         end
@@ -194,7 +194,7 @@ function _read_smi_txt(path::String)
 
         # Right raw pupil position
         rrx, rry = NaN, NaN
-        if idx_rrx !== nothing && idx_rrx <= length(fields)
+        if !isnothing(idx_rrx) && idx_rrx <= length(fields)
             rrx = parse(Float64, strip(fields[idx_rrx]))
             rry = parse(Float64, strip(fields[idx_rry]))
             if rrx == 0.0 && rry == 0.0
@@ -207,17 +207,17 @@ function _read_smi_txt(path::String)
 
         # Right calibrated gaze (POR); fall back to raw if POR absent
         rx, ry = 0.0, 0.0
-        if idx_rpx !== nothing && idx_rpx <= length(fields)
+        if !isnothing(idx_rpx) && idx_rpx <= length(fields)
             rx = parse(Float64, strip(fields[idx_rpx]))
             ry = parse(Float64, strip(fields[idx_rpy]))
-        elseif idx_rrx !== nothing
+        elseif !isnothing(idx_rrx)
             rx = isnan(rrx) ? 0.0 : rrx
             ry = isnan(rry) ? 0.0 : rry
         end
         pa_r = 0.0
-        if idx_rdx !== nothing && idx_rdx <= length(fields)
+        if !isnothing(idx_rdx) && idx_rdx <= length(fields)
             rdx = parse(Float64, strip(fields[idx_rdx]))
-            rdy = (idx_rdy !== nothing && idx_rdy <= length(fields)) ?
+            rdy = (!isnothing(idx_rdy) && idx_rdy <= length(fields)) ?
                   parse(Float64, strip(fields[idx_rdy])) : rdx
             pa_r = (rdx + rdy) / 2.0
         end

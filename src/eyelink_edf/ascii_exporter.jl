@@ -493,7 +493,7 @@ function write_chronological_data(
     # END marker added after sort so it just needs inserting at sorted position
     # Placed at last_sample+1 so it appears before subsequent INPUT/MSG events at higher timestamps
     if include_events
-        end_ts = if edf.samples !== nothing && nrow(edf.samples) > 0
+        end_ts = if !isnothing(edf.samples) && nrow(edf.samples) > 0
             UInt32(min(UInt64(maximum(edf.samples.time)) + 1, typemax(UInt32)))
         elseif nrow(edf.recordings) > 0
             maximum(edf.recordings.time)
@@ -509,10 +509,10 @@ function write_chronological_data(
         )
     end
     n_ev = length(ev_lines)
-    n_sam = edf.samples !== nothing ? nrow(edf.samples) : 0
+    n_sam = !isnothing(edf.samples) ? nrow(edf.samples) : 0
     ei = 1  # index into ev_lines
 
-    if include_samples && edf.samples !== nothing && n_sam > 0
+    if include_samples && !isnothing(edf.samples) && n_sam > 0
         sam = edf.samples
         has_gxL = hasproperty(sam, :gxL)
         has_gxR = hasproperty(sam, :gxR)
@@ -520,7 +520,7 @@ function write_chronological_data(
         # Columns from ASC reader may be Union{Float32,Nothing} — coerce if needed.
         _col(c) =
             eltype(c) == Float32 ? c :
-            Float32[v === nothing || ismissing(v) ? Float32(NaN) : Float32(v) for v in c]
+            Float32[isnothing(v) || ismissing(v) ? Float32(NaN) : Float32(v) for v in c]
         times = Vector{UInt32}(sam.time)
 
         # Determine which eye columns to use.
@@ -572,7 +572,7 @@ function write_chronological_data(
             # 3. Write sample line using pre-allocated buffer (one write per line
             # instead of ~30 individual byte writes going through dynamic dispatch)
             p = _buf_uint32!(linebuf, 1, ts)
-            if gxcol !== nothing
+            if !isnothing(gxcol)
                 @inbounds linebuf[p] = UInt8('\t');
                 p += 1
                 p = _buf_float1_field!(linebuf, p, gxcol[i], 7)
@@ -582,7 +582,7 @@ function write_chronological_data(
                 @inbounds linebuf[p] = UInt8('\t');
                 p += 1
                 p = _buf_float1_field!(linebuf, p, pacol[i], 7)
-                if is_binocular && gxcol2 !== nothing
+                if is_binocular && !isnothing(gxcol2)
                     @inbounds linebuf[p] = UInt8('\t');
                     p += 1
                     p = _buf_float1_field!(linebuf, p, gxcol2[i], 7)

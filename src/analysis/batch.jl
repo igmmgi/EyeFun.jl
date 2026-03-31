@@ -10,7 +10,7 @@ function _batch_read(
 )
     length(files) == 0 && error("No files provided.")
 
-    if participant_labels !== nothing
+    if !isnothing(participant_labels)
         length(participant_labels) == length(files) ||
             error("participant_labels must have same length as files.")
         labels = String.(participant_labels)

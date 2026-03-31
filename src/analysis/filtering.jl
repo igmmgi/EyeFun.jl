@@ -68,7 +68,7 @@ function outlier_filter!(
     gx_col, gy_col = ecols.gx, ecols.gy
 
     # Default bounds from screen resolution
-    if bounds === nothing
+    if isnothing(bounds)
         w, h = df.screen_res
         x_lo, x_hi = -margin, w + margin
         y_lo, y_hi = -margin, h + margin

@@ -33,7 +33,7 @@ function aoi_metrics(
     eye::Symbol = :auto,
     group_by = :trial,
 )
-    samples = selection !== nothing ? _apply_selection(df, selection) : df.df
+    samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found.")
     grouped, group_cols = _valid_groups(samples, group_by)
 

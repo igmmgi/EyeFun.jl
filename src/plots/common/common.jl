@@ -23,7 +23,7 @@ All conditions must match (AND logic). Also supports plain `Int` for trial numbe
     _apply_selection(df, (stimulus="Face",))             # all trials with stimulus == "Face"
 """
 function _apply_selection(df::EyeData, selection)
-    selection === nothing && return df.df
+    isnothing(selection) && return df.df
 
     # Backward compat: plain Int → filter by trial
     if selection isa Int
@@ -54,7 +54,7 @@ end
 
 """Format a clean plot title, e.g. "Gaze: Trial=1" or "Gaze: Trial=1:10, Stimulus=Face"."""
 function _format_title(prefix::String, selection)
-    selection === nothing && return prefix
+    isnothing(selection) && return prefix
     if selection isa Int
         return "$prefix: Trial=$selection"
     end

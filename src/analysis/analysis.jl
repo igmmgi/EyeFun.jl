@@ -207,7 +207,7 @@ function group_summary(df::EyeData; group_by = :trial, by = nothing, eye::Symbol
 
     # Build full grouping columns
     all_group_cols = copy(base_cols)
-    if by !== nothing
+    if !isnothing(by)
         by_syms = by isa Symbol ? [by] : collect(Symbol, by)
         for s in by_syms
             hasproperty(df.df, s) || error("Column :$s not found.")

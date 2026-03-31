@@ -18,7 +18,7 @@ function plot_gaze(
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
-    if facet !== nothing
+    if !isnothing(facet)
         hasproperty(samples, facet) || error("Column :$facet not found for faceting.")
         groups = filter(r -> !ismissing(r[facet]), samples)
         facet_vals = sort(unique(groups[!, facet]))
@@ -31,25 +31,25 @@ function plot_gaze(
 
     title = _format_title("Gaze", selection)
 
-    panel_w = facet !== nothing ? 450 : 900
-    fig_w = facet !== nothing ? (panel_w * n_panels + 50) : panel_w
+    panel_w = !isnothing(facet) ? 450 : 900
+    fig_w = !isnothing(facet) ? (panel_w * n_panels + 50) : panel_w
     fig_h = 500
     fig = Figure(size = (fig_w, fig_h))
 
     use_rel =
-        selection !== nothing &&
+        !isnothing(selection) &&
         hasproperty(samples, :time_rel) &&
         !all(ismissing, samples.time_rel)
     has_trials = hasproperty(samples, :trial)
 
     for (idx, fval) in enumerate(facet_vals)
-        sub = fval === nothing ? groups : filter(r -> r[facet] == fval, groups)
+        sub = isnothing(fval) ? groups : filter(r -> r[facet] == fval, groups)
         gx, gy, _ = _select_eye(sub, eye)
 
         ax1 = Axis(
             fig[1, idx];
             ylabel = idx == 1 ? "Gaze X (px)" : "",
-            title = fval === nothing ? title : "$fval",
+            title = isnothing(fval) ? title : "$fval",
             xticklabelsvisible = false,
         )
         Makie.ylims!(ax1, xlims...)

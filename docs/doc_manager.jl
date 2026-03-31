@@ -89,7 +89,7 @@ function build_documentation(project_root::String)
 end
 
 
-function check_doc_coverage(project_root::String; skip_build_check::Bool = false)
+function check_doc_coverage(project_root::String; skip_build_check::Bool=false)
     print_colored(YELLOW, "Checking documentation coverage...")
 
     try
@@ -122,7 +122,7 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
 
         # Analyze source code documentation (docstrings)
         println("\nSource Code Documentation Analysis:")
-        println("=" ^ 50)
+        println("="^50)
 
         # Find all Julia source files
         src_dir = joinpath(project_root, "src")
@@ -156,11 +156,11 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
 
                     # Extract function name from definitions
                     fname_match = match(r"^function\s+(\w+)", line)
-                    if fname_match === nothing
+                    if isnothing(fname_match)
                         fname_match = match(r"^(\w+)\(.*\)\s*=", line)
                     end
 
-                    if fname_match !== nothing
+                    if !isnothing(fname_match)
                         fname = fname_match.captures[1]
 
                         # Check if there's a docstring above (look back up to 3 lines)
@@ -197,11 +197,11 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
                         if haskey(file_func_names, fname)
                             prev = file_func_names[fname]
                             file_func_names[fname] = (
-                                has_doc = prev.has_doc || docstring_found,
-                                doc_chars = prev.doc_chars + this_doc_chars,
+                                has_doc=prev.has_doc || docstring_found,
+                                doc_chars=prev.doc_chars + this_doc_chars,
                             )
                         else
-                            file_func_names[fname] = (has_doc = docstring_found, doc_chars = this_doc_chars)
+                            file_func_names[fname] = (has_doc=docstring_found, doc_chars=this_doc_chars)
                         end
                     end
                     i += 1
@@ -209,7 +209,7 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
 
                 file_functions = length(file_func_names)
                 file_documented = count(v -> v.has_doc, values(file_func_names))
-                file_doc_chars = sum(v -> v.doc_chars, values(file_func_names); init = 0)
+                file_doc_chars = sum(v -> v.doc_chars, values(file_func_names); init=0)
 
                 total_functions += file_functions
                 documented_functions += file_documented
@@ -226,7 +226,7 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
         end
 
         # Calculate coverage percentage
-        coverage_percent = total_functions > 0 ? round((documented_functions / total_functions) * 100, digits = 1) : 0
+        coverage_percent = total_functions > 0 ? round((documented_functions / total_functions) * 100, digits=1) : 0
 
         println("\n Documentation Coverage Summary:")
         println("   Total functions: $total_functions")
@@ -252,7 +252,7 @@ function clean_docs(project_root::String)
     # Clean build directory
     build_dir = joinpath(project_root, "docs", "build")
     if isdir(build_dir)
-        rm(build_dir, recursive = true)
+        rm(build_dir, recursive=true)
         print_colored(GREEN, "✓ Removed docs/build directory")
     else
         print_colored(YELLOW, "No build directory found")
@@ -263,7 +263,7 @@ function clean_docs(project_root::String)
     for artifact in artifacts
         artifact_path = joinpath(project_root, "docs", artifact)
         if isdir(artifact_path) || isfile(artifact_path)
-            rm(artifact_path, recursive = true)
+            rm(artifact_path, recursive=true)
             print_colored(GREEN, "✓ Removed docs/$artifact")
         end
     end
@@ -397,7 +397,7 @@ function view_documentation(project_root::String)
 
     # Launch server in separate process
     cmd = `julia --project=docs -e "using LiveServer; serve(dir=\"docs/build/1\", launch_browser=true)"`
-    run(cmd, wait = false)
+    run(cmd, wait=false)
 
     print_colored(GREEN, " Server started at http://localhost:8000")
     print_colored(CYAN, " (Server running in background - close browser tab when done)")

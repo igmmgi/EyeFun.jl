@@ -42,10 +42,10 @@ function exclude_trials!(
     bad = falses(nrow(dq))
     bad .|= dq.tracking_loss_pct .> max_tracking_loss
 
-    if max_blink_count !== nothing
+    if !isnothing(max_blink_count)
         bad .|= dq.blink_count .> max_blink_count
     end
-    if min_duration_ms !== nothing
+    if !isnothing(min_duration_ms)
         bad .|= dq.duration_ms .< min_duration_ms
     end
 

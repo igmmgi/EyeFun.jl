@@ -206,7 +206,7 @@ function _write_event_columns!(
     n = length(labels)
 
     # Build column name helper
-    col(name) = prefix === nothing ? name : Symbol(string(prefix) * "_" * string(name))
+    col(name) = isnothing(prefix) ? name : Symbol(string(prefix) * "_" * string(name))
 
     # ── Fixation columns ──
     in_fix = falses(n)
@@ -389,7 +389,7 @@ function detect_events!(
     gx_col, gy_col, pa_col = ecols.gx, ecols.gy, ecols.pa
 
     # Compute pixels per degree
-    ppd = if pixels_per_degree_override !== nothing
+    ppd = if !isnothing(pixels_per_degree_override)
         Float64(pixels_per_degree_override)
     else
         pixels_per_degree(df)
@@ -456,7 +456,7 @@ function _detect_nan_blinks!(ed::EyeData, min_blink_ms::Int, eye::Symbol)
     in_blink = falses(n)
     blink_dur = fill(Int32(0), n)
 
-    if detect_col !== nothing
+    if !isnothing(detect_col)
         track = df[!, detect_col]
         i = 1
         while i <= n

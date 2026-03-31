@@ -13,7 +13,7 @@ function plot_velocity(df::EyeData; selection = nothing, facet = nothing)
         "No saccade columns (sacc_pvel). Ensure your DataFrame includes saccade annotations.",
     )
 
-    if facet !== nothing
+    if !isnothing(facet)
         hasproperty(samples, facet) || error("Column :$facet not found for faceting.")
         groups = filter(r -> !ismissing(r[facet]), samples)
         facet_vals = sort(unique(groups[!, facet]))
@@ -26,20 +26,20 @@ function plot_velocity(df::EyeData; selection = nothing, facet = nothing)
 
     title = _format_title("Saccade Velocity", selection)
 
-    panel_w = facet !== nothing ? 450 : 900
-    fig_w = facet !== nothing ? (panel_w * n_panels + 50) : panel_w
+    panel_w = !isnothing(facet) ? 450 : 900
+    fig_w = !isnothing(facet) ? (panel_w * n_panels + 50) : panel_w
     fig_h = 400
     fig = Figure(size = (fig_w, fig_h))
 
     for (idx, fval) in enumerate(facet_vals)
-        sub_facet = fval === nothing ? groups : filter(r -> r[facet] == fval, groups)
+        sub_facet = isnothing(fval) ? groups : filter(r -> r[facet] == fval, groups)
 
         # Extract unique saccades
         sacc_rows = filter(r -> r.in_sacc == true && !isnan(r.sacc_pvel), sub_facet)
 
         t_mid, pvel = Float64[], Float64[]
         use_rel =
-            selection !== nothing &&
+            !isnothing(selection) &&
             hasproperty(sacc_rows, :time_rel) &&
             !all(ismissing, sacc_rows.time_rel)
 
@@ -61,7 +61,7 @@ function plot_velocity(df::EyeData; selection = nothing, facet = nothing)
             fig[1, idx];
             xlabel = "Time (ms)",
             ylabel = idx == 1 ? "Peak velocity (°/s)" : "",
-            title = fval === nothing ? title : "$fval",
+            title = isnothing(fval) ? title : "$fval",
         )
 
         # Stem markers: vectorized vertical lines from 0 to velocity

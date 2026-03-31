@@ -53,10 +53,7 @@ function detect_microsaccades!(
         nt = length(gx)
         nt < 5 && continue
 
-        # ── Compute 2D velocity using shared central difference ──
-        vel_deg = _compute_velocity_deg(gx, gy, ppd, df.sample_rate)
-        # Convert °/s back to px/sample for threshold computation
-        dt = 1.0 / df.sample_rate
+        # ── Compute raw px/sample velocity for E&K threshold ──
         vx = fill(NaN, nt)
         vy = fill(NaN, nt)
         for i = 3:(nt-2)
