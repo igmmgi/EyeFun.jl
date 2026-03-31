@@ -7,7 +7,7 @@
     isfile(edf_path) || @warn "test1.edf not found"
 
     if isfile(edf_path)
-        edf = read_eyelink_edf(edf_path)
+        edf = read_eyelink(edf_path)
         df = EyeData(edf; trial_time_zero = nothing)
 
         aoi_regions =

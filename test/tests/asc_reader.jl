@@ -8,7 +8,7 @@
         isfile(jul_path) || continue
 
         @testset "$test_name" begin
-            edf = read_eyelink_asc(jul_path)
+            edf = read_eyelink(jul_path)
 
             @test edf isa EyeFun.EDFFile
             @test edf.samples !== nothing

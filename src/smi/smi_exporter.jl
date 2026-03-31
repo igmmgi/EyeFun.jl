@@ -1,11 +1,11 @@
 """
 SMI TXT export — writes an SMIFile back to the tab-separated text format
-produced by SMI's own BeGaze software, so that the Julia IDF binary reader
+produced by SMI's BeGaze software, so that the Julia IDF binary reader
 can be sanity-checked against the native software export.
 """
 
 """
-    write_smi_to_txt(smi::SMIFile, path::String)
+    export_ascii(smi::SMIFile, path::String)
 
 Write the sample data in `smi` to an SMI-format tab-separated text file.
 
@@ -25,30 +25,28 @@ written as `0.00` to match that convention.
 
 # Example
 ```julia
-raw = read_smi("session.idf")         # reads IDF binary
-write_smi_to_txt(raw, "session_julia.txt")  # write equivalent TXT
-# now diff against BeGaze's own export:
-#   read_smi("session_begaze.txt") vs read_smi("session_julia.txt")
+raw = read_smi("session.idf")           # reads IDF binary
+export_ascii(raw, "session_julia.txt")  # write equivalent TXT
 ```
 """
-function write_smi_to_txt(smi::SMIFile)
+function export_ascii(smi::SMIFile)
     path = replace(smi.filename, r"\.(idf|txt)$"i => "_exported.txt")
     if path == smi.filename
         path = path * "_exported.txt"
     end
-    write_smi_to_txt(smi, path)
+    export_ascii(smi, path)
 end
 
-function write_smi_to_txt(smi::SMIFile, path::String)
+function export_ascii(smi::SMIFile, path::String)
     df = smi.samples
     nrow(df) > 0 || error("SMIFile has no sample data to write.")
 
     # ── Detect which eye columns are present and contain data ────────────── #
-    has_left  = hasproperty(df, :gxL) && any(!isnan, df.gxL)
+    has_left = hasproperty(df, :gxL) && any(!isnan, df.gxL)
     has_right = hasproperty(df, :gxR) && any(!isnan, df.gxR)
     has_pupxL = hasproperty(df, :pupxL) && any(!isnan, df.pupxL)
     has_pupxR = hasproperty(df, :pupxR) && any(!isnan, df.pupxR)
-    has_trial   = hasproperty(df, :trial)
+    has_trial = hasproperty(df, :trial)
     has_message = hasproperty(df, :message)
 
     # ── Helper: NaN → 0.0  (SMI tracking-loss convention) ───────────────── #
@@ -93,11 +91,11 @@ function write_smi_to_txt(smi::SMIFile, path::String)
         cols = String["Time", "Type", "Trial"]
         if has_left || has_pupxL
             append!(cols, ["L Raw X [px]", "L Raw Y [px]", "L Dia X [px]", "L Dia Y [px]",
-                           "L CR1 X [px]", "L CR1 Y [px]", "L POR X [px]", "L POR Y [px]"])
+                "L CR1 X [px]", "L CR1 Y [px]", "L POR X [px]", "L POR Y [px]"])
         end
         if has_right || has_pupxR
             append!(cols, ["R Raw X [px]", "R Raw Y [px]", "R Dia X [px]", "R Dia Y [px]",
-                           "R CR1 X [px]", "R CR1 Y [px]", "R POR X [px]", "R POR Y [px]"])
+                "R CR1 X [px]", "R CR1 Y [px]", "R POR X [px]", "R POR Y [px]"])
         end
         append!(cols, ["Timing", "Pupil Confidence", "Trigger", "Frame", "Aux1"])
         println(io, join(cols, "\t"))
@@ -108,7 +106,7 @@ function write_smi_to_txt(smi::SMIFile, path::String)
             # Time: ms → µs (original SMI resolution), integer
             t_us = round(Int64, df.time[i] * 1000.0)
             trial = has_trial ? df.trial[i] : 0
-            trig  = has_message && !isempty(df.message[i]) ? df.message[i] : "0"
+            trig = has_message && !isempty(df.message[i]) ? df.message[i] : "0"
 
             print(io, t_us, "\tSMP\t", trial)
 

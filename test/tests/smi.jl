@@ -87,13 +87,13 @@
         end
     end
 
-    @testset "write_smi_to_txt — IDF round-trip" begin
+    @testset "export_ascii — IDF round-trip" begin
         idf_path = joinpath(smi_dir, "pp23671_rest1.idf")
         if isfile(idf_path)
             raw = read_smi(idf_path)
             out = tempname() * ".txt"
             try
-                write_smi_to_txt(raw, out)
+                export_ascii(raw, out)
                 @test isfile(out)
 
                 # Round-trip: read the written file back via the TXT reader
@@ -105,7 +105,7 @@
                 # Timestamps preserved to within 1 µs (round-trip through µs integers)
                 @test maximum(abs.(rt.samples.time .- raw.samples.time)) < 0.001
 
-                # Gaze values preserved to 2 decimal places (write_smi_to_txt uses %.2f)
+                # Gaze values preserved to 2 decimal places (export_ascii uses %.2f)
                 valid = .!isnan.(raw.samples.gxL) .& .!isnan.(rt.samples.gxL)
                 if any(valid)
                     @test maximum(abs.(raw.samples.gxL[valid] .- rt.samples.gxL[valid])) < 0.01
@@ -114,7 +114,7 @@
                 isfile(out) && rm(out)
             end
         else
-            @warn "SMI IDF test data not found, skipping write_smi_to_txt test"
+            @warn "SMI IDF test data not found, skipping export_ascii test"
         end
     end
 
@@ -126,7 +126,7 @@
         raw = read_smi(idf_path)
         out = tempname() * ".txt"
         try
-            write_smi_to_txt(raw, out)
+            export_ascii(raw, out)
 
             begaze   = filter(l -> !startswith(l, "##") && !startswith(l, "Time"), readlines(ref_txt_path))
             exported = filter(l -> !startswith(l, "##") && !startswith(l, "Time"), readlines(out))

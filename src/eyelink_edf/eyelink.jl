@@ -589,57 +589,42 @@ function read_eyelink(filename::String; kwargs...)
 end
 
 """
-    write_eyelink_edf_to_ascii(edf_path::String, asc_path::String=replace(edf_path, r"\\.edf\$"i => ".asc"))
+    export_ascii(edf_path::String, asc_path::String=replace(edf_path, r"\\.edf\$"i => ".asc"))
+    export_ascii(edf::EDFFile, asc_path::String=replace(edf.filename, r"\\.edf\$"i => "_exported.asc"))
+    export_ascii(dir::String)
 
-Convert an EDF file to ASC format (equivalent to the `edf2asc` tool).
-By default the output path matches the input with an `.asc` extension.
+Convert an EDF file (or all `.edf` files in a directory) to ASC format (equivalent to the `edf2asc` tool), 
+or write an already loaded `EDFFile` object to ASC format.
 
+By default, the output path matches the input with an `.asc` extension.
+
+# Examples
 ```julia
-write_eyelink_edf_to_ascii("recording.edf")                    # → recording.asc
-write_eyelink_edf_to_ascii("recording.edf", "custom_name.asc") # explicit path
+export_ascii("recording.edf")                    # → recording.asc
+export_ascii("recording.edf", "custom_name.asc") # explicit path
+export_ascii(edf_object)                         # writes object to _exported.asc
+export_ascii("/path/to/data/")                   # converts all *.edf in the directory
 ```
 """
-function write_eyelink_edf_to_ascii(
+function export_ascii(
     edf_path::String,
     asc_path::String = replace(edf_path, r"\.edf$"i => ".asc"),
 )
     # If a directory is passed, dispatch to the batch method
-    isdir(edf_path) && return _write_eyelink_edf_dir_to_ascii(edf_path)
+    isdir(edf_path) && return _export_ascii_dir(edf_path)
     @info "Writing $(edf_path) to $(asc_path)"
     et = read_eyelink_edf(edf_path)
-    export_to_ascii(et, asc_path)
+    export_ascii(et, asc_path)
     return nothing
 end
 
-"""
-    write_eyelink_to_asc(edf::EDFFile, asc_path::String = replace(edf.filename, r"\\.edf\$"i => "_exported.asc"))
-
-Write an `EDFFile` object to an ASCII format identical to SR Research's edf2asc tool.
-"""
-function write_eyelink_to_asc(edf::EDFFile, asc_path::String = replace(edf.filename, r"\.edf$"i => "_exported.asc"))
-    @info "Writing EDF to $(asc_path)"
-    export_to_ascii(edf, asc_path)
-    return nothing
-end
-
-
-"""
-    write_eyelink_edf_to_ascii(dir::String)
-
-Convert all `.edf` files in `dir` to ASC format. Each output file is written
-to the same directory with an `.asc` extension.
-
-```julia
-write_eyelink_edf_to_ascii("/path/to/data/")   # converts all *.edf in the directory
-```
-"""
-function _write_eyelink_edf_dir_to_ascii(dir::AbstractString)
+function _export_ascii_dir(dir::AbstractString)
     isdir(dir) || error("Not a directory: $dir")
     edf_files = filter(f -> endswith(lowercase(f), ".edf"), readdir(dir; join = true))
     isempty(edf_files) && @warn "No .edf files found in $dir"
     @info "Found $(length(edf_files)) EDF file(s) in $dir"
     for edf_path in edf_files
-        write_eyelink_edf_to_ascii(edf_path)
+        export_ascii(edf_path)
     end
     return nothing
 end

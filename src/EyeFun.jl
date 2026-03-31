@@ -13,21 +13,19 @@ using Statistics
 
 # Types
 export EyeData
-export create_eyefun_data
 export EyeFile
 export EDFFile, SMIFile, TobiiFile
 export AOI, RectAOI, CircleAOI, EllipseAOI, PolygonAOI
 
 # I/O
-export read_eyelink
-export read_eyelink_edf
-export read_eyelink_asc
-export write_eyelink_edf_to_ascii
-export write_eyelink_to_asc
 export batch_read_eyelink
+export batch_read_smi
+export batch_read_tobii
+export create_eyefun_data
+export read_eyelink
 export read_smi
-export write_smi_to_txt
 export read_tobii
+export export_ascii
 
 # Event accessors
 export saccades
@@ -77,6 +75,7 @@ export growth_curve_data
 export detect_events!
 export detect_microsaccades!
 
+# Plots
 export plot_gaze
 export plot_scanpath
 export plot_heatmap

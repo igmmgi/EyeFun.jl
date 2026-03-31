@@ -12,7 +12,7 @@
             # Generate ASC from EDF
             out_path = tempname() * ".asc"
             try
-                write_eyelink_edf_to_ascii(edf_path, out_path)
+                export_ascii(edf_path, out_path)
 
                 @test isfile(out_path)
                 @test filesize(out_path) > 0
