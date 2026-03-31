@@ -185,7 +185,7 @@ function compare_asc_files(ref_path::String, jul_path::String)
 end
 
 # ════════════════════════════════════════════════════════════════════════════ #
-#  1. ASC output comparison — Julia vs edf2asc reference
+#  ASC output comparison — Julia vs edf2asc reference
 # ════════════════════════════════════════════════════════════════════════════ #
 
 # Helper to safely get count from Dict (for binocular blink tolerance)

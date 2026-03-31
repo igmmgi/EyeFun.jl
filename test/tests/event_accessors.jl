@@ -1,13 +1,14 @@
 # ════════════════════════════════════════════════════════════════════════════ #
-#  7. Event accessors: variables, saccades, fixations, blinks, messages, aois
+#  Event accessors: variables, saccades, fixations, blinks, messages, aois
 # ════════════════════════════════════════════════════════════════════════════ #
 
 @testset "Event accessors" begin
-    edf_path = joinpath(DATA_DIR, "test1.edf")
-    isfile(edf_path) || @warn "test1.edf not found"
+    if !isdefined(Main, :TEST1_EDF)
+        @warn "Global test1.edf fixture not found. Skipping event accessor tests."
+        return
+    end
 
-    if isfile(edf_path)
-        edf = read_eyelink(edf_path)
+    edf = Main.TEST1_EDF
 
         @testset "fixations" begin
             fix = fixations(edf)
@@ -52,6 +53,25 @@
                     end
                 end
             end
+    end
+
+    @testset "Edge cases" begin
+        @testset "Message parsing with null bytes" begin
+            msg_df = messages(edf)
+            @test nrow(msg_df) > 0
+
+            # No message should contain null bytes after parsing
+            for m in msg_df.message
+                @test !occursin('\0', m)
+            end
+        end
+
+        @testset "Empty parser inputs" begin
+            empty_events = DataFrame()
+            @test nrow(EyeFun.parse_fixations(empty_events)) == 0
+            @test nrow(EyeFun.parse_saccades(empty_events)) == 0
+            @test nrow(EyeFun.parse_blinks(empty_events)) == 0
+            @test nrow(EyeFun.parse_messages(empty_events)) == 0
         end
     end
 end

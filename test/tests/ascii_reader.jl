@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════════════════ #
-#  3. ASC reader: can re-read our own output
+#  ASC reader: can re-read our own output
 # ════════════════════════════════════════════════════════════════════════════ #
 
 @testset "ASC reader reads Julia output" begin

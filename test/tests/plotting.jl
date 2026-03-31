@@ -1,14 +1,15 @@
 # ════════════════════════════════════════════════════════════════════════════ #
-#  8. Plotting functions (return Figure, no rendering needed)
+#  Plotting functions (return Figure, no rendering needed)
 # ════════════════════════════════════════════════════════════════════════════ #
 
 @testset "Plotting functions" begin
-    edf_path = joinpath(DATA_DIR, "test1.edf")
-    isfile(edf_path) || @warn "test1.edf not found"
+    if !isdefined(Main, :TEST1_EDF)
+        @warn "Global test1.edf fixture not found. Skipping plotting tests."
+        return
+    end
 
-    if isfile(edf_path)
-        edf = read_eyelink(edf_path)
-        df = EyeData(edf; trial_time_zero = nothing)
+    edf = Main.TEST1_EDF
+    df = Main.TEST1_DF
 
         aoi_regions =
             [RectAOI("Center", 440, 280, 840, 680), RectAOI("TopLeft", 0, 0, 320, 240)]
@@ -100,6 +101,5 @@
                 fig = plot_comparison(df; compare_by = :type)
                 @test fig isa Makie.Figure
             end
-        end
     end
 end

@@ -1,14 +1,15 @@
 # ════════════════════════════════════════════════════════════════════════════ #
-#  5. create_et_dataframe
+#  create_et_dataframe
 # ════════════════════════════════════════════════════════════════════════════ #
 
 @testset "create_eyelink_edf_dataframe" begin
-    edf_path = joinpath(DATA_DIR, "test1.edf")
-    isfile(edf_path) || @warn "test1.edf not found"
+    if !isdefined(Main, :TEST1_EDF)
+        @warn "Global test1.edf fixture not found. Skipping dataframe tests."
+        return
+    end
 
-    if isfile(edf_path)
-        edf = read_eyelink(edf_path)
-        df = EyeData(edf)
+    edf = Main.TEST1_EDF
+    df = Main.TEST1_DF
 
         @test df isa EyeData
         @test nrow(df.df) == nrow(edf.samples)
@@ -52,5 +53,28 @@
 
         # Messages exist at trigger timestamps
         @test any(!isempty, df.df.message)
-    end
+
+        @testset "copycols=false safety" begin
+            # Verify types are correct (not degraded by copycols=false)
+            @test eltype(edf.samples.time) == UInt32
+            @test eltype(edf.samples.gxL) == Float32
+            @test eltype(edf.samples.flags) == UInt16
+
+            # Verify data is valid
+            @test all(t -> t > UInt32(0), edf.samples.time)
+
+            # Events DataFrame columns are correct
+            @test nrow(edf.events) > 0
+            @test hasproperty(edf.events, :type)
+            @test hasproperty(edf.events, :sttime)
+            @test hasproperty(edf.events, :message)
+
+            df2 = EyeData(edf; trial_time_zero = nothing)
+            original_time_first = edf.samples.time[1]
+
+            # Mutating the result should not corrupt the EDFFile
+            df2.df.in_fix[1] = !df2.df.in_fix[1]
+            @test edf.samples !== nothing
+            @test edf.samples.time[1] == original_time_first
+        end
 end

@@ -1,16 +1,18 @@
 # ════════════════════════════════════════════════════════════════════════════ #
-#  9. Analysis functions
+#  Analysis functions
 # ════════════════════════════════════════════════════════════════════════════ #
 
 @testset "Analysis functions" begin
-    edf_path = joinpath(DATA_DIR, "test1.edf")
-    isfile(edf_path) || @warn "test1.edf not found"
+    if !isdefined(Main, :TEST1_EDF)
+        @warn "Global test1.edf fixture not found. Skipping analysis tests."
+        return
+    end
 
-    if isfile(edf_path)
-        edf = read_eyelink(edf_path)
-        df = EyeData(edf; trial_time_zero = nothing)
+    edf = Main.TEST1_EDF
+    df = Main.TEST1_DF
+    edf_path = Main.TEST1_EDF_PATH
 
-        aoi_regions =
+    aoi_regions =
             [RectAOI("Center", 440, 280, 840, 680), RectAOI("TopLeft", 0, 0, 320, 240)]
 
         @testset "data_quality" begin
@@ -283,5 +285,4 @@
             @test Set(df_batch.df.participant) == Set(["sub01", "sub02"])
             @test nrow(df_batch.df) == 2 * nrow(edf.samples)
         end
-    end
 end

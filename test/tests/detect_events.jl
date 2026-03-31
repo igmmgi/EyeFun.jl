@@ -1,14 +1,15 @@
 # ════════════════════════════════════════════════════════════════════════════ #
-#  10. detect_events! — native event detection
+#  detect_events! — native event detection
 # ════════════════════════════════════════════════════════════════════════════ #
 
 @testset "detect_events!" begin
-    edf_path = joinpath(DATA_DIR, "test1.edf")
-    isfile(edf_path) || @warn "test1.edf not found"
+    if !isdefined(Main, :TEST1_EDF)
+        @warn "Global test1.edf fixture not found. Skipping event detection tests."
+        return
+    end
 
-    if isfile(edf_path)
-        edf = read_eyelink(edf_path)
-        df = EyeData(edf; trial_time_zero = nothing)
+    edf = Main.TEST1_EDF
+    df = Main.TEST1_DF
 
         # Count original EyeLink fixations for comparison
         eyelink_fix_count = count(
@@ -103,7 +104,6 @@
             # Prefixed columns should have data
             @test any(df_pfx.df.ivt_in_fix)
             @test any(df_pfx.df.ivt_in_sacc)
-        end
     end
 
     @testset "Synthetic data" begin
