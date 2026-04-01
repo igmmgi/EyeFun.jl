@@ -1,7 +1,7 @@
 # ── plot_gaze ──────────────────────────────────────────────────────────────── #
 
 """
-    plot_gaze(df::EyeData; selection=nothing, eye=:auto, xlims=(0,df.screen_res[1]), ylims=(0,df.screen_res[2]), ydir=:down, facet=nothing)
+    plot_gaze(df::EyeData; selection=nothing, eye=:auto, xlims=(0,df.screen_res[1]), ylims=(0,df.screen_res[2]), ydir=:down, split_by=nothing)
 
 Plot gaze from a wide DataFrame with eye-tracking columns.
 Uses `time_rel` for the X axis if present, otherwise absolute time offset.
@@ -13,26 +13,26 @@ function plot_gaze(
     xlims = (0, df.screen_res[1]),
     ylims = (0, df.screen_res[2]),
     ydir::Symbol = :down,
-    facet = nothing,
+    split_by = nothing,
 )
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
-    if !isnothing(facet)
-        hasproperty(samples, facet) || error("Column :$facet not found for faceting.")
-        groups = filter(r -> !ismissing(r[facet]), samples)
-        facet_vals = sort(unique(groups[!, facet]))
+    if !isnothing(split_by)
+        hasproperty(samples, split_by) || error("Column :$split_by not found for splitting.")
+        groups = filter(r -> !ismissing(r[split_by]), samples)
+        split_vals = sort(unique(groups[!, split_by]))
     else
         groups = samples
-        facet_vals = [nothing]
+        split_vals = [nothing]
     end
-    n_panels = length(facet_vals)
-    n_panels == 0 && error("No non-missing values in :$facet for faceting.")
+    n_panels = length(split_vals)
+    n_panels == 0 && error("No non-missing values in :$split_by for splitting.")
 
     title = _format_title("Gaze", selection)
 
-    panel_w = !isnothing(facet) ? 450 : 900
-    fig_w = !isnothing(facet) ? (panel_w * n_panels + 50) : panel_w
+    panel_w = !isnothing(split_by) ? 450 : 900
+    fig_w = !isnothing(split_by) ? (panel_w * n_panels + 50) : panel_w
     fig_h = 500
     fig = Figure(size = (fig_w, fig_h))
 
@@ -42,8 +42,8 @@ function plot_gaze(
         !all(ismissing, samples.time_rel)
     has_trials = hasproperty(samples, :trial)
 
-    for (idx, fval) in enumerate(facet_vals)
-        sub = isnothing(fval) ? groups : filter(r -> r[facet] == fval, groups)
+    for (idx, fval) in enumerate(split_vals)
+        sub = isnothing(fval) ? groups : filter(r -> r[split_by] == fval, groups)
         gx, gy, _ = _select_eye(sub, eye)
 
         ax1 = Axis(

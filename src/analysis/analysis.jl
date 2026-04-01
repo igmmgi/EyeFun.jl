@@ -19,15 +19,18 @@ function _resolve_eye(dat, eye::Symbol; cols::Symbol=:gaze)
     eye in (:right, :R, :r) && return :right
 
     # From here on, eye MUST be :auto. We try to infer the active eye from the data.
+    has_valid(col) = hasproperty(df, col) && any(v -> !ismissing(v) && !isnan(v), df[!, col])
+
     if cols == :pupil
-        hasproperty(df, :paL) && return :left
-        hasproperty(df, :paR) && return :right
+        has_valid(:paL) && return :left
+        has_valid(:paR) && return :right
     else # gaze
-        hasproperty(df, :gxL) && return :left
-        hasproperty(df, :gxR) && return :right
+        has_valid(:gxL) && return :left
+        has_valid(:gxR) && return :right
     end
 
-    error("DataFrame does not contain recognized eye columns.")
+    # Fallback if both are completely empty/NaN
+    return :left
 end
 
 """

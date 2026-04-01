@@ -2,7 +2,7 @@
 
 """Select gaze columns based on eye keyword and data availability.
 Thin wrapper around `_resolve_eye` + `_eye_columns` for convenience in plot code."""
-function _select_eye(samples::DataFrame, eye::Symbol)
+function _select_eye(samples::AbstractDataFrame, eye::Symbol)
     resolved = _resolve_eye(samples, eye)
     ecols = _eye_columns(resolved)
     label = resolved == :left ? "Left eye" : "Right eye"

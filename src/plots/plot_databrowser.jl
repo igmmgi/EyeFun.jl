@@ -783,15 +783,15 @@ end
 # ── Main entry point ───────────────────────────────────────────────────────── #
 
 """
-    plot_databrowser(df::EyeData; eye=:auto, split_by=:trial)
+    plot_databrowser(df::EyeData; eye=:auto, split_by=nothing)
 
 Open an interactive eye-tracking data viewer.
 
 # Parameters
 - `split_by`: How to segment data for browsing.
-  - `split_by=:trial` (default) — one page per trial
+  - `split_by=nothing` (default) — show entire DataFrame as one continuous view
+  - `split_by=:trial` — one page per trial
   - `split_by=[:block, :trial]` — multi-level grouping
-  - `split_by=nothing` — show entire DataFrame as one view
 
 # Layout
 - **Left**: Spatial gaze view (gaze position on screen with fixations/saccades)
@@ -821,7 +821,7 @@ plot_databrowser(df; split_by=[:block, :trial])
 function plot_databrowser(
     df::EyeData;
     eye::Symbol = :auto,
-    split_by::Union{Nothing,Symbol,Vector{Symbol}} = :trial,
+    split_by::Union{Nothing,Symbol,Vector{Symbol}} = nothing,
     display_plot::Bool = true,
 )
 

@@ -115,11 +115,13 @@ function Base.show(io::IO, ::MIME"text/plain", ed::EyeData)
         println(io, "  $(ns) samples ($(round(dur_s; digits=1)) s)")
     end
 
-    # Trials
-    # TODO: better way of giving user way of defining "trials"
+    # Trials & Columns
+    trial_str = ""
     if hasproperty(df, :trial)
         nt = length(unique(skipmissing(df.trial)))
-        nt > 0 && println(io, "  $(nt) trials")
+        if nt > 0
+            trial_str = "$(nt) trials, "
+        end
     end
 
     # Event counts
@@ -127,10 +129,13 @@ function Base.show(io::IO, ::MIME"text/plain", ed::EyeData)
     hasproperty(df, :in_fix) && push!(parts, "$(counts(df.in_fix)) fixations")
     hasproperty(df, :in_sacc) && push!(parts, "$(counts(df.in_sacc)) saccades")
     hasproperty(df, :in_blink) && push!(parts, "$(counts(df.in_blink)) blinks")
-    !isempty(parts) && println(io, "  ", join(parts, ", "))
 
-    # Columns
-    print(io, "  $(ncol(df)) columns: ", join(names(df), ", "))
+    if isempty(parts)
+        print(io, "  ", trial_str, "$(ncol(df)) columns")
+    else
+        println(io, "  ", trial_str, "$(ncol(df)) columns")
+        print(io, "  ", join(parts, ", "))
+    end
 end
 
 # ── AOI Type System ────────────────────────────────────────────────────────── #

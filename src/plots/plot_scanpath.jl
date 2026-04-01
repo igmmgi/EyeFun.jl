@@ -3,7 +3,7 @@
 """
     plot_scanpath(df::EyeData; selection=nothing, eye=:auto, screen=nothing,
                   xlims=(0,df.screen_res[1]), ylims=(0,df.screen_res[2]), ydir=:down,
-                  facet=nothing, aois=nothing)
+                  split_by=nothing, aois=nothing)
 
 Plot scanpath from a wide DataFrame.
 """
@@ -15,34 +15,34 @@ function plot_scanpath(
     xlims = (0, df.screen_res[1]),
     ylims = (0, df.screen_res[2]),
     ydir::Symbol = :down,
-    facet = nothing,
+    split_by = nothing,
     aois = nothing,
 )
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
-    if !isnothing(facet)
-        hasproperty(samples, facet) || error("Column :$facet not found for faceting.")
-        groups = filter(r -> !ismissing(r[facet]), samples)
-        facet_vals = sort(unique(groups[!, facet]))
+    if !isnothing(split_by)
+        hasproperty(samples, split_by) || error("Column :$split_by not found for splitting.")
+        groups = filter(r -> !ismissing(r[split_by]), samples)
+        split_vals = sort(unique(groups[!, split_by]))
     else
         groups = samples
-        facet_vals = [nothing]
+        split_vals = [nothing]
     end
-    n_panels = length(facet_vals)
-    n_panels == 0 && error("No non-missing values in :$facet for faceting.")
+    n_panels = length(split_vals)
+    n_panels == 0 && error("No non-missing values in :$split_by for splitting.")
 
     title = _format_title("Scanpath", selection)
 
     aspect_ratio = (xlims[2] - xlims[1]) / (ylims[2] - ylims[1])
-    panel_w = !isnothing(facet) ? 400 : round(Int, 600 * aspect_ratio)
-    panel_h = !isnothing(facet) ? round(Int, panel_w / aspect_ratio) : 600
-    fig_w = !isnothing(facet) ? (panel_w * n_panels + 50) : panel_w
-    fig_h = !isnothing(facet) ? panel_h + 80 : panel_h
+    panel_w = !isnothing(split_by) ? 400 : round(Int, 600 * aspect_ratio)
+    panel_h = !isnothing(split_by) ? round(Int, panel_w / aspect_ratio) : 600
+    fig_w = !isnothing(split_by) ? (panel_w * n_panels + 50) : panel_w
+    fig_h = !isnothing(split_by) ? panel_h + 80 : panel_h
     fig = Figure(size = (fig_w, fig_h))
 
-    for (idx, fval) in enumerate(facet_vals)
-        sub = isnothing(fval) ? groups : filter(r -> r[facet] == fval, groups)
+    for (idx, fval) in enumerate(split_vals)
+        sub = isnothing(fval) ? groups : filter(r -> r[split_by] == fval, groups)
 
         ax = Axis(
             fig[1, idx];
@@ -97,7 +97,7 @@ function plot_scanpath(
                 )
                 first_trial = false
             end
-            idx == 1 && axislegend(ax; position = :rt)
+            !first_trial && idx == 1 && axislegend(ax; position = :rt)
         else
             gx, gy, _ = _select_eye(sub, eye)
             valid = .!isnan.(gx) .& .!isnan.(gy)

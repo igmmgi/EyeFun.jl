@@ -7,41 +7,41 @@ Plot pupil size over time. Shades blink periods in gray.
 
 Uses `time_rel` for X axis if available, otherwise absolute time offset.
 """
-function plot_pupil(df::EyeData; selection = nothing, eye::Symbol = :auto, facet = nothing)
+function plot_pupil(df::EyeData; selection = nothing, eye::Symbol = :auto, split_by = nothing)
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
-    if !isnothing(facet)
-        hasproperty(samples, facet) || error("Column :$facet not found for faceting.")
-        groups = filter(r -> !ismissing(r[facet]), samples)
-        facet_vals = sort(unique(groups[!, facet]))
+    if !isnothing(split_by)
+        hasproperty(samples, split_by) || error("Column :$split_by not found for splitting.")
+        groups = filter(r -> !ismissing(r[split_by]), samples)
+        split_vals = sort(unique(groups[!, split_by]))
     else
         groups = samples
-        facet_vals = [nothing]
+        split_vals = [nothing]
     end
-    n_panels = length(facet_vals)
-    n_panels == 0 && error("No non-missing values in :$facet for faceting.")
+    n_panels = length(split_vals)
+    n_panels == 0 && error("No non-missing values in :$split_by for splitting.")
 
     title = _format_title("Pupil", selection)
 
-    panel_w = !isnothing(facet) ? 450 : 900
-    fig_w = !isnothing(facet) ? (panel_w * n_panels + 50) : panel_w
+    panel_w = !isnothing(split_by) ? 450 : 900
+    fig_w = !isnothing(split_by) ? (panel_w * n_panels + 50) : panel_w
     fig_h = 400
     fig = Figure(size = (fig_w, fig_h))
 
-    for (idx, fval) in enumerate(facet_vals)
-        sub_facet = isnothing(fval) ? groups : filter(r -> r[facet] == fval, groups)
+    for (idx, fval) in enumerate(split_vals)
+        sub_split = isnothing(fval) ? groups : filter(r -> r[split_by] == fval, groups)
 
         # Use shared helpers for eye resolution
-        resolved_eye = _resolve_eye(sub_facet, eye; cols = :pupil)
+        resolved_eye = _resolve_eye(sub_split, eye; cols = :pupil)
         pa_col = _eye_columns(resolved_eye).pa
-        pa = Float64.(sub_facet[!, pa_col])
+        pa = Float64.(sub_split[!, pa_col])
 
         # Time axis — only use time_rel when a selection is active
         use_rel =
             !isnothing(selection) &&
-            hasproperty(sub_facet, :time_rel) &&
-            !all(ismissing, sub_facet.time_rel)
+            hasproperty(sub_split, :time_rel) &&
+            !all(ismissing, sub_split.time_rel)
 
         ax = Axis(
             fig[1, idx];
@@ -50,7 +50,7 @@ function plot_pupil(df::EyeData; selection = nothing, eye::Symbol = :auto, facet
             title = isnothing(fval) ? title : "$fval",
         )
 
-        global_t0 = Float64(sub_facet.time[1])
+        global_t0 = Float64(sub_split.time[1])
         function _get_trial_tp(sub)
             pa_sub = Float64.(sub[!, pa_col])
             if use_rel && !all(ismissing, sub.time_rel)
@@ -62,9 +62,9 @@ function plot_pupil(df::EyeData; selection = nothing, eye::Symbol = :auto, facet
         end
 
         # Draw per-trial to avoid connecting lines between trials
-        has_trials = hasproperty(sub_facet, :trial)
-        if has_trials && length(unique(skipmissing(sub_facet.trial))) > 1
-            trial_data = filter(r -> !ismissing(r.trial), sub_facet)
+        has_trials = hasproperty(sub_split, :trial)
+        if has_trials && length(unique(skipmissing(sub_split.trial))) > 1
+            trial_data = filter(r -> !ismissing(r.trial), sub_split)
             for g_df in groupby(trial_data, :trial)
                 t_sub, pa_sub = _get_trial_tp(g_df)
                 _shade_blinks!(ax, g_df, t_sub)
@@ -72,12 +72,12 @@ function plot_pupil(df::EyeData; selection = nothing, eye::Symbol = :auto, facet
             end
         else
             if use_rel
-                t = Float64[ismissing(v) ? NaN : Float64(v) for v in sub_facet.time_rel]
+                t = Float64[ismissing(v) ? NaN : Float64(v) for v in sub_split.time_rel]
             else
-                time_ms = Float64.(sub_facet.time)
+                time_ms = Float64.(sub_split.time)
                 t = time_ms .- time_ms[1]
             end
-            _shade_blinks!(ax, sub_facet, t)
+            _shade_blinks!(ax, sub_split, t)
             lines!(ax, t, pa; color = :black, linewidth = 0.5)
         end
     end

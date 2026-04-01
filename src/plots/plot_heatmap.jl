@@ -77,7 +77,7 @@ end
     plot_heatmap(df::EyeData; selection=nothing, eye=:auto,
                  xlims=(0,df.screen_res[1]), ylims=(0,df.screen_res[2]), ydir=:down,
                  bins=(50,50), colormap=:inferno, metric=:samples, sigma=2.0,
-                 background=nothing, facet=nothing)
+                 background=nothing, split_by=nothing)
 
 Plot a 2D gaze density heatmap from a wide DataFrame.
 
@@ -89,7 +89,7 @@ Plot a 2D gaze density heatmap from a wide DataFrame.
 
 # Parameters
 - `background`: path to stimulus image to overlay
-- `facet`: column name (Symbol) for multi-panel comparison, e.g. `facet=:type`
+- `split_by`: column name (Symbol) for multi-panel comparison, e.g. `split_by=:type`
 - `sigma=0` to disable Gaussian smoothing
 """
 function plot_heatmap(
@@ -104,25 +104,25 @@ function plot_heatmap(
     metric::Symbol = :samples,
     sigma::Real = 2.0,
     background = nothing,
-    facet = nothing,
+    split_by = nothing,
     aois = nothing,
 )
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
     # ── Faceted multi-panel heatmap ──
-    if !isnothing(facet)
-        hasproperty(samples, facet) || error("Column :$facet not found for faceting.")
-        groups = filter(r -> !ismissing(r[facet]), samples)
-        facet_vals = sort(unique(groups[!, facet]))
-        n_panels = length(facet_vals)
-        n_panels == 0 && error("No non-missing values in :$facet for faceting.")
+    if !isnothing(split_by)
+        hasproperty(samples, split_by) || error("Column :$split_by not found for splitting.")
+        groups = filter(r -> !ismissing(r[split_by]), samples)
+        split_vals = sort(unique(groups[!, split_by]))
+        n_panels = length(split_vals)
+        n_panels == 0 && error("No non-missing values in :$split_by for splitting.")
 
         # Compute all panels first to get shared color range
         sr = df.sample_rate
         panel_data = []
-        for lev in facet_vals
-            sub = filter(r -> r[facet] == lev, groups)
+        for lev in split_vals
+            sub = filter(r -> r[split_by] == lev, groups)
             x_c, y_c, vals, _, cb_label =
                 _build_heatmap_data(sub, eye, xlims, ylims, bins, metric, sr)
             vals = _gaussian_smooth(vals, sigma)
