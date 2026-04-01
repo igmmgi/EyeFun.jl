@@ -15,6 +15,12 @@ Returns a DataFrame with columns:
 
 Missing/NaN samples are excluded.
 
+# Parameters
+- `selection`: optional selection predicate to filter trials
+- `eye`: which eye to use (`:auto`, `:left`, `:right`)
+- `group_by`: grouping column(s) (default `:trial`)
+- `measures`: columns to extract (e.g. `[:pupil, :gaze_x]`)
+
 # Measures
 - `:pupil` — pupil size
 - `:gaze_x` — horizontal gaze position
@@ -42,25 +48,14 @@ function prepare_analysis_data(
     ecols = _eye_columns(eye)
 
     # Pre-resolve measure columns
-    measure_cols = Symbol[]
-    for m in measures
-        col = if m == :pupil
-            ecols.pa
-        elseif m == :gaze_x
-            ecols.gx
-        elseif m == :gaze_y
-            ecols.gy
-        else
-            error("Unknown measure :$m. Use :pupil, :gaze_x, or :gaze_y.")
-        end
-        push!(measure_cols, col)
+    measure_map = (pupil=ecols.pa, gaze_x=ecols.gx, gaze_y=ecols.gy)
+    measure_cols = map(measures) do m
+        hasproperty(measure_map, m) || error("Unknown measure :$m. Use :pupil, :gaze_x, or :gaze_y.")
+        getproperty(measure_map, m)
     end
 
     # Collect event columns that exist in the DataFrame
-    event_cols = Symbol[]
-    for ec in (:in_fix, :in_sacc, :in_blink)
-        hasproperty(samples, ec) && push!(event_cols, ec)
-    end
+    event_cols = Symbol[ec for ec in (:in_fix, :in_sacc, :in_blink) if hasproperty(samples, ec)]
 
     df_model = combine(grouped) do g
         t = _trial_relative_time(g)

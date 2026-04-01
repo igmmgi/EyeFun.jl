@@ -40,13 +40,11 @@ function fixation_metrics(
 
     grouped, group_cols = _valid_groups(samples, group_by)
 
-    rows = NamedTuple[]
-
-    for g in grouped
-        label = _group_labels(g, group_cols)
-
+    return combine(grouped) do g
         # Extract ordered fixation sequence for this trial
         fixations = _extract_trial_fixations(g, aois)
+
+        group_rows = NamedTuple[]
 
         # Compute metrics per AOI
         for (ai, aoi) in enumerate(aois)
@@ -54,20 +52,17 @@ function fixation_metrics(
 
             if isempty(aoi_fixes)
                 push!(
-                    rows,
-                    merge(
-                        label,
-                        (
-                            aoi = aoi.name,
-                            first_fixation_duration = NaN,
-                            first_fixation_onset = NaN,
-                            gaze_duration = NaN,
-                            total_time = 0.0,
-                            fixation_count = 0,
-                            revisits = 0,
-                            skipped = true,
-                        ),
-                    ),
+                    group_rows,
+                    (;
+                        aoi = aoi.name,
+                        first_fixation_duration = NaN,
+                        first_fixation_onset = NaN,
+                        gaze_duration = NaN,
+                        total_time = 0.0,
+                        fixation_count = 0,
+                        revisits = 0,
+                        skipped = true,
+                    )
                 )
                 continue
             end
@@ -109,25 +104,21 @@ function fixation_metrics(
             revisits = max(0, visits - 1)
 
             push!(
-                rows,
-                merge(
-                    label,
-                    (
-                        aoi = aoi.name,
-                        first_fixation_duration = ffd,
-                        first_fixation_onset = ff_onset,
-                        gaze_duration = gaze_dur,
-                        total_time = total,
-                        fixation_count = length(aoi_fixes),
-                        revisits = revisits,
-                        skipped = false,
-                    ),
-                ),
+                group_rows,
+                (;
+                    aoi = aoi.name,
+                    first_fixation_duration = ffd,
+                    first_fixation_onset = ff_onset,
+                    gaze_duration = gaze_dur,
+                    total_time = total,
+                    fixation_count = length(aoi_fixes),
+                    revisits = revisits,
+                    skipped = false,
+                )
             )
         end
+        return DataFrame(group_rows)
     end
-
-    return DataFrame(rows)
 end
 
 """Extract ordered fixation list with AOI assignments for a trial group."""

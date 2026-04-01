@@ -1,8 +1,6 @@
-# ── Trial Exclusion ────────────────────────────────────────────────────────── #
-
 """
-    exclude_trials!(ed::EyeData; max_tracking_loss=50.0, max_blink_count=nothing,
-                     min_duration_ms=nothing, group_by=:trial, verbose=true)
+    exclude_trials!(df::EyeData; max_tracking_loss=50.0, max_blink_count=nothing,
+                     min_duration_ms=nothing, group_by=:trial)
 
 Remove trials that fail quality criteria. Modifies the DataFrame in-place.
 
@@ -17,30 +15,25 @@ Returns a `NamedTuple` with:
 - `max_blink_count`: maximum number of blinks per trial (default: no limit)
 - `min_duration_ms`: minimum trial duration in ms (default: no limit)
 - `group_by`: grouping column(s) (default: `:trial`)
-- `verbose`: print summary to stdout (default: `true`)
 
 # Example
 ```julia
-result = exclude_trials!(ed; max_tracking_loss=40, max_blink_count=5)
-# Trial exclusion: 3/48 trials removed (45 remaining)
-
-result = exclude_trials!(ed; max_tracking_loss=30, group_by=[:block, :trial])
+result = exclude_trials!(df; max_tracking_loss=40, max_blink_count=5)
+result = exclude_trials!(df; max_tracking_loss=30, group_by=[:block, :trial])
 ```
 """
 function exclude_trials!(
     ed::EyeData;
-    max_tracking_loss::Real = 50.0,
-    max_blink_count::Union{Nothing,Int} = nothing,
-    min_duration_ms::Union{Nothing,Real} = nothing,
-    group_by = :trial,
-    verbose::Bool = true,
+    max_tracking_loss::Real=50.0,
+    max_blink_count::Union{Nothing,Int}=nothing,
+    min_duration_ms::Union{Nothing,Real}=nothing,
+    group_by=:trial
 )
-    dq = data_quality(ed; group_by = group_by)
+    dq = data_quality(ed; group_by=group_by)
     group_cols = _resolve_group_cols(ed, group_by)
 
     # Identify bad trials
-    bad = falses(nrow(dq))
-    bad .|= dq.tracking_loss_pct .> max_tracking_loss
+    bad = dq.tracking_loss_pct .> max_tracking_loss
 
     if !isnothing(max_blink_count)
         bad .|= dq.blink_count .> max_blink_count
@@ -55,24 +48,19 @@ function exclude_trials!(
 
     # Build exclusion filter: keep only rows whose group keys are NOT in excluded_rows
     if n_excluded > 0
-        keep = antijoin(ed.df, excluded_rows[:, group_cols]; on=group_cols)
+        keep = antijoin(ed.df, excluded_rows[!, group_cols]; on=group_cols)
         empty!(ed.df)
         append!(ed.df, keep)
     end
 
     result = (
-        n_before = n_before,
-        n_excluded = n_excluded,
-        n_after = n_before - n_excluded,
-        excluded = [
-            NamedTuple{Tuple(group_cols)}(Tuple(row[c] for c in group_cols)) for
-            row in eachrow(excluded_rows)
-        ],
+        n_before=n_before,
+        n_excluded=n_excluded,
+        n_after=n_before - n_excluded,
+        excluded=[NamedTuple(row) for row in eachrow(excluded_rows[!, group_cols])],
     )
 
-    if verbose
-        @info "Trial exclusion: $(n_excluded)/$(n_before) trials removed ($(result.n_after) remaining)"
-    end
+    @info "Trial exclusion: $(n_excluded)/$(n_before) trials removed ($(result.n_after) remaining)"
 
     return result
 end

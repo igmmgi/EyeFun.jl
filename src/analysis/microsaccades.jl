@@ -44,7 +44,8 @@ function detect_microsaccades!(
     ppd = pixels_per_degree(df)
     min_dur_samples = max(1, round(Int, min_duration_ms * df.sample_rate / 1000.0))
 
-    grouped, group_cols = _valid_groups(df, group_by)
+    group_cols = _resolve_group_cols(df, group_by)
+    grouped = groupby(df.df, group_cols; skipmissing=true)
 
     for g in grouped
         idxs = parentindices(g)[1]

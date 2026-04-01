@@ -112,6 +112,7 @@ function proportion_of_looks(
     gx_col, gy_col = ecols.gx, ecols.gy
 
     aoi_names = [a.name for a in aois]
+    aoi_syms = Symbol.(aoi_names)
     n_aois = length(aois)
 
     res = combine(grouped) do g
@@ -139,14 +140,14 @@ function proportion_of_looks(
 
         sub_df = DataFrame(time_bin = bin_centers; copycols=false)
         for ai = 1:n_aois
-            sub_df[!, Symbol(aoi_names[ai])] = (aoi_idx .== ai)
+            sub_df[!, aoi_syms[ai]] = (aoi_idx .== ai)
         end
         sub_df[!, :outside] = (aoi_idx .== 0)
 
         if nrow(sub_df) == 0
             empty_res = DataFrame(time_bin = Float64[])
-            for name in aoi_names
-                empty_res[!, Symbol(name)] = Float64[]
+            for sym in aoi_syms
+                empty_res[!, sym] = Float64[]
             end
             empty_res[!, :outside] = Float64[]
             return empty_res
@@ -156,6 +157,6 @@ function proportion_of_looks(
         return combine(groupby(sub_df, :time_bin), [n => mean => n for n in propertynames(sub_df) if n != :time_bin])
     end
 
-    expected_cols = vcat(group_cols, [:time_bin], Symbol.(aoi_names), [:outside])
+    expected_cols = vcat(group_cols, [:time_bin], aoi_syms, [:outside])
     return select!(res, expected_cols)
 end

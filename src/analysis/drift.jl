@@ -1,5 +1,3 @@
-# ── drift_correct ──────────────────────────────────────────────────────────── #
-
 """
     drift_correct!(df::EyeData; target=(640, 480), eye=:auto,
                     use_first_fixation=true, window_ms=200, group_by=:trial)
@@ -23,13 +21,14 @@ drift_correct!(df; target=(960, 540), use_first_fixation=false)  # mean-based
 """
 function drift_correct!(
     df::EyeData;
-    target::Tuple{Real,Real} = (640, 480),
-    eye::Symbol = :auto,
-    use_first_fixation::Bool = true,
-    window_ms::Int = 200,
-    group_by = :trial,
+    target::Tuple{Real,Real}=(640, 480),
+    eye::Symbol=:auto,
+    use_first_fixation::Bool=true,
+    window_ms::Int=200,
+    group_by=:trial,
 )
-    grouped, group_cols = _valid_groups(df, group_by)
+    group_cols = _resolve_group_cols(df, group_by)
+    grouped = groupby(df.df, group_cols; skipmissing=true)
 
     eye = _resolve_eye(df, eye)
     ecols = _eye_columns(eye)
@@ -40,8 +39,6 @@ function drift_correct!(
 
     for g in grouped
         idxs = parentindices(g)[1]
-        gx = collect(g[!, gx_col])
-        gy = collect(g[!, gy_col])
 
         offset_x, offset_y = 0.0, 0.0
 
@@ -56,9 +53,10 @@ function drift_correct!(
                     break
                 end
             end
-        else
-            # Use mean of first window_ms samples (sample-rate aware)
-            win = min(win_samples, length(gx))
+        else # Use mean of first window_ms samples 
+            gx = g[!, gx_col]
+            gy = g[!, gy_col]
+            win = min(win_samples, nrow(g))
             sx, sy, c = 0.0, 0.0, 0
             for j = 1:win
                 if !isnan(gx[j]) && !isnan(gy[j])
@@ -73,8 +71,8 @@ function drift_correct!(
             end
         end
 
-        df.df[idxs, gx_col] .= gx .- offset_x
-        df.df[idxs, gy_col] .= gy .- offset_y
+        df.df[idxs, gx_col] .-= offset_x
+        df.df[idxs, gy_col] .-= offset_y
     end
 
     return df

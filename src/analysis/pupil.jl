@@ -1,5 +1,3 @@
-# ── Pupil preprocessing ────────────────────────────────────────────────────── #
-
 """
     interpolate_blinks!(df::EyeData; eye=:auto, margin_ms=50, method=:linear)
 
@@ -23,16 +21,19 @@ interpolate_blinks!(df; margin_ms=100) # wider margin
 """
 function interpolate_blinks!(
     df::EyeData;
-    eye::Symbol = :auto,
-    margin_ms::Int = 50,
-    method::Symbol = :linear,
+    eye::Symbol=:auto,
+    margin_ms::Int=50,
+    method::Symbol=:linear,
 )
 
-    method ∉ (:linear, :cubic) && error("Invalid method=:$method. Use :linear or :cubic.")
-    !hasproperty(df.df, :in_blink) &&
+    if method ∉ (:linear, :cubic)
+        error("Invalid method=:$method. Use :linear or :cubic.")
+    end
+    if !hasproperty(df.df, :in_blink)
         error("No :in_blink column. Ensure your DataFrame includes blink annotations.")
+    end
 
-    eye = _resolve_eye(df, eye; cols = :pupil)
+    eye = _resolve_eye(df, eye; cols=:pupil)
     pa_col = _eye_columns(eye).pa
 
     pa = collect(df.df[!, pa_col])
@@ -72,8 +73,6 @@ function interpolate_blinks!(
     df.df[!, pa_col] = pa
     return df
 end
-
-# ── Helpers ────────────────────────────────────────────────────────────────── #
 
 """
     _blink_intervals(bm::AbstractVector{Bool}, margin::Int, n::Int)
@@ -159,23 +158,24 @@ baseline_correct_pupil!(df; group_by=[:block, :trial])   # multi-block design
 """
 function baseline_correct_pupil!(
     df::EyeData;
-    eye::Symbol = :auto,
-    window::Tuple{Real,Real} = (-200, 0),
-    method::Symbol = :subtractive,
-    group_by = :trial,
+    eye::Symbol=:auto,
+    window::Tuple{Real,Real}=(-200, 0),
+    method::Symbol=:subtractive,
+    group_by=:trial,
 )
 
-
-    method ∉ (:subtractive, :percent, :zscore) &&
+    if method ∉ (:subtractive, :percent, :zscore)
         error("Invalid method=:$method. Use :subtractive, :percent, or :zscore.")
-    !hasproperty(df.df, :time_rel) && error(
-        "No :time_rel column. Ensure your DataFrame includes relative time (e.g. using trial_time_zero).",
-    )
+    end
+    if !hasproperty(df.df, :time_rel)
+        error("No :time_rel column. Ensure DataFrame includes relative time (e.g. using trial_time_zero).")
+    end
 
-    eye = _resolve_eye(df, eye; cols = :pupil)
+    eye = _resolve_eye(df, eye; cols=:pupil)
     pa_col = _eye_columns(eye).pa
 
-    grouped, group_cols = _valid_groups(df, group_by)
+    group_cols = _resolve_group_cols(df, group_by)
+    grouped = groupby(df.df, group_cols; skipmissing=true)
 
     for g in grouped
         idxs = parentindices(g)[1]
@@ -215,8 +215,8 @@ end
 Apply a moving-average smoothing to the pupil signal. `window_ms` is the
 full width of the smoothing window in milliseconds. Modifies in-place.
 """
-function smooth_pupil!(df::EyeData; eye::Symbol = :auto, window_ms::Int = 50)
-    eye = _resolve_eye(df, eye; cols = :pupil)
+function smooth_pupil!(df::EyeData; eye::Symbol=:auto, window_ms::Int=50)
+    eye = _resolve_eye(df, eye; cols=:pupil)
     pa_col = _eye_columns(eye).pa
 
     pa = collect(df.df[!, pa_col])
@@ -228,7 +228,7 @@ function smooth_pupil!(df::EyeData; eye::Symbol = :auto, window_ms::Int = 50)
     s, c = 0.0, 0
     for j = 1:min(n, half_samples)
         if !isnan(pa[j])
-            s += pa[j];
+            s += pa[j]
             c += 1
         end
     end
@@ -237,13 +237,13 @@ function smooth_pupil!(df::EyeData; eye::Symbol = :auto, window_ms::Int = 50)
         # Add sample entering the window (right edge)
         add = i + half_samples
         if add <= n && !isnan(pa[add])
-            s += pa[add];
+            s += pa[add]
             c += 1
         end
         # Remove sample leaving the window (left edge)
         rem = i - half_samples - 1
         if rem >= 1 && !isnan(pa[rem])
-            s -= pa[rem];
+            s -= pa[rem]
             c -= 1
         end
         smoothed[i] = c > 0 ? s / c : NaN

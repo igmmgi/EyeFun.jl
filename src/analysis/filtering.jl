@@ -1,5 +1,3 @@
-# ── Preprocessing Filters ──────────────────────────────────────────────────── #
-
 """
     velocity_filter!(df::EyeData; eye=:auto, threshold_deg_s=1000.0)
 
@@ -15,25 +13,22 @@ Returns the number of samples removed.
 n_removed = velocity_filter!(df; threshold_deg_s=800)
 ```
 """
-function velocity_filter!(df::EyeData; eye::Symbol = :auto, threshold_deg_s::Real = 1000.0)
+function velocity_filter!(df::EyeData; eye::Symbol=:auto, threshold_deg_s::Real=1000.0)
     eye = _resolve_eye(df, eye)
     ecols = _eye_columns(eye)
     gx_col, gy_col = ecols.gx, ecols.gy
 
     ppd = pixels_per_degree(df)
-    gx = Vector{Float64}(df.df[!, gx_col])
-    gy = Vector{Float64}(df.df[!, gy_col])
+    gx = df.df[!, gx_col]
+    gy = df.df[!, gy_col]
 
     vel = _compute_velocity_deg(gx, gy, ppd, df.sample_rate)
 
     mask = .!isnan.(vel) .& (vel .> threshold_deg_s)
     gx[mask] .= NaN
     gy[mask] .= NaN
-    n_removed = count(mask)
 
-    df.df[!, gx_col] = gx
-    df.df[!, gy_col] = gy
-    return n_removed
+    return count(mask)
 end
 
 """
@@ -55,9 +50,9 @@ n_removed = outlier_filter!(df; bounds=(0, 1280, 0, 960), margin=0)
 """
 function outlier_filter!(
     df::EyeData;
-    eye::Symbol = :auto,
-    bounds::Union{Nothing,NTuple{4,Real}} = nothing,
-    margin::Real = 50,
+    eye::Symbol=:auto,
+    bounds::Union{Nothing,NTuple{4,Real}}=nothing,
+    margin::Real=50,
 )
     eye = _resolve_eye(df, eye)
     ecols = _eye_columns(eye)
@@ -102,7 +97,7 @@ Returns the number of gaps interpolated.
 n_filled = interpolate_gaps!(df; max_gap_ms=100)
 ```
 """
-function interpolate_gaps!(df::EyeData; eye::Symbol = :auto, max_gap_ms::Real = 75)
+function interpolate_gaps!(df::EyeData; eye::Symbol=:auto, max_gap_ms::Real=75)
     eye = _resolve_eye(df, eye)
     ecols = _eye_columns(eye)
     gx_col, gy_col = ecols.gx, ecols.gy

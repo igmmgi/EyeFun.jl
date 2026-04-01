@@ -43,14 +43,13 @@ function aoi_metrics(
 
     sr = df.sample_rate
 
-    rows = NamedTuple[]
-
-    for g in grouped
-        label = _group_labels(g, group_cols)
+    return combine(grouped) do g
         gx = g[!, gx_col]
         gy = g[!, gy_col]
 
         t = _trial_relative_time(g)
+
+        group_rows = NamedTuple[]
 
         for aoi in aois
             # Compute in_aoi using contains() dispatch
@@ -95,23 +94,19 @@ function aoi_metrics(
             end
 
             push!(
-                rows,
-                merge(
-                    label,
-                    (
-                        aoi = aoi.name,
-                        dwell_time_ms = dwell,
-                        fixation_count = fix_count,
-                        first_fixation_time_ms = isnan(first_fix_time) ? missing :
-                                                 round(first_fix_time; digits = 1),
-                        first_fixation_duration_ms = isnan(first_fix_dur) ? missing :
-                                                     round(first_fix_dur; digits = 1),
-                        entry_count = entries,
-                    ),
-                ),
+                group_rows,
+                (;
+                    aoi = aoi.name,
+                    dwell_time_ms = dwell,
+                    fixation_count = fix_count,
+                    first_fixation_time_ms = isnan(first_fix_time) ? missing :
+                                             round(first_fix_time; digits = 1),
+                    first_fixation_duration_ms = isnan(first_fix_dur) ? missing :
+                                                 round(first_fix_dur; digits = 1),
+                    entry_count = entries,
+                )
             )
         end
+        return DataFrame(group_rows)
     end
-
-    return DataFrame(rows)
 end

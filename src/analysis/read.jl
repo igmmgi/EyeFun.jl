@@ -60,7 +60,7 @@ function read_et_data(path::AbstractString; kwargs...)
 end
 
 """
-    read_et_data(files::AbstractVector{<:AbstractString}; participant_labels=nothing, verbose=false, kwargs...) -> EyeData
+    read_et_data(files::AbstractVector{<:AbstractString}; participant_labels=nothing, kwargs...) -> EyeData
 
 Read a batch of files and combine them into a single `EyeData` object. 
 Format is auto-detected from the first file.
@@ -68,7 +68,6 @@ Format is auto-detected from the first file.
 function read_et_data(
     files::AbstractVector{<:AbstractString};
     participant_labels=nothing,
-    verbose::Bool=false,
     kwargs...,
 )
     length(files) == 0 && error("No files provided.")
@@ -85,7 +84,7 @@ function read_et_data(
     fmt = detect_format(files[1]) # Assume homogeneous batch
 
     for (i, file) in enumerate(files)
-        verbose && @info "Reading \$file (\$(labels[i]))"
+        @info "Reading \$file (\$(labels[i]))"
         ed_i = read_et_data(fmt, file; kwargs...)
         ed_i.df.participant .= labels[i]
         push!(eds, ed_i)
@@ -97,7 +96,7 @@ function read_et_data(
         @warn "Files have different sample rates: \$rates. Using \$(eds[1].sample_rate) Hz from first file."
     end
 
-    combined = vcat([ed.df for ed in eds]...; cols=:union)
+    combined = reduce(vcat, [ed.df for ed in eds]; cols=:union)
     return EyeData(
         combined;
         source=eds[1].source,

@@ -118,7 +118,7 @@ include("analysis/filtering.jl")
 include("analysis/fixation_metrics.jl")
 include("analysis/microsaccades.jl")
 include("analysis/pupil.jl")
-include("analysis/scanpath_comparison.jl")
+include("analysis/scanpath.jl")
 include("analysis/statistics.jl")
 include("analysis/time_course.jl")
 

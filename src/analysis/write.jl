@@ -1,5 +1,3 @@
-# ── Unified I/O Writing Pattern ──────────────────────────────────────────────── #
-
 """
     write_et_ascii(path::AbstractString, out_path::Union{String,Nothing}=nothing; kwargs...)
 
@@ -16,7 +14,7 @@ function write_et_ascii(path::AbstractString, out_path::Union{String,Nothing}=no
 
     # Otherwise, read as raw EyeFile
     fmt = detect_format(path)
-    
+
     # Read the file to get its internal struct bypassing create_eyefun_data
     raw = if fmt == EDFFile
         EyeFun.read_eyelink(path; kwargs...)
@@ -33,7 +31,7 @@ function write_et_ascii(path::AbstractString, out_path::Union{String,Nothing}=no
     else
         write_et_ascii(raw, out_path)
     end
-    
+
     return nothing
 end
 
@@ -52,12 +50,12 @@ end
 
 function _write_et_ascii_dir(
     dir::AbstractString;
-    ext::Union{String,Nothing} = nothing,
-    recursive::Bool = false,
+    ext::Union{String,Nothing}=nothing,
+    recursive::Bool=false,
     kwargs...,
 )
     isdir(dir) || error("Not a directory: $dir")
-    
+
     # If no ext specified, default to identifying EDF and IDF binary files
     if isnothing(ext)
         @warn "No extension provided to write_et_ascii directory batch. Detecting .edf and .idf files..."
@@ -85,7 +83,7 @@ function _write_et_ascii_dir(
 
     sort!(files)
     isempty(files) && @warn "No eye-tracking binary (.edf / .idf) files found in $dir"
-    
+
     write_et_ascii(files; kwargs...)
     return nothing
 end

@@ -341,7 +341,7 @@ standard EyeFun column schema (`in_fix`, `fix_gavx`, `in_sacc`, `sacc_gstx`, etc
 By default, **overwrites** existing event columns. Use `prefix=:ivt` to write
 to prefixed columns instead (e.g. `ivt_in_fix`), preserving originals for comparison.
 
-# Arguments
+# Parameters
 - `method=:ivt`: Detection algorithm — `:ivt` (velocity threshold) or `:idt` (dispersion threshold)
 - `eye=:auto`: Which eye to use — `:auto`, `:left`, or `:right`
 - `velocity_threshold=30.0`: Velocity threshold in °/s (I-VT only)
@@ -389,11 +389,7 @@ function detect_events!(
     gx_col, gy_col, pa_col = ecols.gx, ecols.gy, ecols.pa
 
     # Compute pixels per degree
-    ppd = if !isnothing(pixels_per_degree_override)
-        Float64(pixels_per_degree_override)
-    else
-        pixels_per_degree(df)
-    end
+    ppd = Float64(something(pixels_per_degree_override, pixels_per_degree(df)))
 
     sample_rate = df.sample_rate
 
@@ -405,7 +401,7 @@ function detect_events!(
     # Process whole continuous recording
     gx = Vector{Float64}(df.df[!, gx_col])
     gy = Vector{Float64}(df.df[!, gy_col])
-    pa = Vector{Float64}(df.df[!, pa_col])
+    pa = hasproperty(df.df, pa_col) ? Vector{Float64}(df.df[!, pa_col]) : fill(NaN, nrow(df.df))
 
     all_vel = _compute_velocity_deg(gx, gy, ppd, sample_rate)
     if method == :ivt
@@ -442,9 +438,9 @@ function _detect_nan_blinks!(ed::EyeData, min_blink_ms::Int, eye::Symbol)
     ecols = _eye_columns(eye)
     
     # Determine which eye column to use for NaN detection (preferred: gaze, fallback: pupil)
-    detect_col = if hasproperty(df, ecols.gx) && any(!isnan, df[!, ecols.gx])
+    detect_col = if hasproperty(df, ecols.gx)
         ecols.gx
-    elseif hasproperty(df, ecols.pa) && any(!isnan, df[!, ecols.pa])
+    elseif hasproperty(df, ecols.pa)
         ecols.pa
     else
         nothing # 100% missing data

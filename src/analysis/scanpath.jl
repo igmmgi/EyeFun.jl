@@ -1,5 +1,3 @@
-# ── Scanpath Comparison ────────────────────────────────────────────────────── #
-
 """
     scanpath_similarity(df::EyeData, aois::Vector{<:AOI};
                         selection1, selection2, eye=:auto, method=:levenshtein)
@@ -27,7 +25,7 @@ function scanpath_similarity(
     aois::Vector{<:AOI};
     selection1,
     selection2,
-    eye::Symbol = :auto,
+    eye::Symbol=:auto,
 )
 
     seq1 = _aoi_sequence(df, aois, selection1, eye)
@@ -39,10 +37,10 @@ function scanpath_similarity(
     similarity = 1.0 - norm_dist
 
     return (
-        distance = dist,
-        similarity = round(similarity; digits = 4),
-        seq1 = seq1,
-        seq2 = seq2,
+        distance=dist,
+        similarity=round(similarity; digits=4),
+        seq1=seq1,
+        seq2=seq2,
     )
 end
 
@@ -60,14 +58,19 @@ function _aoi_sequence(df::EyeData, aois::Vector{<:AOI}, selection, eye::Symbol)
 
     seq = Char[]
     prev_fx = NaN
+
+    in_fix = samples.in_fix
+    fix_gx = samples.fix_gavx
+    fix_gy = samples.fix_gavy
+
     for i = 1:nrow(samples)
-        samples.in_fix[i] || continue
-        fx = Float64(samples.fix_gavx[i])
+        in_fix[i] || continue
+        fx = Float64(fix_gx[i])
         isnan(fx) && continue
         fx == prev_fx && continue
         prev_fx = fx
 
-        fy = Float64(samples.fix_gavy[i])
+        fy = Float64(fix_gy[i])
         for (ai, aoi) in enumerate(aois)
             if contains(aoi, fx, fy)
                 push!(seq, letters[ai])

@@ -33,8 +33,8 @@ function plot_sequence(
     labels = String[]
     for gi = 1:n_groups
         g = groups[gi]
-        label = _group_labels(g, group_cols)
-        push!(labels, join(["$(v)" for v in values(label)], "/"))
+        vals = [first(g[!, c]) for c in group_cols]
+        push!(labels, join(["$(v)" for v in vals], "/"))
     end
 
     fig = Figure(size = (900, max(300, n_groups * 30 + 80)))
