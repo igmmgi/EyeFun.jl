@@ -5,7 +5,6 @@
                           group_by=:trial, measures=[:pupil])
 
 Reshape eye-tracking data into a clean, one-row-per-sample long-format DataFrame
-suitable for statistical modeling (e.g. with `MixedModels.jl`).
 
 Returns a DataFrame with columns:
 - Group columns (e.g. `:trial`)
@@ -24,17 +23,15 @@ Missing/NaN samples are excluded.
 
 # Example
 ```julia
-df_model = prepare_analysis_data(df; measures=[:pupil, :gaze_x], selection=(trial=1:20,))
-# Ready for MixedModels.jl:
-# fit(MixedModel, @formula(pupil ~ condition * time + (time | participant)), df_model)
+df = prepare_analysis_data(df; measures=[:pupil, :gaze_x], selection=(trial=1:20,))
 ```
 """
 function prepare_analysis_data(
     df::EyeData;
-    selection = nothing,
-    eye::Symbol = :auto,
-    group_by = :trial,
-    measures::Vector{Symbol} = [:pupil],
+    selection=nothing,
+    eye::Symbol=:auto,
+    group_by=:trial,
+    measures::Vector{Symbol}=[:pupil],
 )
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
@@ -77,14 +74,14 @@ function prepare_analysis_data(
         idx = findall(valid)
 
         # Construct dictionary of columns for the result DataFrame
-        cols = Dict{Symbol, AbstractVector}()
+        cols = Dict{Symbol,AbstractVector}()
         cols[:time] = t[idx]
         cols[:sample] = idx
-        
-        for mc in measure_cols
-            cols[mc] = Float64.(g[idx, mc])
+
+        for (m, mc) in zip(measures, measure_cols)
+            cols[m] = Float64.(g[idx, mc])
         end
-        
+
         for ec in event_cols
             cols[ec] = g[idx, ec]
         end
@@ -107,23 +104,15 @@ Takes output from `time_bin()` or `proportion_of_looks()` and adds columns
 `ot1`, `ot2`, ..., `otN` containing orthogonal polynomial values computed
 over the time column.
 
-These columns are suitable as fixed and random effects in mixed-effects models
-(see Mirman, 2014, *Growth Curve Analysis*).
-
 # Example
 ```julia
 # Typical workflow:
 binned = time_bin(df; bin_ms=50, measure=:pupil, selection=(trial=1:40,))
 gcd = growth_curve_data(binned; degree=3)
 # gcd now has columns: ..., ot1, ot2, ot3
-
-# Then in MixedModels.jl:
-# fit(MixedModel,
-#     @formula(value ~ (ot1 + ot2 + ot3) * condition + (ot1 + ot2 | participant)),
-#     gcd)
 ```
 """
-function growth_curve_data(df::DataFrame; time_col::Symbol = :time_bin, degree::Int = 3)
+function growth_curve_data(df::DataFrame; time_col::Symbol=:time_bin, degree::Int=3)
     hasproperty(df, time_col) ||
         error("Column :$time_col not found. Specify time_col= or use time_bin() first.")
     nrow(df) == 0 && error("Empty DataFrame.")

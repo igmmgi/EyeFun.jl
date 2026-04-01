@@ -229,38 +229,30 @@ function group_summary(df::EyeData; group_by = :trial, by = nothing, eye::Symbol
         valid_n = count(!isnan, gx)
         loss_pct = round((n_samples - valid_n) / n_samples * 100.0; digits = 1)
 
-        # Fixation stats (column vectors instead of eachrow)
+        # Fixation stats using vectorized onset detection
         n_fix = 0
         fix_durs = Float64[]
-        if hasproperty(g, :fix_gavx)
-            col_in_fix = g.in_fix
-            col_fx = g.fix_gavx
-            col_fd = g.fix_dur
-            for i in eachindex(col_fx)
-                is_onset = col_in_fix[i] && (i == 1 || !col_in_fix[i-1])
-                if is_onset && !isnan(col_fx[i])
-                    n_fix += 1
-                    push!(fix_durs, Float64(col_fd[i]))
-                end
-            end
+        if hasproperty(g, :in_fix) && hasproperty(g, :fix_gavx)
+            in_fix = g.in_fix
+            onset_mask = in_fix .& .![false; in_fix[1:end-1]]
+            valid_onsets = onset_mask .& .!isnan.(g.fix_gavx)
+            
+            n_fix = count(valid_onsets)
+            fix_durs = Float64.(g.fix_dur[valid_onsets])
         end
 
-        # Saccade stats (column vectors instead of eachrow)
+        # Saccade stats using vectorized onset detection
         n_sacc = 0
         sacc_ampls = Float64[]
         sacc_pvels = Float64[]
-        if hasproperty(g, :sacc_pvel)
-            col_in_sacc = g.in_sacc
-            col_spvel = g.sacc_pvel
-            col_sampl = g.sacc_ampl
-            for i in eachindex(col_spvel)
-                is_onset = col_in_sacc[i] && (i == 1 || !col_in_sacc[i-1])
-                if is_onset && !isnan(col_spvel[i])
-                    n_sacc += 1
-                    isnan(col_sampl[i]) || push!(sacc_ampls, col_sampl[i])
-                    push!(sacc_pvels, col_spvel[i])
-                end
-            end
+        if hasproperty(g, :in_sacc) && hasproperty(g, :sacc_pvel)
+            in_sacc = g.in_sacc
+            onset_mask = in_sacc .& .![false; in_sacc[1:end-1]]
+            valid_onsets = onset_mask .& .!isnan.(g.sacc_pvel)
+            
+            n_sacc = count(valid_onsets)
+            sacc_pvels = Float64.(g.sacc_pvel[valid_onsets])
+            sacc_ampls = filter(!isnan, Float64.(g.sacc_ampl[valid_onsets]))
         end
 
         # Blink count

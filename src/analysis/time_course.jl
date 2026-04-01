@@ -51,44 +51,27 @@ function time_bin(
         error("Unknown measure=:$measure. Use :pupil, :gaze_x, or :gaze_y.")
     end
 
-    rows = NamedTuple[]
-
-    for g in grouped
-        label = _group_labels(g, group_cols)
-
+    res = combine(grouped) do g
         t = _trial_relative_time(g)
-
         vals = Float64.(g[!, val_col])
 
-        # Determine bin edges
-        t_valid = filter(!isnan, t)
-        isempty(t_valid) && continue
-        t_min, t_max = minimum(t_valid), maximum(t_valid)
-        bin_edges = t_min:bin_ms:t_max
+        # Filter NaNs
+        valid = @. !isnan(t) && !isnan(vals)
+        t_valid = t[valid]
+        v_valid = vals[valid]
 
-        for b = 1:(length(bin_edges)-1)
-            lo = bin_edges[b]
-            hi = bin_edges[b+1]
-            center = (lo + hi) / 2.0
+        # Anchor bins using robust integer division based on 0
+        bin_centers = @. (fld(t_valid, bin_ms) * bin_ms) + (bin_ms / 2.0)
 
-            mask = lo .<= t .< hi
-            bin_vals = filter(!isnan, vals[mask])
-
-            push!(
-                rows,
-                merge(
-                    label,
-                    (
-                        time_bin = center,
-                        value = isempty(bin_vals) ? NaN : mean(bin_vals),
-                        n = length(bin_vals),
-                    ),
-                ),
-            )
+        sub_df = DataFrame(time_bin = bin_centers, value = v_valid; copycols=false)
+        if nrow(sub_df) == 0
+            return DataFrame(time_bin = Float64[], value = Float64[], n = Int[])
         end
+        return combine(groupby(sub_df, :time_bin), :value => mean => :value, nrow => :n)
     end
 
-    return DataFrame(rows)
+    expected_cols = vcat(group_cols, [:time_bin, :value, :n])
+    return select!(res, expected_cols)
 end
 
 """
@@ -131,50 +114,48 @@ function proportion_of_looks(
     aoi_names = [a.name for a in aois]
     n_aois = length(aois)
 
-    rows = NamedTuple[]
-
-    for g in grouped
-        label = _group_labels(g, group_cols)
-
+    res = combine(grouped) do g
         t = _trial_relative_time(g)
-
         gx = Float64.(g[!, gx_col])
         gy = Float64.(g[!, gy_col])
 
-        t_valid = filter(!isnan, t)
-        isempty(t_valid) && continue
-        t_min, t_max = minimum(t_valid), maximum(t_valid)
-        bin_edges = t_min:bin_ms:t_max
+        valid = @. !isnan(t) && !isnan(gx) && !isnan(gy)
+        t_valid = t[valid]
+        gx_valid = gx[valid]
+        gy_valid = gy[valid]
 
-        for b = 1:(length(bin_edges)-1)
-            lo = bin_edges[b]
-            hi = bin_edges[b+1]
-            center = (lo + hi) / 2.0
+        bin_centers = @. (fld(t_valid, bin_ms) * bin_ms) + (bin_ms / 2.0)
 
-            n_valid = 0
-            aoi_counts = zeros(Int, n_aois)
-            for j in eachindex(t)
-                (t[j] < lo || t[j] >= hi) && continue
-                isnan(gx[j]) && continue
-                isnan(gy[j]) && continue
-                n_valid += 1
-                for ai = 1:n_aois
-                    if contains(aois[ai], gx[j], gy[j])
-                        aoi_counts[ai] += 1
-                        break
-                    end
+        # Map each valid point to exactly one AOI (the first that contains it), or 0 for outside
+        aoi_idx = zeros(Int, length(t_valid))
+        for i in eachindex(gx_valid)
+            for ai = 1:n_aois
+                if contains(aois[ai], gx_valid[i], gy_valid[i])
+                    aoi_idx[i] = ai
+                    break
                 end
             end
-
-            # Build row with per-AOI proportions
-            props = NamedTuple{Tuple(Symbol.(aoi_names))}(
-                Tuple(n_valid > 0 ? aoi_counts[ai] / n_valid : NaN for ai = 1:n_aois),
-            )
-            outside = n_valid > 0 ? (n_valid - sum(aoi_counts)) / n_valid : NaN
-
-            push!(rows, merge(label, (time_bin = center,), props, (outside = outside,)))
         end
+
+        sub_df = DataFrame(time_bin = bin_centers; copycols=false)
+        for ai = 1:n_aois
+            sub_df[!, Symbol(aoi_names[ai])] = (aoi_idx .== ai)
+        end
+        sub_df[!, :outside] = (aoi_idx .== 0)
+
+        if nrow(sub_df) == 0
+            empty_res = DataFrame(time_bin = Float64[])
+            for name in aoi_names
+                empty_res[!, Symbol(name)] = Float64[]
+            end
+            empty_res[!, :outside] = Float64[]
+            return empty_res
+        end
+
+        # Computing mean over booleans yields exact grouped proportions natively
+        return combine(groupby(sub_df, :time_bin), [n => mean => n for n in propertynames(sub_df) if n != :time_bin])
     end
 
-    return DataFrame(rows)
+    expected_cols = vcat(group_cols, [:time_bin], Symbol.(aoi_names), [:outside])
+    return select!(res, expected_cols)
 end

@@ -69,29 +69,28 @@ function aoi_metrics(
             first_fix_time = NaN
             first_fix_dur = NaN
             fix_count = 0
-            if hasproperty(g, :fix_gavx) && hasproperty(g, :fix_gavy)
-                col_in_fix = g.in_fix
-                col_fx = g.fix_gavx
-                col_fy = g.fix_gavy
-                col_fd = g.fix_dur
-                for i in eachindex(col_fx)
-                    is_onset = col_in_fix[i] && (i == 1 || !col_in_fix[i-1])
-                    if is_onset && !isnan(col_fx[i]) && !isnan(col_fy[i])
-                        if contains(aoi, col_fx[i], col_fy[i])
-                            fix_count += 1
-                            if isnan(first_fix_time) && !isnan(t[i])
-                                first_fix_time = t[i]
-                                first_fix_dur = Float64(col_fd[i])
-                            end
-                        end
-                    end
+            if hasproperty(g, :in_fix) && hasproperty(g, :fix_gavx) && hasproperty(g, :fix_gavy)
+                in_fix = g.in_fix
+                onset_mask = in_fix .& .![false; in_fix[1:end-1]]
+                valid_onsets = onset_mask .& .!isnan.(g.fix_gavx) .& .!isnan.(g.fix_gavy)
+                
+                fx = g.fix_gavx[valid_onsets]
+                fy = g.fix_gavy[valid_onsets]
+                fd = g.fix_dur[valid_onsets]
+                ft = t[valid_onsets]
+                
+                in_aoi_fix = Bool[contains(aoi, x, y) for (x, y) in zip(fx, fy)]
+                fix_count = count(in_aoi_fix)
+                
+                if fix_count > 0
+                    first_idx = findfirst(in_aoi_fix)
+                    first_fix_time = ft[first_idx]
+                    first_fix_dur = Float64(fd[first_idx])
                 end
             else
-                for i in eachindex(in_aoi)
-                    if in_aoi[i] && !isnan(t[i])
-                        first_fix_time = t[i]
-                        break
-                    end
+                first_idx = findfirst(in_aoi .& .!isnan.(t))
+                if !isnothing(first_idx)
+                    first_fix_time = t[first_idx]
                 end
             end
 
