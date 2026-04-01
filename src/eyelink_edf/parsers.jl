@@ -506,16 +506,7 @@ function variables(variables::DataFrame; trial_marker::Union{String,Nothing} = n
     return result
 end
 
-"""
-    variables(edf::EDFFile; trial_marker::Union{String,Nothing} = nothing) -> DataFrame
 
-Convenience method: parse trial variables from `edf.events` and pivot to wide format.
-"""
-function variables(edf::EDFFile; trial_marker::Union{String,Nothing} = nothing)
-    vars = parse_variables(edf.events)
-    nrow(vars) == 0 && return DataFrame()
-    return variables(vars; trial_marker = trial_marker)
-end
 
 
 """
@@ -682,7 +673,7 @@ function create_eyefun_data(
     # ── Interval join: stamp fixation data onto sample rows ──────────────── #
     # For each event [sttime, entime], find sample indices in that range using
     # searchsorted (requires samples to be sorted by time — guaranteed by EDF).
-    fix_df = fixations(edf)
+    fix_df = parse_fixations(edf.events)
     if nrow(fix_df) > 0
         for row in eachrow(fix_df)
             (ismissing(row.sttime) || ismissing(row.entime)) && continue
@@ -700,7 +691,7 @@ function create_eyefun_data(
         end
     end
 
-    sacc_df = saccades(edf)
+    sacc_df = parse_saccades(edf.events)
     if nrow(sacc_df) > 0
         has_ampl = hasproperty(sacc_df, :ampl)
         has_pvel = hasproperty(sacc_df, :pvel)
@@ -723,7 +714,7 @@ function create_eyefun_data(
         end
     end
 
-    blink_df = blinks(edf)
+    blink_df = parse_blinks(edf.events; samples = edf.samples)
     if nrow(blink_df) > 0
         for row in eachrow(blink_df)
             lo = searchsortedfirst(times, UInt32(row.sttime))
@@ -736,7 +727,7 @@ function create_eyefun_data(
     end
 
     # ── Point-join: messages at sample timestamps ────────────────────────── #
-    msg_df = messages(edf)
+    msg_df = parse_messages(edf.events)
     if nrow(msg_df) > 0
         for row in eachrow(msg_df)
             idx = searchsortedfirst(times, UInt32(row.sttime))
@@ -786,7 +777,8 @@ function create_eyefun_data(
 
     # ── Optionally join trial variables ──────────────────────────────────── #
     if include_variables
-        conds = variables(edf)
+        vars_long = parse_variables(edf.events)
+        conds = nrow(vars_long) > 0 ? variables(vars_long) : DataFrame()
         if nrow(conds) > 0 && hasproperty(result, :trial)
             # Match on sequential trial number
             conds.trial_seq = 1:nrow(conds)

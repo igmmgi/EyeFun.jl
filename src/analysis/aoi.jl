@@ -52,17 +52,17 @@ function aoi_metrics(
         group_rows = NamedTuple[]
 
         for aoi in aois
-            # Compute in_aoi using contains() dispatch
-            in_aoi = Bool[
-                !isnan(gx[i]) && !isnan(gy[i]) && contains(aoi, gx[i], gy[i]) for
+            # Compute sample-level AOI membership mask
+            aoi_mask = Bool[
+                !isnan(gx[i]) && !isnan(gy[i]) && in_aoi(aoi, gx[i], gy[i]) for
                 i in eachindex(gx)
             ]
 
             # Dwell time in ms (using actual sample rate)
-            dwell = round(sum(in_aoi) / sr * 1000.0; digits = 1)
+            dwell = round(sum(aoi_mask) / sr * 1000.0; digits = 1)
 
             # Entry count (transitions from outside → inside)
-            entries = counts(in_aoi)
+            entries = counts(aoi_mask)
 
             # First fixation time and duration
             first_fix_time = NaN
@@ -78,7 +78,7 @@ function aoi_metrics(
                 fd = g.fix_dur[valid_onsets]
                 ft = t[valid_onsets]
                 
-                in_aoi_fix = Bool[contains(aoi, x, y) for (x, y) in zip(fx, fy)]
+                in_aoi_fix = Bool[in_aoi(aoi, x, y) for (x, y) in zip(fx, fy)]
                 fix_count = count(in_aoi_fix)
                 
                 if fix_count > 0
@@ -87,7 +87,7 @@ function aoi_metrics(
                     first_fix_dur = Float64(fd[first_idx])
                 end
             else
-                first_idx = findfirst(in_aoi .& .!isnan.(t))
+                first_idx = findfirst(aoi_mask .& .!isnan.(t))
                 if !isnothing(first_idx)
                     first_fix_time = t[first_idx]
                 end

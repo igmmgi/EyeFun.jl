@@ -84,7 +84,7 @@ function read_et_data(
     fmt = detect_format(files[1]) # Assume homogeneous batch
 
     for (i, file) in enumerate(files)
-        @info "Reading \$file (\$(labels[i]))"
+        @info "Reading $(file) ($(labels[i]))"
         ed_i = read_et_data(fmt, file; kwargs...)
         ed_i.df.participant .= labels[i]
         push!(eds, ed_i)
@@ -93,7 +93,7 @@ function read_et_data(
     # Warn if sample rates differ across files
     rates = unique(ed.sample_rate for ed in eds)
     if length(rates) > 1
-        @warn "Files have different sample rates: \$rates. Using \$(eds[1].sample_rate) Hz from first file."
+        @warn "Files have different sample rates: $(rates). Using $(eds[1].sample_rate) Hz from first file."
     end
 
     combined = reduce(vcat, [ed.df for ed in eds]; cols=:union)

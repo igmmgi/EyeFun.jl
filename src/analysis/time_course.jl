@@ -131,7 +131,7 @@ function proportion_of_looks(
         aoi_idx = zeros(Int, length(t_valid))
         for i in eachindex(gx_valid)
             for ai = 1:n_aois
-                if contains(aois[ai], gx_valid[i], gy_valid[i])
+                if in_aoi(aois[ai], gx_valid[i], gy_valid[i])
                     aoi_idx[i] = ai
                     break
                 end

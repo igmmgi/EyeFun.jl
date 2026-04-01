@@ -63,11 +63,11 @@ function Base.show(io::IO, ::MIME"text/plain", smi::SMIFile)
 
         # Eye presence (limit to first 1000 samples to avoid O(N) scan on missing eyes)
         check_eye(col) = hasproperty(smi.samples, col) && any(!isnan, view(smi.samples[!, col], 1:min(1000, nrow(smi.samples))))
-        has_left  = check_eye(:gxL)
+        has_left = check_eye(:gxL)
         has_right = check_eye(:gxR)
-        eye_str   = has_left && has_right ? "binocular" :
-                    has_left              ? "left eye"  :
-                    has_right             ? "right eye" : ""
+        eye_str = has_left && has_right ? "binocular" :
+                  has_left ? "left eye" :
+                  has_right ? "right eye" : ""
         !isempty(eye_str) && print(io, ", $eye_str")
         sr > 0 && print(io, ")")
         println(io)
@@ -91,24 +91,6 @@ function Base.show(io::IO, ::MIME"text/plain", smi::SMIFile)
         print(io, "  (no samples loaded)")
     end
 end
-
-# ── Event accessor stubs ────────────────────────────────────────────────────── #
-# SMIFile holds only raw samples — events must be detected via create_smi_dataframe.
-
-_smi_event_error(fn) = error(
-    "Cannot call $fn on a SMIFile — events have not been detected yet.\n" *
-    "Call create_eyefun_data(smi) first:\n\n" *
-    "    ed = create_eyefun_data(smi)\n" *
-    "    detect_events!(ed)\n" *
-    "    $(fn)(ed)\n"
-)
-
-fixations(smi::SMIFile; kwargs...) = _smi_event_error("fixations")
-saccades(smi::SMIFile;  kwargs...) = _smi_event_error("saccades")
-blinks(smi::SMIFile;    kwargs...) = _smi_event_error("blinks")
-
-
-# ── EyeData constructor for SMIFile ────────────────────────────────────────── #
 
 """
     create_eyefun_data(smi::SMIFile) -> EyeData
@@ -145,11 +127,11 @@ function create_eyefun_data(smi::SMIFile)
 
     return EyeData(
         df;
-        source              = :smi,
-        sample_rate         = smi.sample_rate,
-        screen_res          = smi.screen_res,
-        screen_width_cm     = smi.screen_width_cm,
-        viewing_distance_cm = smi.viewing_distance_cm,
+        source=:smi,
+        sample_rate=smi.sample_rate,
+        screen_res=smi.screen_res,
+        screen_width_cm=smi.screen_width_cm,
+        viewing_distance_cm=smi.viewing_distance_cm,
     )
 end
 

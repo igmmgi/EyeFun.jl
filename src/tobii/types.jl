@@ -80,19 +80,6 @@ function Base.show(io::IO, ::MIME"text/plain", tob::TobiiFile)
     end
 end
 
-_tobii_event_error(fn) = error(
-    "Cannot call $fn on a TobiiFile — events have not been detected yet.\n" *
-    "Call create_eyefun_data(tob) first, then detect_events!(ed):\n\n" *
-    "    ed = create_eyefun_data(tob)\n" *
-    "    detect_events!(ed)\n" *
-    "    $(fn)(ed)\n"
-)
-
-fixations(tob::TobiiFile; kwargs...) = _tobii_event_error("fixations")
-saccades(tob::TobiiFile; kwargs...) = _tobii_event_error("saccades")
-blinks(tob::TobiiFile; kwargs...) = _tobii_event_error("blinks")
-
-# ── EyeData constructor for TobiiFile ────────────────────────────────────────── #
 
 """
     create_eyefun_data(tob::TobiiFile) -> EyeData

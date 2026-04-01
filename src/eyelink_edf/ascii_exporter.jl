@@ -371,7 +371,7 @@ function write_chronological_data(
 
     # End events — use parsed sub-DataFrames (correct sttime/entime/duration)
     if include_events
-        sacc_df = saccades(edf)
+        sacc_df = parse_saccades(edf.events)
         if nrow(sacc_df) > 0
             for row in eachrow(sacc_df)
                 in_recording(row.sttime) && valid_ts(row.entime) || continue
@@ -409,7 +409,7 @@ function write_chronological_data(
                 )
             end
         end
-        fix_df = fixations(edf)
+        fix_df = parse_fixations(edf.events)
         if nrow(fix_df) > 0
             for row in eachrow(fix_df)
                 in_recording(row.sttime) && valid_ts(row.entime) || continue
@@ -437,7 +437,7 @@ function write_chronological_data(
                 )
             end
         end
-        blink_df = blinks(edf)
+        blink_df = parse_blinks(edf.events; samples = edf.samples)
         if nrow(blink_df) > 0
             for row in eachrow(blink_df)
                 in_recording(row.sttime) && valid_ts(row.entime) || continue

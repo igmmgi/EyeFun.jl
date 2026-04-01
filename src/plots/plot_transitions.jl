@@ -53,7 +53,7 @@ function transition_matrix(
         # Find which AOI this fixation falls in
         aoi_idx = 0
         for (ai, aoi) in enumerate(aois)
-            if contains(aoi, fx, fy)
+            if in_aoi(aoi, fx, fy)
                 aoi_idx = ai
                 break
             end

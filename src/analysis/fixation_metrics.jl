@@ -142,7 +142,7 @@ function _extract_trial_fixations(g::AbstractDataFrame, aois::Vector{<:AOI})
         # Find AOI (0 = outside all AOIs)
         aoi_idx = 0
         for (ai, aoi) in enumerate(aois)
-            if contains(aoi, fx, fy)
+            if in_aoi(aoi, fx, fy)
                 aoi_idx = ai
                 break
             end

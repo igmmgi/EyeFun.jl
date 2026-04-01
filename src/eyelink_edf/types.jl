@@ -25,12 +25,12 @@ end
 """
     EDFFile
 
-Main container returned by `read_eyelink_edf` and `read_eyelink_asc`.
+Raw container returned by `read_eyelink_edf` and `read_eyelink_asc`.
 
-Access sub-tables via functions rather than fields:
-- `saccades(edf)`, `fixations(edf)`, `blinks(edf)`
-- `messages(edf)`, `aois(edf)`
-- `variables(edf)`
+Holds the parsed binary/text data before conversion to `EyeData`.
+Use `create_eyefun_data(edf)` (or `read_et_data`) to get an analysis-ready
+`EyeData` with event annotations, then use `fixations`, `saccades`, `blinks`,
+`messages`, and `variables` on the resulting `EyeData`.
 """
 mutable struct EDFFile <: EyeFile
     filename::String

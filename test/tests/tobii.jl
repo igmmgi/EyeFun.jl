@@ -1,7 +1,7 @@
 @testset "Tobii TSV reader" begin
     @testset "read_tobii — returns TobiiFile" begin
         raw = Main.TEST_TOBII_TSV
-        @test raw isa TobiiFile
+        @test raw isa EyeFun.TobiiFile
         @test raw.sample_rate ≈ 500.0
         @test raw.subject == "P1"
         
@@ -32,7 +32,7 @@
 
     @testset "create_eyefun_data(TobiiFile) — returns EyeData with events" begin
         raw = Main.TEST_TOBII_TSV
-        ed = create_eyefun_data(deepcopy(raw))
+        ed = EyeFun.create_eyefun_data(deepcopy(raw))
 
         @test ed isa EyeData
         @test ed.source == :tobii

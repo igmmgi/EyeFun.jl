@@ -72,7 +72,7 @@ function _aoi_sequence(df::EyeData, aois::Vector{<:AOI}, selection, eye::Symbol)
 
         fy = Float64(fix_gy[i])
         for (ai, aoi) in enumerate(aois)
-            if contains(aoi, fx, fy)
+            if in_aoi(aoi, fx, fy)
                 push!(seq, letters[ai])
                 break
             end

@@ -64,7 +64,7 @@
             @test hasproperty(edf.events, :sttime)
             @test hasproperty(edf.events, :message)
 
-            ed = create_eyefun_data(edf; trial_time_zero = nothing)
+            ed = EyeFun.create_eyefun_data(edf; trial_time_zero = nothing)
             original_time_first = edf.samples.time[1]
 
             # Mutating the result should not corrupt the EDFFile

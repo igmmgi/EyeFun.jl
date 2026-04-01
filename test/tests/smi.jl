@@ -1,7 +1,7 @@
 @testset "SMI reader" begin
     @testset "read_smi (txt) — returns SMIFile" begin
         raw = Main.TEST_SMI_TXT
-        @test raw isa SMIFile
+        @test raw isa EyeFun.SMIFile
         @test raw.sample_rate == 50.0
         @test raw.screen_res == (1280, 1024)
         @test raw.screen_width_cm ≈ 30.0
@@ -25,7 +25,7 @@
     @testset "create_eyefun_data (txt) — returns EyeData with events" begin
         raw = Main.TEST_SMI_TXT
         # Create fresh DataFrame
-        ed  = create_eyefun_data(deepcopy(raw))
+        ed  = EyeFun.create_eyefun_data(deepcopy(raw))
 
         @test ed isa EyeData
         @test ed.source == :smi
@@ -64,7 +64,7 @@
 
     @testset "read_smi (idf) — returns SMIFile" begin
         raw = Main.TEST_SMI_IDF
-        @test raw isa SMIFile
+        @test raw isa EyeFun.SMIFile
         @test nrow(raw.samples) > 0
         @test hasproperty(raw.samples, :gxL)
         @test hasproperty(raw.samples, :time)
@@ -80,7 +80,7 @@
 
             # Round-trip: read the written file back via the TXT reader
             rt = EyeFun.read_smi(out)
-            @test rt isa SMIFile
+            @test rt isa EyeFun.SMIFile
             @test nrow(rt.samples) == nrow(raw.samples)
             @test rt.sample_rate == raw.sample_rate
 

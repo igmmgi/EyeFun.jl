@@ -11,8 +11,8 @@
             @test edf isa EyeFun.EDFFile
             @test !isnothing(edf.samples)
             @test nrow(edf.samples) > 0
-            @test nrow(fixations(edf)) > 0
-            @test nrow(saccades(edf)) > 0
+            @test nrow(EyeFun.parse_fixations(edf.events)) > 0
+            @test nrow(EyeFun.parse_saccades(edf.events)) > 0
         end
     end
 end

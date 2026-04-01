@@ -14,13 +14,11 @@ using Statistics
 
 # Types
 export EyeData
-export EyeFile
-export EDFFile, SMIFile, TobiiFile
 export AOI, RectAOI, CircleAOI, EllipseAOI, PolygonAOI
+export in_aoi
 
 # I/O
 export read_et_data
-export create_eyefun_data
 export write_et_ascii
 
 # Event accessors

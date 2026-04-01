@@ -32,7 +32,7 @@ function plot_dwell(
     colors = Makie.wong_colors()
 
     for aoi in aois
-        count = sum(contains(aoi, px[i], py[i]) for i in eachindex(px))
+        count = sum(in_aoi(aoi, px[i], py[i]) for i in eachindex(px))
         push!(dwell_ms, count / df.sample_rate * 1000.0)
     end
 

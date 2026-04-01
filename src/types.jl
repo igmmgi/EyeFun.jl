@@ -146,7 +146,7 @@ end
 Abstract supertype for all Area of Interest definitions.
 
 Subtypes must implement:
-- `contains(aoi, x, y) -> Bool` — point-in-AOI test
+- `in_aoi(aoi, x, y) -> Bool` — point-in-AOI test
 
 Future subtypes (e.g. `DynamicAOI`, `GroupAOI`) can extend this hierarchy.
 """
@@ -161,7 +161,7 @@ Rectangular Area of Interest defined by (x1, y1) bottom-left and (x2, y2) top-ri
 
 ```julia
 aoi = RectAOI("Button", 100, 200, 300, 400)
-contains(aoi, 150, 300)  # true
+in_aoi(aoi, 150, 300)  # true
 ```
 """
 struct RectAOI <: AOI
@@ -172,7 +172,7 @@ struct RectAOI <: AOI
     y2::Float64
 end
 
-contains(aoi::RectAOI, x::Real, y::Real) = aoi.x1 <= x <= aoi.x2 && aoi.y1 <= y <= aoi.y2
+in_aoi(aoi::RectAOI, x::Real, y::Real) = aoi.x1 <= x <= aoi.x2 && aoi.y1 <= y <= aoi.y2
 
 # ── CircleAOI ──────────────────────────────────────────────────────────────── #
 
@@ -183,7 +183,7 @@ Circular Area of Interest defined by center and radius.
 
 ```julia
 aoi = CircleAOI("Fixation Cross", 640, 480, 50)
-contains(aoi, 650, 485)  # true
+in_aoi(aoi, 650, 485)  # true
 ```
 """
 struct CircleAOI <: AOI
@@ -193,7 +193,7 @@ struct CircleAOI <: AOI
     radius::Float64
 end
 
-contains(aoi::CircleAOI, x::Real, y::Real) = (x - aoi.cx)^2 + (y - aoi.cy)^2 <= aoi.radius^2
+in_aoi(aoi::CircleAOI, x::Real, y::Real) = (x - aoi.cx)^2 + (y - aoi.cy)^2 <= aoi.radius^2
 
 # ── EllipseAOI ─────────────────────────────────────────────────────────────── #
 
@@ -204,7 +204,7 @@ Elliptical Area of Interest defined by center and semi-axes.
 
 ```julia
 aoi = EllipseAOI("Face", 640, 400, 100, 150)
-contains(aoi, 640, 400)  # true
+in_aoi(aoi, 640, 400)  # true
 ```
 """
 struct EllipseAOI <: AOI
@@ -215,7 +215,7 @@ struct EllipseAOI <: AOI
     ry::Float64
 end
 
-contains(aoi::EllipseAOI, x::Real, y::Real) =
+in_aoi(aoi::EllipseAOI, x::Real, y::Real) =
     ((x - aoi.cx) / aoi.rx)^2 + ((y - aoi.cy) / aoi.ry)^2 <= 1.0
 
 # ── PolygonAOI ─────────────────────────────────────────────────────────────── #
@@ -228,7 +228,7 @@ The polygon is automatically closed (first vertex connected to last).
 
 ```julia
 aoi = PolygonAOI("Region", [(100,100), (200,50), (300,100), (250,200), (150,200)])
-contains(aoi, 200, 150)  # true
+in_aoi(aoi, 200, 150)  # true
 ```
 """
 struct PolygonAOI <: AOI
@@ -237,7 +237,7 @@ struct PolygonAOI <: AOI
 end
 
 """Point-in-polygon using the ray casting algorithm."""
-function contains(aoi::PolygonAOI, x::Real, y::Real)
+function in_aoi(aoi::PolygonAOI, x::Real, y::Real)
     verts = aoi.vertices
     n = length(verts)
     n < 3 && return false
@@ -415,6 +415,83 @@ function blinks(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
     end
 
     return DataFrame(sttime = sttime, entime = entime, duration = dur)
+end
+
+"""
+    messages(ed::EyeData; summary=false) -> DataFrame
+
+Extract message events from the `EyeData` sample timeline.
+
+Returns a `DataFrame` with columns `time` and `message` for each non-empty
+message entry. Messages that were joined at the same timestamp (separated by
+`"; "`) are split back into individual rows.
+
+With `summary=true`, returns a frequency table of unique messages sorted by count,
+grouping near-identical messages (e.g. "TRIALID 1"…"TRIALID 894" → "TRIALID").
+
+# Example
+```julia
+ed = read_et_data("recording.edf")
+messages(ed)               # all individual messages
+messages(ed; summary=true) # frequency table
+```
+"""
+function messages(ed::EyeData; summary::Bool = false)
+    df = ed.df
+    !hasproperty(df, :message) && return DataFrame()
+
+    # Extract rows where message is non-empty
+    mask = [!ismissing(m) && m != "" for m in df.message]
+    !any(mask) && return DataFrame()
+
+    msg_rows = df[mask, :]
+
+    # Split ";"-joined messages back into individual rows
+    result_time = Float64[]
+    result_msg = String[]
+    for row in eachrow(msg_rows)
+        for m in split(row.message, "; ")
+            s = strip(m)
+            isempty(s) && continue
+            push!(result_time, Float64(row.time))
+            push!(result_msg, s)
+        end
+    end
+
+    isempty(result_msg) && return DataFrame()
+    msg = DataFrame(time = result_time, message = result_msg)
+    !summary && return msg
+
+    # ── Summary mode: frequency table ───────────────────────────────────── #
+    nrow(msg) == 0 && return DataFrame(message = String[], count = Int[])
+
+    msg_counts = Dict{String,Int}()
+    for m in msg.message
+        msg_counts[m] = get(msg_counts, m, 0) + 1
+    end
+
+    # Group by first word to collapse "TRIALID 1", "TRIALID 2" etc.
+    word_counts = Dict{String,Int}()
+    word_examples = Dict{String,String}()
+    for (m, c) in msg_counts
+        w = split(m; limit = 2)[1]
+        word_counts[w] = get(word_counts, w, 0) + c
+        if !haskey(word_examples, w) || length(m) > length(word_examples[w])
+            word_examples[w] = m
+        end
+    end
+
+    # If grouping by first word reduced count a lot, use grouped view
+    if length(word_counts) < length(msg_counts) * 0.5
+        rows =
+            [(message = w, example = word_examples[w], count = c) for (w, c) in word_counts]
+    else
+        rows = [(message = m, example = m, count = c) for (m, c) in msg_counts]
+    end
+
+    result = DataFrame(rows)
+    sort!(result, :count; rev = true)
+    return result
 end
 
 """

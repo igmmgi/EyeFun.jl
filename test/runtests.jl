@@ -18,7 +18,7 @@ const TEST1_EDF_PATH = joinpath(DATA_DIR_EYELINK, "test1.edf")
 const TEST1_ASC_PATH = joinpath(DATA_DIR_EYELINK, "test1.asc")
 println("Loading global test data from EyeLink...")
 const TEST1_EDF = EyeFun.read_eyelink(TEST1_EDF_PATH)
-const TEST1_DF = create_eyefun_data(TEST1_EDF; trial_time_zero=nothing)
+const TEST1_DF = EyeFun.create_eyefun_data(TEST1_EDF; trial_time_zero=nothing)
 const TEST1_ASC = EyeFun.read_eyelink(TEST1_ASC_PATH)
 
 # TODO: I am not familiar with SMI/TOBII so this will probably need to be updated
