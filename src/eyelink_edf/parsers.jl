@@ -598,7 +598,7 @@ function parse_aois(events::DataFrame)
 end
 
 """
-    EyeData(edf::EDFFile; include_variables=true, trial_time_zero=nothing, screen_res=nothing) -> EyeData
+    create_eyefun_data(edf::EDFFile; include_variables=true, trial_time_zero=nothing, screen_res=nothing) -> EyeData
 
 Build an analysis-ready `EyeData` from an `EDFFile` (returned by `read_eyelink`).
 
@@ -622,7 +622,7 @@ saccades(ed)
 blinks(ed)
 ```
 """
-function EyeData(
+function create_eyefun_data(
     edf::EDFFile;
     include_variables::Bool = true,
     trial_time_zero::Union{String,Nothing} = nothing,
@@ -851,12 +851,3 @@ function EyeData(
     return EyeData(result; source = :eyelink, sample_rate = sr, screen_res = screen_res)
 end
 
-"""
-    create_eyefun_data(edf::EDFFile; kwargs...) -> EyeData
-
-Convert an `EDFFile` into an analysis-ready `EyeData` container.
-Delegates to the `EyeData` constructor.
-"""
-function create_eyefun_data(edf::EDFFile; kwargs...)
-    return EyeData(edf; kwargs...)
-end

@@ -36,13 +36,13 @@
         @test hasproperty(raw.events, :time)
     end
 
-    @testset "EyeData(TobiiFile) — returns EyeData with events" begin
+    @testset "create_eyefun_data(TobiiFile) — returns EyeData with events" begin
         if !isdefined(Main, :TEST_TOBII_TSV)
             @warn "Global Tobii TSV fixture not found."
             return
         end
         raw = Main.TEST_TOBII_TSV
-        ed  = EyeData(deepcopy(raw))
+        ed = create_eyefun_data(deepcopy(raw))
 
         @test ed isa EyeData
         @test ed.source == :tobii

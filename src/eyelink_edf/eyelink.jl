@@ -588,47 +588,6 @@ function read_eyelink(filename::String; kwargs...)
     end
 end
 
-"""
-    export_ascii(edf_path::String, asc_path::String=replace(edf_path, r"\\.edf\$"i => ".asc"))
-    export_ascii(edf::EDFFile, asc_path::String=replace(edf.filename, r"\\.edf\$"i => "_exported.asc"))
-    export_ascii(dir::String)
-
-Convert an EDF file (or all `.edf` files in a directory) to ASC format (equivalent to the `edf2asc` tool), 
-or write an already loaded `EDFFile` object to ASC format.
-
-By default, the output path matches the input with an `.asc` extension.
-
-# Examples
-```julia
-export_ascii("recording.edf")                    # → recording.asc
-export_ascii("recording.edf", "custom_name.asc") # explicit path
-export_ascii(edf_object)                         # writes object to _exported.asc
-export_ascii("/path/to/data/")                   # converts all *.edf in the directory
-```
-"""
-function export_ascii(
-    edf_path::String,
-    asc_path::String = replace(edf_path, r"\.edf$"i => ".asc"),
-)
-    # If a directory is passed, dispatch to the batch method
-    isdir(edf_path) && return _export_ascii_dir(edf_path)
-    @info "Writing $(edf_path) to $(asc_path)"
-    et = read_eyelink_edf(edf_path)
-    export_ascii(et, asc_path)
-    return nothing
-end
-
-function _export_ascii_dir(dir::AbstractString)
-    isdir(dir) || error("Not a directory: $dir")
-    edf_files = filter(f -> endswith(lowercase(f), ".edf"), readdir(dir; join = true))
-    isempty(edf_files) && @warn "No .edf files found in $dir"
-    @info "Found $(length(edf_files)) EDF file(s) in $dir"
-    for edf_path in edf_files
-        export_ascii(edf_path)
-    end
-    return nothing
-end
-
 
 """
     saccades(edf::EDFFile) -> DataFrame

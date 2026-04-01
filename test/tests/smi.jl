@@ -28,14 +28,14 @@
         @test all(==("pp23671"), raw.samples.participant)
     end
 
-    @testset "create_smi_dataframe (txt) — returns EyeData with events" begin
+    @testset "create_eyefun_data (txt) — returns EyeData with events" begin
         if !isdefined(Main, :TEST_SMI_TXT)
             @warn "Global SMI TXT fixture not found."
             return
         end
         raw = Main.TEST_SMI_TXT
         # Create fresh DataFrame
-        ed  = EyeData(deepcopy(raw))
+        ed  = create_eyefun_data(deepcopy(raw))
 
         @test ed isa EyeData
         @test ed.source == :smi
@@ -85,7 +85,7 @@
         @test all(isnan, raw.samples.gxL)
     end
 
-    @testset "export_ascii — IDF round-trip" begin
+    @testset "write_et_ascii — IDF round-trip" begin
         if !isdefined(Main, :TEST_SMI_IDF)
             @warn "Global SMI IDF fixture not found."
             return
@@ -93,11 +93,11 @@
         raw = Main.TEST_SMI_IDF
         out = tempname() * ".txt"
         try
-            export_ascii(raw, out)
+            write_et_ascii(raw, out)
             @test isfile(out)
 
             # Round-trip: read the written file back via the TXT reader
-            rt = read_smi(out)
+            rt = EyeFun.read_smi(out)
             @test rt isa SMIFile
             @test nrow(rt.samples) == nrow(raw.samples)
             @test rt.sample_rate == raw.sample_rate
@@ -105,7 +105,7 @@
             # Timestamps preserved to within 1 µs (round-trip through µs integers)
             @test maximum(abs.(rt.samples.time .- raw.samples.time)) < 0.001
 
-            # Gaze values preserved to 2 decimal places (export_ascii uses %.2f)
+            # Gaze values preserved to 2 decimal places (write_et_ascii uses %.2f)
             valid = .!isnan.(raw.samples.gxL) .& .!isnan.(rt.samples.gxL)
             if any(valid)
                 @test maximum(abs.(raw.samples.gxL[valid] .- rt.samples.gxL[valid])) < 0.01
@@ -120,10 +120,10 @@
     # export for gaze, pupil, corneal reflex, and trigger columns.
 
     function _compare_idf_parity(idf_path, ref_txt_path)
-        raw = read_smi(idf_path)
+        raw = EyeFun.read_smi(idf_path)
         out = tempname() * ".txt"
         try
-            export_ascii(raw, out)
+            write_et_ascii(raw, out)
 
             begaze   = filter(l -> !startswith(l, "##") && !startswith(l, "Time"), readlines(ref_txt_path))
             exported = filter(l -> !startswith(l, "##") && !startswith(l, "Time"), readlines(out))
@@ -144,7 +144,7 @@
 
                     b_f = tryparse(Float64, bg_parts[j])
                     e_f = tryparse(Float64, ex_parts[j])
-                    if b_f !== nothing && e_f !== nothing
+                    if !isnothing(b_f) && !isnothing(e_f)
                         abs(b_f - e_f) > 0.015 && (mismatches += 1)
                     else
                         strip(bg_parts[j]) != strip(ex_parts[j]) && (mismatches += 1)
@@ -175,7 +175,7 @@
                 # Verify trigger events were extracted
                 @test nrow(raw.events) > 0
                 @test all(==("MSG"), raw.events.type)
-                @test all(m -> tryparse(Int, m) !== nothing, raw.events.message)
+                @test all(m -> !isnothing(tryparse(Int, m)), raw.events.message)
 
                 # Verify sample rate detection
                 @test 49.0 < raw.sample_rate < 51.0

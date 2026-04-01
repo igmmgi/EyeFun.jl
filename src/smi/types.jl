@@ -111,7 +111,7 @@ blinks(smi::SMIFile;    kwargs...) = _smi_event_error("blinks")
 # ── EyeData constructor for SMIFile ────────────────────────────────────────── #
 
 """
-    EyeData(smi::SMIFile) -> EyeData
+    create_eyefun_data(smi::SMIFile) -> EyeData
 
 Build an analysis-ready `EyeData` from a raw `SMIFile` (returned by `read_smi`).
 
@@ -130,7 +130,7 @@ blinks(ed)
 plot_gaze(ed)
 ```
 """
-function EyeData(smi::SMIFile)
+function create_eyefun_data(smi::SMIFile)
     samples = smi.samples
     nrow(samples) > 0 || error("No sample data in SMIFile.")
 
@@ -152,16 +152,5 @@ function EyeData(smi::SMIFile)
         viewing_distance_cm = smi.viewing_distance_cm,
     )
 end
-
-"""
-    create_eyefun_data(smi::SMIFile) -> EyeData
-
-Convert a raw `SMIFile` into an analysis-ready `EyeData` container.
-Delegates to the `EyeData` constructor.
-"""
-function create_eyefun_data(smi::SMIFile)
-    return EyeData(smi)
-end
-
 
 

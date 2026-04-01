@@ -128,7 +128,7 @@ const _TAB1SP = b"\t "     # \t + 1 space  (before pa)
 const _TABDOTS = b"\t...\n" # trailing tag + newline
 
 """
-    export_ascii(edf::EDFFile, output_file::String = replace(edf.filename, r"\\.edf\$"i => "_exported.asc"); 
+    write_et_ascii(edf::EDFFile, output_file::String = replace(edf.filename, r"\\.edf\$"i => "_exported.asc"); 
                    include_samples::Bool = true,
                    include_events::Bool = true,
                    include_messages::Bool = true)
@@ -145,7 +145,7 @@ Export an EDF file to ASCII format identical to SR Research's edf2asc tool.
 # Returns
 - `Nothing`: Writes the ASCII file to disk
 """
-function export_ascii(
+function write_et_ascii(
     edf::EDFFile,
     output_file::String = replace(edf.filename, r"\.edf$"i => "_exported.asc");
     include_samples::Bool = true,

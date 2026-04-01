@@ -102,7 +102,7 @@ blinks(tob::TobiiFile;    kwargs...) = _tobii_event_error("blinks")
 # ── EyeData constructor for TobiiFile ────────────────────────────────────────── #
 
 """
-    EyeData(tob::TobiiFile) -> EyeData
+    create_eyefun_data(tob::TobiiFile) -> EyeData
 
 Build an analysis-ready `EyeData` from a raw `TobiiFile`.
 
@@ -111,7 +111,7 @@ etc.) are transferred into the standard `EyeData` schema. Event columns (`in_fix
 `in_sacc`, `in_blink`) are **not** populated; call `detect_events!(ed)` afterwards
 to run fixation/saccade/blink detection.
 """
-function EyeData(tob::TobiiFile)
+function create_eyefun_data(tob::TobiiFile)
     samples = tob.samples
     nrow(samples) > 0 || error("No sample data in TobiiFile.")
 
@@ -130,14 +130,4 @@ function EyeData(tob::TobiiFile)
         screen_width_cm     = tob.screen_width_cm,
         viewing_distance_cm = tob.viewing_distance_cm,
     )
-end
-
-"""
-    create_eyefun_data(tob::TobiiFile) -> EyeData
-
-Convert a raw `TobiiFile` into an analysis-ready `EyeData` container.
-Delegates to the `EyeData` constructor.
-"""
-function create_eyefun_data(tob::TobiiFile)
-    return EyeData(tob)
 end

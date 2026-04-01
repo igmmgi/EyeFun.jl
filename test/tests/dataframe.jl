@@ -2,7 +2,7 @@
 #  create_et_dataframe
 # ════════════════════════════════════════════════════════════════════════════ #
 
-@testset "create_eyelink_edf_dataframe" begin
+@testset "create_eyefun_data" begin
     if !isdefined(Main, :TEST1_EDF)
         @warn "Global test1.edf fixture not found. Skipping dataframe tests."
         return
@@ -69,12 +69,12 @@
             @test hasproperty(edf.events, :sttime)
             @test hasproperty(edf.events, :message)
 
-            df2 = EyeData(edf; trial_time_zero = nothing)
+            ed = create_eyefun_data(edf; trial_time_zero = nothing)
             original_time_first = edf.samples.time[1]
 
             # Mutating the result should not corrupt the EDFFile
-            df2.df.in_fix[1] = !df2.df.in_fix[1]
-            @test edf.samples !== nothing
+            ed.df.in_fix[1] = !ed.df.in_fix[1]
+            @test !isnothing(edf.samples)
             @test edf.samples.time[1] == original_time_first
         end
 end

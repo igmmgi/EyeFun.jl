@@ -3,22 +3,22 @@
 # ════════════════════════════════════════════════════════════════════════════ #
 
 @testset "read_eyelink dispatcher" begin
-    edf_path = joinpath(DATA_DIR, "test1.edf")
-    asc_path = joinpath(DATA_DIR, "test1.asc")
+    edf_path = joinpath(DATA_DIR_EYELINK, "test1.edf")
+    asc_path = joinpath(DATA_DIR_EYELINK, "test1.asc")
 
     if isfile(edf_path)
-        edf = read_eyelink(edf_path)
+        edf = EyeFun.read_eyelink(edf_path)
         @test edf isa EyeFun.EDFFile
-        @test edf.samples !== nothing
+        @test !isnothing(edf.samples)
     end
 
     if isfile(asc_path)
-        asc = read_eyelink(asc_path)
+        asc = EyeFun.read_eyelink(asc_path)
         @test asc isa EyeFun.EDFFile
-        @test asc.samples !== nothing
+        @test !isnothing(asc.samples)
     end
 
-    @test_throws ErrorException read_eyelink("file.xyz")
+    @test_throws ErrorException EyeFun.read_eyelink("file.xyz")
 end
 
 
@@ -26,12 +26,12 @@ end
 #  read_et_dataframe
 # ════════════════════════════════════════════════════════════════════════════ #
 
-@testset "create_eyelink_edf_dataframe (from file)" begin
-    edf_path = joinpath(DATA_DIR, "test1.edf")
-    asc_path = joinpath(DATA_DIR, "test1.asc")
+@testset "create_eyefun_data (EDF from file)" begin
+    edf_path = joinpath(DATA_DIR_EYELINK, "test1.edf")
+    asc_path = joinpath(DATA_DIR_EYELINK, "test1.asc")
 
     if isfile(edf_path)
-        df = EyeData(read_eyelink(edf_path))
+        df = read_et_data(edf_path)
         @test df isa EyeData
         @test nrow(df.df) > 0
         @test hasproperty(df.df, :sacc_ampl)
@@ -40,7 +40,7 @@ end
     end
 
     if isfile(asc_path)
-        df = EyeData(read_eyelink(asc_path))
+        df = read_et_data(asc_path)
         @test df isa EyeData
         @test nrow(df.df) > 0
     end

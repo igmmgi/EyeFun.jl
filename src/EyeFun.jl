@@ -19,14 +19,9 @@ export EDFFile, SMIFile, TobiiFile
 export AOI, RectAOI, CircleAOI, EllipseAOI, PolygonAOI
 
 # I/O
-export batch_read_eyelink
-export batch_read_smi
-export batch_read_tobii
+export read_et_data
 export create_eyefun_data
-export read_eyelink
-export read_smi
-export read_tobii
-export export_ascii
+export write_et_ascii
 
 # Event accessors
 export saccades
@@ -113,7 +108,8 @@ include("tobii/tobii_reader.jl")
 
 include("analysis/analysis.jl")
 include("analysis/aoi.jl")
-include("analysis/batch.jl")
+include("analysis/read.jl")
+include("analysis/write.jl")
 include("analysis/coordinates.jl")
 include("analysis/detect_events.jl")
 include("analysis/drift.jl")

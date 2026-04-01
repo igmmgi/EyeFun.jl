@@ -274,15 +274,17 @@
             @test abs(mean(gcd.ot1)) < 0.1
         end
 
-        @testset "batch_read_eyelink" begin
-            # Read the same file twice as two "participants"
-            df_batch = batch_read_eyelink(
-                [edf_path, edf_path];
-                participant_labels = ["sub01", "sub02"],
+        @testset "batch_read via read_et_data" begin
+            # Using the new polymorphic entry point for a batch of files
+            df_batch = read_et_data(
+                [TEST1_EDF_PATH, TEST1_EDF_PATH]; # Mock multiple files
+                participant_labels=["p1", "p2"],
+                verbose=false,
+                trial_time_zero=nothing
             )
             @test df_batch isa EyeData
-            @test hasproperty(df_batch.df, :participant)
-            @test Set(df_batch.df.participant) == Set(["sub01", "sub02"])
+            @test "p1" in df_batch.df.participant
+            @test "p2" in df_batch.df.participant
             @test nrow(df_batch.df) == 2 * nrow(edf.samples)
         end
 end

@@ -77,7 +77,7 @@ function compare_asc_files(ref_path::String, jul_path::String)
         for k = 2:min(n_vals, 4)
             rv = _parse_f64(rp[k])
             jv = _parse_f64(jp[k])
-            if rv !== nothing && jv !== nothing && abs(rv - jv) > 0.15
+            if !isnothing(rv) && !isnothing(jv) && abs(rv - jv) > 0.15
                 sample_mismatches += 1
                 break
             end
@@ -97,7 +97,7 @@ function compare_asc_files(ref_path::String, jul_path::String)
         if rp[3] == jp[3] && rp[4] == jp[4]  # sttime, entime match
             rg = _parse_f64(rp[6])
             jg = _parse_f64(jp[6])
-            if rg !== nothing && jg !== nothing && abs(rg - jg) <= 0.15
+            if !isnothing(rg) && !isnothing(jg) && abs(rg - jg) <= 0.15
                 efix_value_matches += 1
             end
         end
@@ -118,7 +118,7 @@ function compare_asc_files(ref_path::String, jul_path::String)
             for k = 6:9  # gstx, gsty, genx, geny
                 rv = _parse_f64(rp[k])
                 jv = _parse_f64(jp[k])
-                if rv !== nothing && jv !== nothing && abs(rv - jv) > 0.15
+                if !isnothing(rv) && !isnothing(jv) && abs(rv - jv) > 0.15
                     all_match = false
                     break
                 end
@@ -137,11 +137,11 @@ function compare_asc_files(ref_path::String, jul_path::String)
         ja = _parse_f64(jp[10])
         rp_v = _parse_f64(rp[11])
         jp_v = _parse_f64(jp[11])
-        if ra !== nothing &&
-           ja !== nothing &&
+        if !isnothing(ra) &&
+           !isnothing(ja) &&
            abs(ra - ja) <= 0.5 &&
-           rp_v !== nothing &&
-           jp_v !== nothing &&
+           !isnothing(rp_v) &&
+           !isnothing(jp_v) &&
            abs(rp_v - jp_v) <= 5.0
             esacc_ampl_matches += 1
         end
@@ -193,8 +193,8 @@ nrow_or(d::Dict, k::Symbol, default::Int) = get(d, k, default)
 
 @testset "ASC output: Julia vs edf2asc" begin
     for test_name in ("test1", "test2", "test3")
-        ref_path = joinpath(DATA_DIR, "$(test_name).asc")
-        jul_path = joinpath(DATA_DIR, "$(test_name)_julia.asc")
+        ref_path = joinpath(DATA_DIR_EYELINK, "$(test_name).asc")
+        jul_path = joinpath(DATA_DIR_EYELINK, "$(test_name)_julia.asc")
         (isfile(ref_path) && isfile(jul_path)) || continue
 
         is_mono = test_name in ("test1", "test2")

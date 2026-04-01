@@ -5,7 +5,7 @@ can be sanity-checked against the native software export.
 """
 
 """
-    export_ascii(smi::SMIFile, path::String)
+    write_et_ascii(smi::SMIFile, path::String)
 
 Write the sample data in `smi` to an SMI-format tab-separated text file.
 
@@ -26,18 +26,18 @@ written as `0.00` to match that convention.
 # Example
 ```julia
 raw = read_smi("session.idf")           # reads IDF binary
-export_ascii(raw, "session_julia.txt")  # write equivalent TXT
+write_et_ascii(raw, "session_julia.txt")  # write equivalent TXT
 ```
 """
-function export_ascii(smi::SMIFile)
+function write_et_ascii(smi::SMIFile)
     path = replace(smi.filename, r"\.(idf|txt)$"i => "_exported.txt")
     if path == smi.filename
         path = path * "_exported.txt"
     end
-    export_ascii(smi, path)
+    write_et_ascii(smi, path)
 end
 
-function export_ascii(smi::SMIFile, path::String)
+function write_et_ascii(smi::SMIFile, path::String)
     df = smi.samples
     nrow(df) > 0 || error("SMIFile has no sample data to write.")
 

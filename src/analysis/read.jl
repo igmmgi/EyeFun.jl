@@ -1,12 +1,75 @@
-# ── Batch Reading Utilities ────────────────────────────────────────────────── #
+# ── Unified I/O Reading Pattern ──────────────────────────────────────────────── #
 
-function _batch_read(
-    reader_func::Function,
-    files::Vector{String},
-    participant_labels,
-    verbose::Bool,
-    post_func::Function;
-    kwargs...
+"""
+    detect_format(path::AbstractString)
+
+Detect the correct `EyeFile` type based on file extension.
+Returns `EDFFile`, `SMIFile`, or `TobiiFile`.
+"""
+function detect_format(path::AbstractString)
+    ext = lowercase(splitext(path)[2])
+    if ext == ".edf" || ext == ".asc"
+        return EDFFile
+    elseif ext == ".idf" || ext == ".csv"
+        return SMIFile
+    elseif ext == ".tsv"
+        return TobiiFile
+    else
+        error("Unsupported eye-tracking data format for extension: `\$ext`. Please use a supported format (.edf, .asc, .idf, .tsv)")
+    end
+end
+
+"""
+    read_et_data(T::Type{<:EyeFile}, path::String; kwargs...)
+
+Internal format-specific dispatchers returning `EyeData`.
+"""
+function read_et_data(::Type{EDFFile}, path::AbstractString; trial_time_zero=nothing, kwargs...)
+    return create_eyefun_data(EyeFun.read_eyelink(path; kwargs...); trial_time_zero=trial_time_zero)
+end
+
+function read_et_data(::Type{SMIFile}, path::AbstractString; kwargs...)
+    return create_eyefun_data(EyeFun.read_smi(path; kwargs...))
+end
+
+function read_et_data(::Type{TobiiFile}, path::AbstractString; kwargs...)
+    return create_eyefun_data(EyeFun.read_tobii(path; kwargs...))
+end
+
+
+
+"""
+    read_et_data(path::String; kwargs...) -> EyeData
+
+Read a single eye-tracking file. Format is auto-detected from extension. 
+
+By default, this will wrap the raw data in an `EyeData` object 
+(which you can then safely filter, manipulate, and plot).
+"""
+function read_et_data(path::AbstractString; kwargs...)
+    isfile(path) || isdir(path) || error("Path not found: \$path")
+
+    # If it's a directory, delegate to the directory dispatcher
+    if isdir(path)
+        return _read_et_data_dir(path; kwargs...)
+    end
+
+    # Otherwise, it's a single file
+    fmt = detect_format(path)
+    return read_et_data(fmt, path; kwargs...)
+end
+
+"""
+    read_et_data(files::AbstractVector{<:AbstractString}; participant_labels=nothing, verbose=false, kwargs...) -> EyeData
+
+Read a batch of files and combine them into a single `EyeData` object. 
+Format is auto-detected from the first file.
+"""
+function read_et_data(
+    files::AbstractVector{<:AbstractString};
+    participant_labels=nothing,
+    verbose::Bool=false,
+    kwargs...,
 )
     length(files) == 0 && error("No files provided.")
 
@@ -19,11 +82,11 @@ function _batch_read(
     end
 
     eds = EyeData[]
+    fmt = detect_format(files[1]) # Assume homogeneous batch
 
     for (i, file) in enumerate(files)
-        verbose && @info "Reading $file ($(labels[i]))"
-        raw_data = reader_func(file; kwargs...)
-        ed_i = post_func(raw_data)
+        verbose && @info "Reading \$file (\$(labels[i]))"
+        ed_i = read_et_data(fmt, file; kwargs...)
         ed_i.df.participant .= labels[i]
         push!(eds, ed_i)
     end
@@ -31,31 +94,28 @@ function _batch_read(
     # Warn if sample rates differ across files
     rates = unique(ed.sample_rate for ed in eds)
     if length(rates) > 1
-        @warn "Files have different sample rates: $rates. Using $(eds[1].sample_rate) Hz from first file."
+        @warn "Files have different sample rates: \$rates. Using \$(eds[1].sample_rate) Hz from first file."
     end
 
-    combined = vcat([ed.df for ed in eds]...; cols = :union)
+    combined = vcat([ed.df for ed in eds]...; cols=:union)
     return EyeData(
         combined;
-        source = eds[1].source,
-        sample_rate = eds[1].sample_rate,
-        screen_res = eds[1].screen_res,
-        screen_width_cm = eds[1].screen_width_cm,
-        viewing_distance_cm = eds[1].viewing_distance_cm,
+        source=eds[1].source,
+        sample_rate=eds[1].sample_rate,
+        screen_res=eds[1].screen_res,
+        screen_width_cm=eds[1].screen_width_cm,
+        viewing_distance_cm=eds[1].viewing_distance_cm,
     )
 end
 
-function _batch_read_dir(
-    reader_func::Function,
-    dir::AbstractString,
-    ext::String,
-    recursive::Bool,
-    participant_labels,
-    verbose::Bool,
-    post_func::Function;
-    kwargs...
+function _read_et_data_dir(
+    dir::AbstractString;
+    ext::Union{String,Nothing}=nothing,
+    recursive::Bool=false,
+    kwargs...,
 )
-    isdir(dir) || error("Not a directory: $dir")
+    isnothing(ext) && error("When providing a directory path to `read_et_data`, you must specify the file extension via the `ext` keyword argument (e.g., ext=\".edf\").")
+
     ext_lower = lowercase(ext)
     files = if recursive
         [
@@ -66,114 +126,7 @@ function _batch_read_dir(
         [joinpath(dir, f) for f in readdir(dir) if endswith(lowercase(f), ext_lower)]
     end
     sort!(files)
-    isempty(files) && error("No $ext_lower files found in $dir")
-    return _batch_read(reader_func, files, participant_labels, verbose, post_func; kwargs...)
-end
+    isempty(files) && error("No \$(ext_lower) files found in \$dir")
 
-
-# ── batch_read_eyelink ───────────────────────────────────────── #
-
-"""
-    batch_read_eyelink(files::Vector{String};
-        participant_labels=nothing,
-        trial_time_zero=nothing,
-        verbose=false,
-        kwargs...)
-
-Read multiple EDF/ASC files and stack into a single `EyeData` with a
-`:participant` column.
-"""
-function batch_read_eyelink(
-    files::Vector{String};
-    participant_labels = nothing,
-    trial_time_zero = nothing,
-    verbose::Bool = false,
-    kwargs...,
-)
-    post_func = raw -> EyeData(raw; trial_time_zero = trial_time_zero)
-    return _batch_read(read_eyelink, files, participant_labels, verbose, post_func; kwargs...)
-end
-
-"""
-    batch_read_eyelink(dir::String; ext=".edf", recursive=false, kwargs...)
-
-Read all files with extension `ext` in `dir` and stack into a single `EyeData`.
-"""
-function batch_read_eyelink(
-    dir::AbstractString;
-    ext::String = ".edf",
-    recursive::Bool = false,
-    participant_labels = nothing,
-    trial_time_zero = nothing,
-    verbose::Bool = false,
-    kwargs...,
-)
-    post_func = raw -> EyeData(raw; trial_time_zero = trial_time_zero)
-    return _batch_read_dir(read_eyelink, dir, ext, recursive, participant_labels, verbose, post_func; kwargs...)
-end
-
-
-# ── batch_read_smi ───────────────────────────────────────────── #
-
-"""
-    batch_read_smi(files::Vector{String}; participant_labels=nothing, verbose=false, kwargs...)
-
-Read multiple SMI (.idf / .csv) files and stack into a single `EyeData`.
-"""
-function batch_read_smi(
-    files::Vector{String};
-    participant_labels = nothing,
-    verbose::Bool = false,
-    kwargs...,
-)
-    return _batch_read(read_smi, files, participant_labels, verbose, EyeData; kwargs...)
-end
-
-"""
-    batch_read_smi(dir::String; ext=".idf", recursive=false, kwargs...)
-
-Read all files with extension `ext` in `dir` and stack into a single `EyeData`.
-"""
-function batch_read_smi(
-    dir::AbstractString;
-    ext::String = ".idf",
-    recursive::Bool = false,
-    participant_labels = nothing,
-    verbose::Bool = false,
-    kwargs...,
-)
-    return _batch_read_dir(read_smi, dir, ext, recursive, participant_labels, verbose, EyeData; kwargs...)
-end
-
-
-# ── batch_read_tobii ─────────────────────────────────────────── #
-
-"""
-    batch_read_tobii(files::Vector{String}; participant_labels=nothing, verbose=false, kwargs...)
-
-Read multiple Tobii (.tsv) files and stack into a single `EyeData`.
-"""
-function batch_read_tobii(
-    files::Vector{String};
-    participant_labels = nothing,
-    verbose::Bool = false,
-    kwargs...,
-)
-    return _batch_read(read_tobii, files, participant_labels, verbose, EyeData; kwargs...)
-end
-
-"""
-    batch_read_tobii(dir::String; ext=".tsv", recursive=false, kwargs...)
-
-Read all files with extension `ext` in `dir` and stack into a single `EyeData`.
-"""
-function batch_read_tobii(
-    dir::AbstractString;
-    ext::String = ".tsv",
-    recursive::Bool = false,
-    participant_labels = nothing,
-    verbose::Bool = false,
-    kwargs...,
-)
-    return _batch_read_dir(read_tobii, dir, ext, recursive, participant_labels, verbose, EyeData; kwargs...)
+    return read_et_data(files; kwargs...)
 end

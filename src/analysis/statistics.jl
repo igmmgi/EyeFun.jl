@@ -59,47 +59,43 @@ function prepare_analysis_data(
         push!(measure_cols, col)
     end
 
-    rows = NamedTuple[]
-
-    for g in grouped
-        label = _group_labels(g, group_cols)
-        t = _trial_relative_time(g)
-
-        for i = 1:nrow(g)
-            isnan(t[i]) && continue
-
-            # Check all measure columns for validity
-            skip = false
-            for mc in measure_cols
-                if isnan(Float64(g[i, mc]))
-                    skip = true
-                    break
-                end
-            end
-            skip && continue
-
-            row = merge(
-                label,
-                (time = t[i], sample = i),
-                NamedTuple{Tuple(measures)}(Tuple(Float64(g[i, mc]) for mc in measure_cols)),
-            )
-
-            # Add event flags if present
-            if hasproperty(g, :in_fix)
-                row = merge(row, (in_fix = g.in_fix[i],))
-            end
-            if hasproperty(g, :in_sacc)
-                row = merge(row, (in_sacc = g.in_sacc[i],))
-            end
-            if hasproperty(g, :in_blink)
-                row = merge(row, (in_blink = g.in_blink[i],))
-            end
-
-            push!(rows, row)
-        end
+    # Collect event columns that exist in the DataFrame
+    event_cols = Symbol[]
+    for ec in (:in_fix, :in_sacc, :in_blink)
+        hasproperty(samples, ec) && push!(event_cols, ec)
     end
 
-    return DataFrame(rows)
+    df_model = combine(grouped) do g
+        t = _trial_relative_time(g)
+
+        # Build valid mask (time is not NaN, and all measures are not NaN)
+        valid = .!isnan.(t)
+        for mc in measure_cols
+            valid .&= .!isnan.(g[!, mc])
+        end
+
+        idx = findall(valid)
+
+        # Construct dictionary of columns for the result DataFrame
+        cols = Dict{Symbol, AbstractVector}()
+        cols[:time] = t[idx]
+        cols[:sample] = idx
+        
+        for mc in measure_cols
+            cols[mc] = Float64.(g[idx, mc])
+        end
+        
+        for ec in event_cols
+            cols[ec] = g[idx, ec]
+        end
+
+        return DataFrame(cols; copycols=false)
+    end
+
+    # DataFrames `combine` puts grouping columns first, but order of columns
+    # inside the result dict might vary. Reorder for deterministic output:
+    expected_cols = vcat(group_cols, [:time, :sample], measures, event_cols)
+    return select!(df_model, expected_cols)
 end
 
 """

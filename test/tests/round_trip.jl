@@ -4,15 +4,15 @@
 
 @testset "EDF → ASC round-trip" begin
     for test_name in ("test1", "test2", "test3")
-        edf_path = joinpath(DATA_DIR, "$(test_name).edf")
-        ref_path = joinpath(DATA_DIR, "$(test_name).asc")
+        edf_path = joinpath(DATA_DIR_EYELINK, "$(test_name).edf")
+        ref_path = joinpath(DATA_DIR_EYELINK, "$(test_name).asc")
         (isfile(edf_path) && isfile(ref_path)) || continue
 
         @testset "$test_name" begin
             # Generate ASC from EDF
             out_path = tempname() * ".asc"
             try
-                export_ascii(edf_path, out_path)
+                write_et_ascii(edf_path, out_path)
 
                 @test isfile(out_path)
                 @test filesize(out_path) > 0

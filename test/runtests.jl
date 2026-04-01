@@ -4,38 +4,44 @@ using DataFrames
 using Makie
 using Statistics
 
-const DATA_DIR = joinpath(dirname(@__DIR__), "resources", "data", "eyelink")
-
 println("Running EyeFun.jl Test Suite")
-println("=" ^ 40)
+println("="^40)
 
-# ── Global Test Fixtures ─────────────────────────────────────────────── #
+# Get some data for the tests
+# Data paths
+const DATA_DIR_EYELINK = joinpath(dirname(@__DIR__), "resources", "data", "eyelink")
 const DATA_DIR_SMI = joinpath(dirname(@__DIR__), "resources", "data", "smi")
 const DATA_DIR_TOBII = joinpath(dirname(@__DIR__), "resources", "data", "tobi")
 
-const TEST1_EDF_PATH = joinpath(DATA_DIR, "test1.edf")
-if isfile(TEST1_EDF_PATH)
-    println("Loading global test fixtures from test1.edf...")
-    const TEST1_EDF = read_eyelink(TEST1_EDF_PATH)
-    const TEST1_DF  = EyeData(TEST1_EDF; trial_time_zero = nothing)
+# SR Research
+const TEST1_EDF_PATH = joinpath(DATA_DIR_EYELINK, "test1.edf")
+const TEST1_ASC_PATH = joinpath(DATA_DIR_EYELINK, "test1.asc")
+if isfile(TEST1_EDF_PATH) && isfile(TEST1_ASC_PATH)
+    println("Loading global test data from EyeLink...")
+    const TEST1_EDF = EyeFun.read_eyelink(TEST1_EDF_PATH)
+    const TEST1_DF = create_eyefun_data(TEST1_EDF; trial_time_zero=nothing)
+    const TEST1_ASC = EyeFun.read_eyelink(TEST1_ASC_PATH)
 else
-    @warn "test1.edf not found in $(DATA_DIR). Many tests will be skipped."
+    @warn "EyeLink test1.edf or test1.asc missing in $(DATA_DIR_EYELINK). Many tests will be skipped."
 end
 
+# TODO: I am not familiar with SMI/TOBII so this will probably need to be updated
+# SMI
 const TEST_SMI_TXT_PATH = joinpath(DATA_DIR_SMI, "pp23671_rest1_samples.txt")
 const TEST_SMI_IDF_PATH = joinpath(DATA_DIR_SMI, "pp23671_rest1.idf")
 if isfile(TEST_SMI_TXT_PATH) && isfile(TEST_SMI_IDF_PATH)
-    println("Loading global test fixtures from SMI...")
-    const TEST_SMI_TXT = read_smi(TEST_SMI_TXT_PATH)
-    const TEST_SMI_IDF = read_smi(TEST_SMI_IDF_PATH)
+    println("Loading global test data from SMI...")
+    const TEST_SMI_TXT = EyeFun.read_smi(TEST_SMI_TXT_PATH)
+    const TEST_SMI_IDF = EyeFun.read_smi(TEST_SMI_IDF_PATH)
 else
     @warn "SMI data missing in $(DATA_DIR_SMI)."
 end
 
+# TOBII
 const TEST_TOBII_TSV_PATH = joinpath(DATA_DIR_TOBII, "sample_data.tsv")
 if isfile(TEST_TOBII_TSV_PATH)
-    println("Loading global test fixtures from Tobii TSV...")
-    const TEST_TOBII_TSV = read_tobii(TEST_TOBII_TSV_PATH)
+    println("Loading global test data from Tobii TSV...")
+    const TEST_TOBII_TSV = EyeFun.read_tobii(TEST_TOBII_TSV_PATH)
 else
     @warn "Tobii TSV missing in $(DATA_DIR_TOBII)."
 end
