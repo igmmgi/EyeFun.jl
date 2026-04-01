@@ -37,16 +37,14 @@ const TEST_TOBII_TSV = EyeFun.read_tobii(TEST_TOBII_TSV_PATH)
 
 @testset "EyeFun" begin
 
-    include("tests/ascii_comparison.jl")
-    include("tests/round_trip.jl")
-    include("tests/ascii_reader.jl")
-    include("tests/io.jl")
+    include("tests/eyelink_validation.jl")
+    include("tests/eyelink_import.jl")
     include("tests/dataframe.jl")
     include("tests/event_accessors.jl")
     include("tests/plotting.jl")
     include("tests/analysis.jl")
     include("tests/detect_events.jl")
-    include("tests/ascii_exporter.jl")
+    include("tests/eyelink_export.jl")
     include("tests/smi.jl")
     include("tests/tobii.jl")
 

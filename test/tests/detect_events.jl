@@ -13,7 +13,7 @@
         )
 
         @testset "I-VT detection" begin
-            df_ivt = EyeData(copy(df.df))
+            df_ivt = deepcopy(df)
             detect_events!(df_ivt; method = :ivt, velocity_threshold = 30.0)
 
             # Column schema must match
@@ -69,7 +69,7 @@
         end
 
         @testset "I-DT detection" begin
-            df_idt = EyeData(copy(df.df))
+            df_idt = deepcopy(df)
             detect_events!(df_idt; method = :idt, dispersion_threshold = 1.5)
 
             # Should find fixations
@@ -81,7 +81,7 @@
         end
 
         @testset "Prefix mode" begin
-            df_pfx = EyeData(copy(df.df))
+            df_pfx = deepcopy(df)
             # Save original EyeLink values
             orig_in_fix = copy(df_pfx.df.in_fix)
 

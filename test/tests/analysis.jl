@@ -24,7 +24,7 @@
         end
 
         @testset "interpolate_blinks!" begin
-            df2 = EyeData(copy(df.df))
+            df2 = deepcopy(df)
             pa_col = hasproperty(df2.df, :paL) && !all(isnan, df2.df.paL) ? :paL : :paR
             nan_before = count(isnan, df2.df[!, pa_col])
             interpolate_blinks!(df2)
@@ -34,7 +34,7 @@
         end
 
         @testset "smooth_pupil!" begin
-            df2 = EyeData(copy(df.df))
+            df2 = deepcopy(df)
             pa_col = hasproperty(df2.df, :paL) && !all(isnan, df2.df.paL) ? :paL : :paR
             raw = Float64.(df2.df[!, pa_col])
             smooth_pupil!(df2; window_ms = 20)
@@ -50,7 +50,7 @@
         end
 
         @testset "drift_correct!" begin
-            df2 = EyeData(copy(df.df))
+            df2 = deepcopy(df)
             drift_correct!(df2; target = (640, 480))
             # Should still have valid gaze data
             gx_col = hasproperty(df2.df, :gxL) && !all(isnan, df2.df.gxL) ? :gxL : :gxR
@@ -94,14 +94,7 @@
         end
 
         @testset "exclude_trials!" begin
-            df_copy = EyeData(
-                copy(df.df);
-                source = df.source,
-                sample_rate = df.sample_rate,
-                screen_res = df.screen_res,
-                screen_width_cm = df.screen_width_cm,
-                viewing_distance_cm = df.viewing_distance_cm,
-            )
+            df_copy = deepcopy(df)
             n_before = length(unique(skipmissing(df_copy.df.trial)))
             result = exclude_trials!(df_copy; max_tracking_loss = 50.0, verbose = false)
             @test result.n_before == n_before
@@ -178,42 +171,21 @@
         end
 
         @testset "velocity_filter!" begin
-            df_copy = EyeData(
-                copy(df.df);
-                source = df.source,
-                sample_rate = df.sample_rate,
-                screen_res = df.screen_res,
-                screen_width_cm = df.screen_width_cm,
-                viewing_distance_cm = df.viewing_distance_cm,
-            )
+            df_copy = deepcopy(df)
             n_removed = velocity_filter!(df_copy; threshold_deg_s = 1000.0)
             @test n_removed isa Int
             @test n_removed >= 0
         end
 
         @testset "outlier_filter!" begin
-            df_copy = EyeData(
-                copy(df.df);
-                source = df.source,
-                sample_rate = df.sample_rate,
-                screen_res = df.screen_res,
-                screen_width_cm = df.screen_width_cm,
-                viewing_distance_cm = df.viewing_distance_cm,
-            )
+            df_copy = deepcopy(df)
             n_removed = outlier_filter!(df_copy)
             @test n_removed isa Int
             @test n_removed >= 0
         end
 
         @testset "interpolate_gaps!" begin
-            df_copy = EyeData(
-                copy(df.df);
-                source = df.source,
-                sample_rate = df.sample_rate,
-                screen_res = df.screen_res,
-                screen_width_cm = df.screen_width_cm,
-                viewing_distance_cm = df.viewing_distance_cm,
-            )
+            df_copy = deepcopy(df)
             n_filled = interpolate_gaps!(df_copy; max_gap_ms = 75)
             @test n_filled isa Int
             @test n_filled >= 0
@@ -232,7 +204,7 @@
         end
 
         @testset "detect_microsaccades!" begin
-            df2 = EyeData(copy(df.df))
+            df2 = deepcopy(df)
             detect_microsaccades!(df2)
             @test hasproperty(df2.df, :in_msacc)
             @test hasproperty(df2.df, :msacc_ampl)

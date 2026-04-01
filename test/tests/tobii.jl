@@ -1,6 +1,4 @@
 @testset "Tobii TSV reader" begin
-    tobii_dir = joinpath(dirname(dirname(@__DIR__)), "resources", "data", "tobi")
-
     @testset "read_tobii — returns TobiiFile" begin
         raw = Main.TEST_TOBII_TSV
         @test raw isa TobiiFile

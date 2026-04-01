@@ -1,8 +1,3 @@
-# ─────────────────────────────────────────────────────────────────────────── #
-# Helper: parse a numeric field from an ASC line, tolerant of whitespace
-# ─────────────────────────────────────────────────────────────────────────── #
-_parse_f64(s) = tryparse(Float64, s)
-
 """
     compare_asc_lines(ref_path, jul_path)
 
@@ -37,29 +32,23 @@ function compare_asc_files(ref_path::String, jul_path::String)
         return :other
     end
 
-    count_type(lines, t) = count(l -> classify(l) == t, lines)
+    function extract_groups(lines)
+        groups = Dict{Symbol,Vector{String}}()
+        for l in lines
+            push!(get!(groups, classify(l), String[]), l)
+        end
+        return groups
+    end
 
-    # Count each line type
-    ref_counts = Dict(
-        t => count_type(ref_lines, t) for t in [
-            :sample,
-            :efix,
-            :esacc,
-            :eblink,
-            :sfix,
-            :ssacc,
-            :sblink,
-            :msg,
-            :input,
-            :start,
-            :endblock,
-        ]
-    )
-    jul_counts = Dict(t => count_type(jul_lines, t) for t in keys(ref_counts))
+    ref_groups = extract_groups(ref_lines)
+    jul_groups = extract_groups(jul_lines)
+
+    ref_counts = Dict(k => length(v) for (k, v) in ref_groups)
+    jul_counts = Dict(k => length(v) for (k, v) in jul_groups)
 
     # Extract sample lines for value comparison
-    ref_samples = filter(l -> classify(l) == :sample, ref_lines)
-    jul_samples = filter(l -> classify(l) == :sample, jul_lines)
+    ref_samples = get(ref_groups, :sample, String[])
+    jul_samples = get(jul_groups, :sample, String[])
 
     # Compare first N sample values (timestamp, gx, gy, pa)
     n_compare = min(100, length(ref_samples), length(jul_samples))
@@ -75,8 +64,8 @@ function compare_asc_files(ref_path::String, jul_path::String)
         # Compare gaze values (columns 2-4 for monocular, 2-7 for binocular)
         n_vals = min(length(rp), length(jp)) - 1  # skip trailing ...
         for k = 2:min(n_vals, 4)
-            rv = _parse_f64(rp[k])
-            jv = _parse_f64(jp[k])
+            rv = tryparse(Float64, rp[k])
+            jv = tryparse(Float64, jp[k])
             if !isnothing(rv) && !isnothing(jv) && abs(rv - jv) > 0.15
                 sample_mismatches += 1
                 break
@@ -85,8 +74,8 @@ function compare_asc_files(ref_path::String, jul_path::String)
     end
 
     # Extract EFIX lines and compare sttime, entime, gavx, gavy, ava
-    ref_efix = filter(l -> classify(l) == :efix, ref_lines)
-    jul_efix = filter(l -> classify(l) == :efix, jul_lines)
+    ref_efix = get(ref_groups, :efix, String[])
+    jul_efix = get(jul_groups, :efix, String[])
     n_efix = min(length(ref_efix), length(jul_efix))
     efix_value_matches = 0
     for i = 1:n_efix
@@ -95,8 +84,8 @@ function compare_asc_files(ref_path::String, jul_path::String)
         # EFIX L sttime entime dur gavx gavy ava
         length(rp) >= 8 && length(jp) >= 8 || continue
         if rp[3] == jp[3] && rp[4] == jp[4]  # sttime, entime match
-            rg = _parse_f64(rp[6])
-            jg = _parse_f64(jp[6])
+            rg = tryparse(Float64, rp[6])
+            jg = tryparse(Float64, jp[6])
             if !isnothing(rg) && !isnothing(jg) && abs(rg - jg) <= 0.15
                 efix_value_matches += 1
             end
@@ -104,8 +93,8 @@ function compare_asc_files(ref_path::String, jul_path::String)
     end
 
     # Extract ESACC lines and compare sttime, entime, gaze coords
-    ref_esacc = filter(l -> classify(l) == :esacc, ref_lines)
-    jul_esacc = filter(l -> classify(l) == :esacc, jul_lines)
+    ref_esacc = get(ref_groups, :esacc, String[])
+    jul_esacc = get(jul_groups, :esacc, String[])
     n_esacc = min(length(ref_esacc), length(jul_esacc))
     esacc_gaze_matches = 0
     for i = 1:n_esacc
@@ -116,8 +105,8 @@ function compare_asc_files(ref_path::String, jul_path::String)
         if rp[3] == jp[3] && rp[4] == jp[4]  # sttime, entime
             all_match = true
             for k = 6:9  # gstx, gsty, genx, geny
-                rv = _parse_f64(rp[k])
-                jv = _parse_f64(jp[k])
+                rv = tryparse(Float64, rp[k])
+                jv = tryparse(Float64, jp[k])
                 if !isnothing(rv) && !isnothing(jv) && abs(rv - jv) > 0.15
                     all_match = false
                     break
@@ -133,10 +122,10 @@ function compare_asc_files(ref_path::String, jul_path::String)
         rp = split(ref_esacc[i])
         jp = split(jul_esacc[i])
         length(rp) >= 11 && length(jp) >= 11 || continue
-        ra = _parse_f64(rp[10])
-        ja = _parse_f64(jp[10])
-        rp_v = _parse_f64(rp[11])
-        jp_v = _parse_f64(jp[11])
+        ra = tryparse(Float64, rp[10])
+        ja = tryparse(Float64, jp[10])
+        rp_v = tryparse(Float64, rp[11])
+        jp_v = tryparse(Float64, jp[11])
         if !isnothing(ra) &&
            !isnothing(ja) &&
            abs(ra - ja) <= 0.5 &&
@@ -148,8 +137,8 @@ function compare_asc_files(ref_path::String, jul_path::String)
     end
 
     # Extract EBLINK lines and compare sttime/entime/duration
-    ref_eblink = filter(l -> classify(l) == :eblink, ref_lines)
-    jul_eblink = filter(l -> classify(l) == :eblink, jul_lines)
+    ref_eblink = get(ref_groups, :eblink, String[])
+    jul_eblink = get(jul_groups, :eblink, String[])
     n_eblink = min(length(ref_eblink), length(jul_eblink))
     eblink_matches = 0
     for i = 1:n_eblink
@@ -162,25 +151,25 @@ function compare_asc_files(ref_path::String, jul_path::String)
     end
 
     # Extract MSG lines and compare text content
-    ref_msgs = filter(l -> classify(l) == :msg, ref_lines)
-    jul_msgs = filter(l -> classify(l) == :msg, jul_lines)
+    ref_msgs = get(ref_groups, :msg, String[])
+    jul_msgs = get(jul_groups, :msg, String[])
 
     return (
-        ref_counts = ref_counts,
-        jul_counts = jul_counts,
-        n_ref_samples = length(ref_samples),
-        n_jul_samples = length(jul_samples),
-        sample_mismatches = sample_mismatches,
-        n_compared = n_compare,
-        n_efix = n_efix,
-        efix_value_matches = efix_value_matches,
-        n_esacc = n_esacc,
-        esacc_gaze_matches = esacc_gaze_matches,
-        esacc_ampl_matches = esacc_ampl_matches,
-        n_eblink = n_eblink,
-        eblink_matches = eblink_matches,
-        n_ref_msgs = length(ref_msgs),
-        n_jul_msgs = length(jul_msgs),
+        ref_counts=ref_counts,
+        jul_counts=jul_counts,
+        n_ref_samples=length(ref_samples),
+        n_jul_samples=length(jul_samples),
+        sample_mismatches=sample_mismatches,
+        n_compared=n_compare,
+        n_efix=n_efix,
+        efix_value_matches=efix_value_matches,
+        n_esacc=n_esacc,
+        esacc_gaze_matches=esacc_gaze_matches,
+        esacc_ampl_matches=esacc_ampl_matches,
+        n_eblink=n_eblink,
+        eblink_matches=eblink_matches,
+        n_ref_msgs=length(ref_msgs),
+        n_jul_msgs=length(jul_msgs),
     )
 end
 
@@ -195,7 +184,6 @@ nrow_or(d::Dict, k::Symbol, default::Int) = get(d, k, default)
     for test_name in ("test1", "test2", "test3")
         ref_path = joinpath(DATA_DIR_EYELINK, "$(test_name).asc")
         jul_path = joinpath(DATA_DIR_EYELINK, "$(test_name)_julia.asc")
-        (isfile(ref_path) && isfile(jul_path)) || continue
 
         is_mono = test_name in ("test1", "test2")
 
@@ -212,9 +200,8 @@ nrow_or(d::Dict, k::Symbol, default::Int) = get(d, k, default)
             @testset "Event line counts" begin
                 efix_tol = is_mono ? 0 : 5
                 esacc_tol = is_mono ? 0 : 5
-                eblink_tol = is_mono ? 0 : nrow_or(cmp.jul_counts, :eblink, 200)
-                @test abs(cmp.ref_counts[:efix] - cmp.jul_counts[:efix]) <= efix_tol
-                @test abs(cmp.ref_counts[:esacc] - cmp.jul_counts[:esacc]) <= esacc_tol
+                @test abs(get(cmp.ref_counts, :efix, 0) - get(cmp.jul_counts, :efix, 0)) <= efix_tol
+                @test abs(get(cmp.ref_counts, :esacc, 0) - get(cmp.jul_counts, :esacc, 0)) <= esacc_tol
                 @test abs(cmp.n_ref_msgs - cmp.n_jul_msgs) <= 10
             end
 

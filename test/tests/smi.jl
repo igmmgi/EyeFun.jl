@@ -1,6 +1,4 @@
 @testset "SMI reader" begin
-    smi_dir = joinpath(dirname(dirname(@__DIR__)), "resources", "data", "smi")
-
     @testset "read_smi (txt) — returns SMIFile" begin
         raw = Main.TEST_SMI_TXT
         @test raw isa SMIFile
@@ -151,8 +149,8 @@
 
     for (label, idf_fn, txt_fn) in parity_cases
         @testset "IDF↔BeGaze parity — $label" begin
-            idf_path = joinpath(smi_dir, idf_fn)
-            txt_path = joinpath(smi_dir, txt_fn)
+            idf_path = joinpath(Main.DATA_DIR_SMI, idf_fn)
+            txt_path = joinpath(Main.DATA_DIR_SMI, txt_fn)
             if isfile(idf_path) && isfile(txt_path)
                 raw = _compare_idf_parity(idf_path, txt_path)
 
