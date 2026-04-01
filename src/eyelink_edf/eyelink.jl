@@ -321,9 +321,8 @@ function read_eyelink_edf(
                 EVENT_STARTEVENTS,
                 EVENT_ENDEVENTS,
             )
-                rec, pos = _recording_bytes(binary_data, pos, ts)
+                rec, pos = _recording_bytes(binary_data, pos, ts, in_trial ? trial : nothing)
                 if !isnothing(rec)
-                    rec.trial = in_trial ? trial : nothing
                     push!(recordings_data, rec)
                     # Only update parsing state from recording blocks with plausible
                     # sample rates (100–2000 Hz). Garbage STARTSAMPLES blocks embedded
@@ -422,10 +421,10 @@ function read_eyelink_asc(
 
     edf = EDFFile(filename)
 
-    # ── Event / recording accumulators (small counts — NamedTuple rows are fine) #
+    # ── Event / recording accumulators ────────────────────────────────────────── #
     preamble_lines = String[]
-    event_rows = []
-    recording_rows = []
+    event_rows = EDFEvent[]
+    recording_rows = EDFRecording[]
 
     # ── Sample accumulators (millions of rows — use typed column vectors) ─────── #
     # Pre-allocate with a generous capacity hint to avoid repeated resizing.
@@ -485,7 +484,7 @@ function read_eyelink_asc(
             # Keyword dispatch
             if c == 'M' && startswith(line, "MSG")
                 parts = split(line; limit = 3)
-                row = _parse_msg(parts, trial, in_trial)
+                row = _parse_msg(parts)
                 if !isnothing(row)
                     push!(event_rows, row)
                 end
@@ -503,13 +502,13 @@ function read_eyelink_asc(
 
             elseif c == 'E'
                 if startswith(line, "EFIX")
-                    row = _parse_efix(line, trial, in_trial)
+                    row = _parse_efix(line)
                     !isnothing(row) && push!(event_rows, row)
                 elseif startswith(line, "ESACC")
-                    row = _parse_esacc(line, trial, in_trial)
+                    row = _parse_esacc(line)
                     !isnothing(row) && push!(event_rows, row)
                 elseif startswith(line, "EBLINK")
-                    row = _parse_eblink(line, trial, in_trial)
+                    row = _parse_eblink(line)
                     !isnothing(row) && push!(event_rows, row)
                 elseif startswith(line, "END")
                     row = _parse_end(line)
@@ -517,11 +516,11 @@ function read_eyelink_asc(
                 end
 
             elseif c == 'S' && startswith(line, "START")
-                row = _parse_start(line)
+                row = _parse_start(line, in_trial, trial)
                 !isnothing(row) && push!(recording_rows, row)
 
             elseif c == 'I' && startswith(line, "INPUT")
-                row = _parse_input(line, trial, in_trial)
+                row = _parse_input(line)
                 !isnothing(row) && push!(event_rows, row)
             end
         end
@@ -533,7 +532,7 @@ function read_eyelink_asc(
 
     # ── Build events DataFrame ─────────────────────────────────────────────── #
     if !isempty(event_rows)
-        edf.events = _rows_to_df(event_rows)
+        edf.events = events_to_dataframe(event_rows)
     end
 
     # ── Build samples DataFrame (column-major — no per-row schema scan) ──── #
@@ -555,7 +554,7 @@ function read_eyelink_asc(
 
     # ── Build recordings DataFrame ─────────────────────────────────────────── #
     if !isempty(recording_rows)
-        edf.recordings = _rows_to_df(recording_rows)
+        edf.recordings = recordings_to_dataframe(recording_rows)
     end
 
     @info "ASC read complete: $(nrow(edf.events)) events, " *

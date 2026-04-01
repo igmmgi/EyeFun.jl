@@ -74,19 +74,30 @@ function plot_fixations(
             )
         end
 
-        fix_rows =
-            filter(r -> r.in_fix == true && !isnan(r.fix_gavx) && !isnan(r.fix_gavy), sub)
-        if nrow(fix_rows) > 0
-            # Deduplicate consecutive identical fixation centers
-            fx, fy, fdur = Float64[], Float64[], Float64[]
-            for r in eachrow(fix_rows)
-                gx, gy, dur = Float64(r.fix_gavx), Float64(r.fix_gavy), Float64(r.fix_dur)
+        # Zero-allocation pass to extract unique fixations
+        fx, fy, fdur = Float64[], Float64[], Float64[]
+        if hasproperty(sub, :fix_gavx)
+            in_fix = sub.in_fix
+            fix_gx = sub.fix_gavx
+            fix_gy = sub.fix_gavy
+            fix_dur = sub.fix_dur
+            
+            for i in 1:nrow(sub)
+                in_fix[i] || continue
+                gx, gy = Float64(fix_gx[i]), Float64(fix_gy[i])
+                isnan(gx) && continue
+                isnan(gy) && continue
+                
+                dur = Float64(fix_dur[i])
                 if isempty(fx) || gx != fx[end] || gy != fy[end]
-                    push!(fx, gx);
-                    push!(fy, gy);
+                    push!(fx, gx)
+                    push!(fy, gy)
                     push!(fdur, dur)
                 end
             end
+        end
+        
+        if length(fx) > 0
 
             # Scanpath line connecting fixations
             lines!(ax, fx, fy; color = (:black, 0.3), linewidth = 0.5)

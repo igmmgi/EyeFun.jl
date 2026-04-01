@@ -1,37 +1,13 @@
 """
 Julia EDF binary reader — reads SR Research EDF files directly without libedfapi.so.
 
-Reverse-engineered via help (lots) of Claude/Gemini + trial and error hex dumps :-)
+Reverse-engineered via help (lots) of Claude/Gemini + trial and error hex dumps, and
+edf2asc round-trips :-)
 
-The EDF file consists of:
-1. ASCII preamble starting with "SR_RESEARCH_1000" and ending with "ENDP:\\n"
-2. Sequential binary records, each with:
-   - 3-byte header: type_byte, flags_byte, marker_byte (0x21)
-   - 4-byte big-endian uint32 timestamp
-   - Variable-length payload depending on event type
+NB. This has not been exhaustively tested, but it works for my files and several others 
+I have tested! More test files welcome!
 
-Type byte encoding:
-- Lower 6 bits = event type code (matches edf_data.h constants)
-- Bit 6 (0x40) = RIGHT_EYE flag
-- Bit 7 (0x80) = LEFT_EYE flag
-
-FEVENT payload encoding:
-- Gaze coordinates stored as big-endian int16, scaled by 10 (i.e., 131.5 → 1315)
-- Timestamps stored as big-endian uint32
-- Pupil size stored as big-endian int16
-
-Sample encoding (reverse-engineered, validated against edfmex):
-- 2-byte flags (uint16 BE): bit 13 (0x2000) indicates full timestamp
-- Timestamp: 4-byte uint32 BE (full) or 1-byte uint8 (delta from previous)
-- Data block (18 bytes for sflags=0x6FC0, monocular gaze+href+pupil+res+input):
-  hx(int16), hy(int16), gx*10(int16), gy*10(int16), rx(int16), ry(int16),
-  pa(int16), status(uint16), unused(uint8), input(uint8)
-- Full timestamp every 10th sample; 1-byte delta (+N ms) otherwise
-
-NB. This has not been exhaustively tested, but it works for my files and several others I have tested!
-More test files welcome!
 We also have ascii_reader which can read the output of edf2asc.
-
 """
 
 # ──────────────────────────────────────────────────────────────────────────── #
@@ -431,31 +407,31 @@ function read_fevent_payload(io::IO, event_type::Int)
         EVENT_ENDEVENTS,
     )
         return (
-            sttime = UInt32(0),
-            entime = UInt32(0),
-            hstx = 0.0f0,
-            hsty = 0.0f0,
-            gstx = 0.0f0,
-            gsty = 0.0f0,
-            sta = 0.0f0,
-            henx = 0.0f0,
-            heny = 0.0f0,
-            genx = 0.0f0,
-            geny = 0.0f0,
-            ena = 0.0f0,
-            havx = 0.0f0,
-            havy = 0.0f0,
-            gavx = 0.0f0,
-            gavy = 0.0f0,
-            ava = 0.0f0,
-            ampl = 0.0f0,
-            pvel = 0.0f0,
-            svel = 0.0f0,
-            evel = 0.0f0,
-            supd_x = 0.0f0,
-            eupd_x = 0.0f0,
-            supd_y = 0.0f0,
-            eupd_y = 0.0f0,
+            sttime=UInt32(0),
+            entime=UInt32(0),
+            hstx=0.0f0,
+            hsty=0.0f0,
+            gstx=0.0f0,
+            gsty=0.0f0,
+            sta=0.0f0,
+            henx=0.0f0,
+            heny=0.0f0,
+            genx=0.0f0,
+            geny=0.0f0,
+            ena=0.0f0,
+            havx=0.0f0,
+            havy=0.0f0,
+            gavx=0.0f0,
+            gavy=0.0f0,
+            ava=0.0f0,
+            ampl=0.0f0,
+            pvel=0.0f0,
+            svel=0.0f0,
+            evel=0.0f0,
+            supd_x=0.0f0,
+            eupd_x=0.0f0,
+            supd_y=0.0f0,
+            eupd_y=0.0f0,
         )
     end
 
@@ -475,31 +451,31 @@ function read_fevent_payload(io::IO, event_type::Int)
 
     if payload_size == 0
         return (
-            sttime = UInt32(0),
-            entime = UInt32(0),
-            hstx = 0.0f0,
-            hsty = 0.0f0,
-            gstx = 0.0f0,
-            gsty = 0.0f0,
-            sta = 0.0f0,
-            henx = 0.0f0,
-            heny = 0.0f0,
-            genx = 0.0f0,
-            geny = 0.0f0,
-            ena = 0.0f0,
-            havx = 0.0f0,
-            havy = 0.0f0,
-            gavx = 0.0f0,
-            gavy = 0.0f0,
-            ava = 0.0f0,
-            ampl = 0.0f0,
-            pvel = 0.0f0,
-            svel = 0.0f0,
-            evel = 0.0f0,
-            supd_x = 0.0f0,
-            eupd_x = 0.0f0,
-            supd_y = 0.0f0,
-            eupd_y = 0.0f0,
+            sttime=UInt32(0),
+            entime=UInt32(0),
+            hstx=0.0f0,
+            hsty=0.0f0,
+            gstx=0.0f0,
+            gsty=0.0f0,
+            sta=0.0f0,
+            henx=0.0f0,
+            heny=0.0f0,
+            genx=0.0f0,
+            geny=0.0f0,
+            ena=0.0f0,
+            havx=0.0f0,
+            havy=0.0f0,
+            gavx=0.0f0,
+            gavy=0.0f0,
+            ava=0.0f0,
+            ampl=0.0f0,
+            pvel=0.0f0,
+            svel=0.0f0,
+            evel=0.0f0,
+            supd_x=0.0f0,
+            eupd_x=0.0f0,
+            supd_y=0.0f0,
+            eupd_y=0.0f0,
         )
     end
 
@@ -529,31 +505,31 @@ function read_fevent_payload(io::IO, event_type::Int)
         genx = n >= 24 ? Float32(read_be_int16(payload_bytes, 22)) / 10.0f0 : 0.0f0
         geny = n >= 26 ? Float32(read_be_int16(payload_bytes, 24)) / 10.0f0 : 0.0f0
         return (
-            sttime = UInt32(0),
-            entime = entime,
-            hstx = hstx,
-            hsty = hsty,
-            gstx = gstx,
-            gsty = gsty,
-            sta = 0.0f0,
-            henx = henx,
-            heny = heny,
-            genx = genx,
-            geny = geny,
-            ena = 0.0f0,
-            havx = hstx,
-            havy = hsty,
-            gavx = gstx,
-            gavy = gsty,
-            ava = 0.0f0,
-            ampl = 0.0f0,
-            pvel = 0.0f0,
-            svel = 0.0f0,
-            evel = 0.0f0,
-            supd_x = 0.0f0,
-            eupd_x = 0.0f0,
-            supd_y = 0.0f0,
-            eupd_y = 0.0f0,
+            sttime=UInt32(0),
+            entime=entime,
+            hstx=hstx,
+            hsty=hsty,
+            gstx=gstx,
+            gsty=gsty,
+            sta=0.0f0,
+            henx=henx,
+            heny=heny,
+            genx=genx,
+            geny=geny,
+            ena=0.0f0,
+            havx=hstx,
+            havy=hsty,
+            gavx=gstx,
+            gavy=gsty,
+            ava=0.0f0,
+            ampl=0.0f0,
+            pvel=0.0f0,
+            svel=0.0f0,
+            evel=0.0f0,
+            supd_x=0.0f0,
+            eupd_x=0.0f0,
+            supd_y=0.0f0,
+            eupd_y=0.0f0,
         )
 
     elseif event_type == EVENT_ENDFIX || event_type == EVENT_FIXUPDATE
@@ -569,147 +545,66 @@ function read_fevent_payload(io::IO, event_type::Int)
         gavy = n >= 16 ? Float32(read_be_int16(payload_bytes, 14)) / 10.0f0 : 0.0f0
         ava = n >= 39 ? Float32(read_be_int16(payload_bytes, 37)) : 0.0f0
         return (
-            sttime = UInt32(0),
-            entime = entime,
-            hstx = hstx,
-            hsty = hsty,
-            gstx = gavx,
-            gsty = gavy,
-            sta = ava,
-            henx = hstx,
-            heny = hsty,
-            genx = gavx,
-            geny = gavy,
-            ena = ava,
-            havx = hstx,
-            havy = hsty,
-            gavx = gavx,
-            gavy = gavy,
-            ava = ava,
-            ampl = 0.0f0,
-            pvel = 0.0f0,
-            svel = 0.0f0,
-            evel = 0.0f0,
-            supd_x = 0.0f0,
-            eupd_x = 0.0f0,
-            supd_y = 0.0f0,
-            eupd_y = 0.0f0,
+            sttime=UInt32(0),
+            entime=entime,
+            hstx=hstx,
+            hsty=hsty,
+            gstx=gavx,
+            gsty=gavy,
+            sta=ava,
+            henx=hstx,
+            heny=hsty,
+            genx=gavx,
+            geny=gavy,
+            ena=ava,
+            havx=hstx,
+            havy=hsty,
+            gavx=gavx,
+            gavy=gavy,
+            ava=ava,
+            ampl=0.0f0,
+            pvel=0.0f0,
+            svel=0.0f0,
+            evel=0.0f0,
+            supd_x=0.0f0,
+            eupd_x=0.0f0,
+            supd_y=0.0f0,
+            eupd_y=0.0f0,
         )
 
     else  # ENDBLINK — only timing matters, no position data
         return (
-            sttime = UInt32(0),
-            entime = entime,
-            hstx = 0.0f0,
-            hsty = 0.0f0,
-            gstx = 0.0f0,
-            gsty = 0.0f0,
-            sta = 0.0f0,
-            henx = 0.0f0,
-            heny = 0.0f0,
-            genx = 0.0f0,
-            geny = 0.0f0,
-            ena = 0.0f0,
-            havx = 0.0f0,
-            havy = 0.0f0,
-            gavx = 0.0f0,
-            gavy = 0.0f0,
-            ava = 0.0f0,
-            ampl = 0.0f0,
-            pvel = 0.0f0,
-            svel = 0.0f0,
-            evel = 0.0f0,
-            supd_x = 0.0f0,
-            eupd_x = 0.0f0,
-            supd_y = 0.0f0,
-            eupd_y = 0.0f0,
+            sttime=UInt32(0),
+            entime=entime,
+            hstx=0.0f0,
+            hsty=0.0f0,
+            gstx=0.0f0,
+            gsty=0.0f0,
+            sta=0.0f0,
+            henx=0.0f0,
+            heny=0.0f0,
+            genx=0.0f0,
+            geny=0.0f0,
+            ena=0.0f0,
+            havx=0.0f0,
+            havy=0.0f0,
+            gavx=0.0f0,
+            gavy=0.0f0,
+            ava=0.0f0,
+            ampl=0.0f0,
+            pvel=0.0f0,
+            svel=0.0f0,
+            evel=0.0f0,
+            supd_x=0.0f0,
+            eupd_x=0.0f0,
+            supd_y=0.0f0,
+            eupd_y=0.0f0,
         )
     end
 end
 
 
-"""
-    read_recording_block(io::IO) -> EDFRecording
 
-Read the inline RECORDING_INFO data block that follows control events
-(STARTSAMPLES, STARTEVENTS, etc.).
-"""
-function read_recording_block(io::IO, timestamp::UInt32)
-    # The recording block format (approximately 29 bytes total):
-    # state_byte(1) + sample_rate(2 BE) + eflags(2) + additional config (~24 bytes)
-    # sflags is at offset 26-27 from block start (1-indexed: bytes 27-28)
-    # i.e., within the "remaining" bytes, sflags is at offset 20-21
-
-    if eof(io)
-        return nothing
-    end
-
-    # Peek to see if a valid recording block follows
-    pos_before = position(io)
-    first_byte = read(io, UInt8)
-
-    # Check if this is another record header instead of recording data
-    if !eof(io)
-        next2 = read(io, 2)
-        if length(next2) >= 2 && next2[2] == HEADER_MARKER
-            # This is the next record, not recording data — seek back
-            seek(io, pos_before)
-            return nothing
-        end
-    end
-
-    seek(io, pos_before)
-
-    # Recording block layout (confirmed empirically from test1.edf):
-    #   [0]        state_byte   (bit0=RECORDING_START, bit6=LEFT, bit7=RIGHT)
-    #   [1..2]     sample_rate  (uint16 BE)
-    #   [3..4]     eflags       (uint16 BE)
-    #   [5..6]     sflags       (uint16 BE)
-    #   [7]        record_type  (1=SAMPLES,2=EVENTS,3=BOTH)
-    #   [8]        pupil_type   (0=AREA,1=DIAMETER)
-    #   [9]        recording_mode
-    #   [10]       filter_type
-    #   [11]       pos_type
-    #   [12]       eye          (0=LEFT,1=RIGHT,2=BINOCULAR)
-    block = read(io, min(13, bytesavailable(io)))
-    n = length(block)
-    n < 1 && return nothing
-
-    state_byte = block[1]
-    sample_rate = n >= 3 ? Float32(UInt16(block[2]) << 8 | UInt16(block[3])) : 0.0f0
-    eflags = n >= 5 ? UInt16(block[4]) << 8 | UInt16(block[5]) : UInt16(0)
-    sflags = n >= 7 ? UInt16(block[6]) << 8 | UInt16(block[7]) : UInt16(0)
-    eye_byte = n >= 13 ? block[13] : UInt8(0)
-
-    # pupil_type from eflags bit 0: clear = AREA, set = DIAMETER
-    pupil_type = (eflags & UInt16(0x0001)) != 0 ? UInt8(PUPIL_DIAMETER) : UInt8(PUPIL_AREA)
-
-    # In the recording state_byte: bit6 (0x40) = LEFT, bit7 (0x80) = RIGHT
-    # (opposite of the record-header type byte convention)
-    rec_state = state_byte & 0x01 == 0x01 ? UInt8(RECORDING_START) : UInt8(RECORDING_END)
-    rec_eye = if eye_byte == UInt8(1)
-        UInt8(EYE_RIGHT)
-    elseif eye_byte == UInt8(2)
-        UInt8(EYE_BINOCULAR)
-    else
-        UInt8(EYE_LEFT)
-    end
-
-    return EDFRecording(
-        timestamp,
-        sample_rate,
-        eflags,
-        sflags,
-        rec_state,
-        UInt8(RECORD_BOTH),
-        pupil_type,
-        UInt8(MODE_CR),
-        UInt8(2),
-        UInt8(POS_GAZE),
-        rec_eye,
-        nothing,
-    )
-end
 
 
 """
@@ -1019,31 +914,31 @@ function _fevent_bytes(data::Vector{UInt8}, pos::Int, event_type::Int)
         (event_type == EVENT_ENDSACC) ? 48 :
         (event_type == EVENT_ENDFIX || event_type == EVENT_FIXUPDATE) ? 67 : 0
     _zero = (
-        sttime = UInt32(0),
-        entime = UInt32(0),
-        hstx = 0.0f0,
-        hsty = 0.0f0,
-        gstx = 0.0f0,
-        gsty = 0.0f0,
-        sta = 0.0f0,
-        henx = 0.0f0,
-        heny = 0.0f0,
-        genx = 0.0f0,
-        geny = 0.0f0,
-        ena = 0.0f0,
-        havx = 0.0f0,
-        havy = 0.0f0,
-        gavx = 0.0f0,
-        gavy = 0.0f0,
-        ava = 0.0f0,
-        ampl = 0.0f0,
-        pvel = 0.0f0,
-        svel = 0.0f0,
-        evel = 0.0f0,
-        supd_x = 0.0f0,
-        eupd_x = 0.0f0,
-        supd_y = 0.0f0,
-        eupd_y = 0.0f0,
+        sttime=UInt32(0),
+        entime=UInt32(0),
+        hstx=0.0f0,
+        hsty=0.0f0,
+        gstx=0.0f0,
+        gsty=0.0f0,
+        sta=0.0f0,
+        henx=0.0f0,
+        heny=0.0f0,
+        genx=0.0f0,
+        geny=0.0f0,
+        ena=0.0f0,
+        havx=0.0f0,
+        havy=0.0f0,
+        gavx=0.0f0,
+        gavy=0.0f0,
+        ava=0.0f0,
+        ampl=0.0f0,
+        pvel=0.0f0,
+        svel=0.0f0,
+        evel=0.0f0,
+        supd_x=0.0f0,
+        eupd_x=0.0f0,
+        supd_y=0.0f0,
+        eupd_y=0.0f0,
     )
     payload_size == 0 && return _zero, pos
     n = length(data)
@@ -1070,31 +965,31 @@ function _fevent_bytes(data::Vector{UInt8}, pos::Int, event_type::Int)
         pixel_dist = sqrt((genx - gstx)^2 + (geny - gsty)^2)
         ampl = ppd_mean > 0.0f0 ? pixel_dist / ppd_mean : 0.0f0
         return (
-            sttime = UInt32(0),
-            entime = entime,
-            hstx = hstx,
-            hsty = hsty,
-            gstx = gstx,
-            gsty = gsty,
-            sta = 0.0f0,
-            henx = henx,
-            heny = heny,
-            genx = genx,
-            geny = geny,
-            ena = 0.0f0,
-            havx = hstx,
-            havy = hsty,
-            gavx = gstx,
-            gavy = gsty,
-            ava = 0.0f0,
-            ampl = ampl,
-            pvel = pvel,
-            svel = 0.0f0,
-            evel = 0.0f0,
-            supd_x = ppd_x,
-            eupd_x = ppd_x,
-            supd_y = ppd_y,
-            eupd_y = ppd_y,
+            sttime=UInt32(0),
+            entime=entime,
+            hstx=hstx,
+            hsty=hsty,
+            gstx=gstx,
+            gsty=gsty,
+            sta=0.0f0,
+            henx=henx,
+            heny=heny,
+            genx=genx,
+            geny=geny,
+            ena=0.0f0,
+            havx=hstx,
+            havy=hsty,
+            gavx=gstx,
+            gavy=gsty,
+            ava=0.0f0,
+            ampl=ampl,
+            pvel=pvel,
+            svel=0.0f0,
+            evel=0.0f0,
+            supd_x=ppd_x,
+            eupd_x=ppd_x,
+            supd_y=ppd_y,
+            eupd_y=ppd_y,
         ),
         pos + payload_size
     else  # ENDFIX / FIXUPDATE
@@ -1104,38 +999,38 @@ function _fevent_bytes(data::Vector{UInt8}, pos::Int, event_type::Int)
         gavy = pl >= pos + 14 ? Float32(read_be_int16(data, pos + 13)) / 10.0f0 : 0.0f0
         ava = pl >= pos + 37 ? Float32(read_be_int16(data, pos + 36)) : 0.0f0
         return (
-            sttime = UInt32(0),
-            entime = entime,
-            hstx = hstx,
-            hsty = hsty,
-            gstx = gavx,
-            gsty = gavy,
-            sta = ava,
-            henx = hstx,
-            heny = hsty,
-            genx = gavx,
-            geny = gavy,
-            ena = ava,
-            havx = hstx,
-            havy = hsty,
-            gavx = gavx,
-            gavy = gavy,
-            ava = ava,
-            ampl = 0.0f0,
-            pvel = 0.0f0,
-            svel = 0.0f0,
-            evel = 0.0f0,
-            supd_x = 0.0f0,
-            eupd_x = 0.0f0,
-            supd_y = 0.0f0,
-            eupd_y = 0.0f0,
+            sttime=UInt32(0),
+            entime=entime,
+            hstx=hstx,
+            hsty=hsty,
+            gstx=gavx,
+            gsty=gavy,
+            sta=ava,
+            henx=hstx,
+            heny=hsty,
+            genx=gavx,
+            geny=gavy,
+            ena=ava,
+            havx=hstx,
+            havy=hsty,
+            gavx=gavx,
+            gavy=gavy,
+            ava=ava,
+            ampl=0.0f0,
+            pvel=0.0f0,
+            svel=0.0f0,
+            evel=0.0f0,
+            supd_x=0.0f0,
+            eupd_x=0.0f0,
+            supd_y=0.0f0,
+            eupd_y=0.0f0,
         ),
         pos + payload_size
     end
 end
 
 """Parse a RECORDING_INFO block from a byte vector. Returns (EDFRecording|nothing, new_pos)."""
-function _recording_bytes(data::Vector{UInt8}, pos::Int, timestamp::UInt32)
+function _recording_bytes(data::Vector{UInt8}, pos::Int, timestamp::UInt32, trial_val::Union{Int,Nothing})
     n = length(data)
     pos > n && return nothing, pos
 
@@ -1157,7 +1052,7 @@ function _recording_bytes(data::Vector{UInt8}, pos::Int, timestamp::UInt32)
             UInt8(2),
             UInt8(POS_GAZE),
             UInt8(EYE_LEFT),
-            nothing,
+            trial_val,
         ),
         pos + 1
     end
@@ -1210,7 +1105,7 @@ function _recording_bytes(data::Vector{UInt8}, pos::Int, timestamp::UInt32)
         UInt8(2),
         UInt8(POS_GAZE),
         rec_eye,
-        nothing,
+        trial_val,
     ),
     pos
 end

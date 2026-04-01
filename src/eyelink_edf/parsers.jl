@@ -281,13 +281,7 @@ function parse_blinks(events::DataFrame; samples::Union{DataFrame,Nothing} = not
     # Keep only the earliest sttime per (eye, entime) pair.
     if is_binary && nrow(blinks) > 0
         sort!(blinks, [:eye, :entime, :sttime])
-        keep = trues(nrow(blinks))
-        for i = 2:nrow(blinks)
-            if blinks.eye[i] == blinks.eye[i-1] && blinks.entime[i] == blinks.entime[i-1]
-                keep[i] = false
-            end
-        end
-        blinks = blinks[keep, :]
+        unique!(blinks, [:eye, :entime])
     end
 
     # Merge overlapping/adjacent blinks for the same eye.
@@ -637,25 +631,28 @@ function create_eyefun_data(
     times = samples.time  # sorted UInt32 vector
 
     # ── helpers ──────────────────────────────────────────────────────────── #
-    # Coerce a column that may be Union{Missing,Nothing,Float32} to plain Float64,
-    # mapping both missing and nothing to NaN.
-    function coerce_f64(col)
-        out = fill(NaN, length(col))
+    # Forward the strictly-typed Float32 arrays produced by the Eyelink parsers
+    # directly as pointers, bypassing complete array duplication.
+    function _f32_col(col)
+        T = eltype(col)
+        T === Float32 && return col
+        out = fill(Float32(NaN), length(col))
         @inbounds for (i, v) in enumerate(col)
             if !ismissing(v) && v isa Number
-                out[i] = Float64(v)
+                out[i] = Float32(v)
             end
         end
         return out
     end
 
     # ── Base columns ─────────────────────────────────────────────────────── #
-    gxR = hasproperty(samples, :gxR) ? coerce_f64(samples.gxR) : fill(NaN, n)
-    gyR = hasproperty(samples, :gyR) ? coerce_f64(samples.gyR) : fill(NaN, n)
-    paR = hasproperty(samples, :paR) ? coerce_f64(samples.paR) : fill(NaN, n)
-    gxL = hasproperty(samples, :gxL) ? coerce_f64(samples.gxL) : fill(NaN, n)
-    gyL = hasproperty(samples, :gyL) ? coerce_f64(samples.gyL) : fill(NaN, n)
-    paL = hasproperty(samples, :paL) ? coerce_f64(samples.paL) : fill(NaN, n)
+    NaN32 = Float32(NaN)
+    gxR = hasproperty(samples, :gxR) ? _f32_col(samples.gxR) : fill(NaN32, n)
+    gyR = hasproperty(samples, :gyR) ? _f32_col(samples.gyR) : fill(NaN32, n)
+    paR = hasproperty(samples, :paR) ? _f32_col(samples.paR) : fill(NaN32, n)
+    gxL = hasproperty(samples, :gxL) ? _f32_col(samples.gxL) : fill(NaN32, n)
+    gyL = hasproperty(samples, :gyL) ? _f32_col(samples.gyL) : fill(NaN32, n)
+    paL = hasproperty(samples, :paL) ? _f32_col(samples.paL) : fill(NaN32, n)
 
     trial =
         hasproperty(samples, :trial) ? Vector{Union{Int,Missing}}(samples.trial) :
@@ -663,19 +660,19 @@ function create_eyefun_data(
 
     # ── Event annotation columns ─────────────────────────────────────────── #
     in_fix = falses(n)
-    fix_gavx = fill(NaN, n)
-    fix_gavy = fill(NaN, n)
-    fix_ava = fill(NaN, n)
+    fix_gavx = fill(NaN32, n)
+    fix_gavy = fill(NaN32, n)
+    fix_ava = fill(NaN32, n)
     fix_dur = fill(Int32(0), n)
 
     in_sacc = falses(n)
-    sacc_gstx = fill(NaN, n)
-    sacc_gsty = fill(NaN, n)
-    sacc_genx = fill(NaN, n)
-    sacc_geny = fill(NaN, n)
+    sacc_gstx = fill(NaN32, n)
+    sacc_gsty = fill(NaN32, n)
+    sacc_genx = fill(NaN32, n)
+    sacc_geny = fill(NaN32, n)
     sacc_dur = fill(Int32(0), n)
-    sacc_ampl = fill(NaN, n)
-    sacc_pvel = fill(NaN, n)
+    sacc_ampl = fill(NaN32, n)
+    sacc_pvel = fill(NaN32, n)
 
     in_blink = falses(n)
     blink_dur = fill(Int32(0), n)
@@ -695,9 +692,9 @@ function create_eyefun_data(
             hi = searchsortedlast(times, UInt32(row.entime))
             if lo <= hi
                 in_fix[lo:hi] .= true
-                fix_gavx[lo:hi] .= Float64(row.gavx)
-                fix_gavy[lo:hi] .= Float64(row.gavy)
-                fix_ava[lo:hi] .= Float64(row.ava)
+                fix_gavx[lo:hi] .= Float32(row.gavx)
+                fix_gavy[lo:hi] .= Float32(row.gavy)
+                fix_ava[lo:hi] .= Float32(row.ava)
                 fix_dur[lo:hi] .= Int32(row.duration)
             end
         end
@@ -715,13 +712,13 @@ function create_eyefun_data(
             hi = searchsortedlast(times, UInt32(row.entime))
             if lo <= hi
                 in_sacc[lo:hi] .= true
-                sacc_gstx[lo:hi] .= Float64(row.gstx)
-                sacc_gsty[lo:hi] .= Float64(row.gsty)
-                sacc_genx[lo:hi] .= Float64(row.genx)
-                sacc_geny[lo:hi] .= Float64(row.geny)
+                sacc_gstx[lo:hi] .= Float32(row.gstx)
+                sacc_gsty[lo:hi] .= Float32(row.gsty)
+                sacc_genx[lo:hi] .= Float32(row.genx)
+                sacc_geny[lo:hi] .= Float32(row.geny)
                 sacc_dur[lo:hi] .= Int32(row.duration)
-                has_ampl && (sacc_ampl[lo:hi] .= Float64(row.ampl))
-                has_pvel && (sacc_pvel[lo:hi] .= Float64(row.pvel))
+                has_ampl && (sacc_ampl[lo:hi] .= Float32(row.ampl))
+                has_pvel && (sacc_pvel[lo:hi] .= Float32(row.pvel))
             end
         end
     end
@@ -764,10 +761,10 @@ function create_eyefun_data(
         gxR = gxR,
         gyR = gyR,
         paR = paR,
-        pupxL = fill(NaN, n),
-        pupyL = fill(NaN, n),
-        pupxR = fill(NaN, n),
-        pupyR = fill(NaN, n),
+        pupxL = fill(NaN32, n),
+        pupyL = fill(NaN32, n),
+        pupxR = fill(NaN32, n),
+        pupyR = fill(NaN32, n),
         message = message,
         in_fix = in_fix,
         fix_gavx = fix_gavx,

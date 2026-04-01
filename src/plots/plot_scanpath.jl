@@ -73,7 +73,7 @@ function plot_scanpath(
         if has_trials && length(unique(skipmissing(sub.trial))) > 1
             first_trial = true
             for g in groupby(trial_subset, :trial)
-                gx_t, gy_t, _ = _select_eye(DataFrame(g), eye)
+                gx_t, gy_t, _ = _select_eye(g, eye)
                 v = .!isnan.(gx_t) .& .!isnan.(gy_t)
                 tx = Float64.(gx_t[v])
                 ty = Float64.(gy_t[v])

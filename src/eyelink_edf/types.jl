@@ -7,18 +7,18 @@ Type definitions for EDFReader.jl.
 
 Recording block metadata (START / END blocks in the EDF stream).
 """
-mutable struct EDFRecording
+struct EDFRecording
     time::UInt32
     sample_rate::Float32
     eflags::UInt16
     sflags::UInt16
-    state::UInt8        # RECORDING_START or RECORDING_END
-    record_type::UInt8  # RECORD_SAMPLES, RECORD_EVENTS, RECORD_BOTH
-    pupil_type::UInt8   # PUPIL_AREA or PUPIL_DIAMETER
+    state::UInt8           # RECORDING_START or RECORDING_END
+    record_type::UInt8     # RECORD_SAMPLES, RECORD_EVENTS, RECORD_BOTH
+    pupil_type::UInt8      # PUPIL_AREA or PUPIL_DIAMETER
     recording_mode::UInt8  # MODE_PUPIL or MODE_CR
     filter_type::UInt8
-    pos_type::UInt8     # POS_GAZE, POS_HREF, POS_RAW
-    eye::UInt8          # EYE_LEFT, EYE_RIGHT, EYE_BINOCULAR
+    pos_type::UInt8        # POS_GAZE, POS_HREF, POS_RAW
+    eye::UInt8             # EYE_LEFT, EYE_RIGHT, EYE_BINOCULAR
     trial::Union{Int,Nothing}
 end
 
@@ -38,26 +38,9 @@ mutable struct EDFFile <: EyeFile
     events::DataFrame
     samples::Union{DataFrame,Nothing}
     recordings::DataFrame
-
     function EDFFile(filename::String)
         new(filename, "", DataFrame(), nothing, DataFrame())
     end
-end
-
-# ── Pretty printing ────────────────────────────────────────────────────────── #
-
-function _comma(n::Int)
-    s = string(n)
-    # Insert commas for thousands separators
-    len = length(s)
-    len <= 3 && return s
-    chunks = String[]
-    while length(s) > 3
-        push!(chunks, s[(end-2):end])
-        s = s[1:(end-3)]
-    end
-    push!(chunks, s)
-    return join(reverse(chunks), ",")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", edf::EDFFile)
@@ -66,7 +49,7 @@ function Base.show(io::IO, ::MIME"text/plain", edf::EDFFile)
     # Samples info
     if !isnothing(edf.samples) && nrow(edf.samples) > 0
         ns = nrow(edf.samples)
-        print(io, "  $(_comma(ns)) samples")
+        print(io, "  $(ns) samples")
 
         # Sample rate from recordings
         if nrow(edf.recordings) > 0 && hasproperty(edf.recordings, :sample_rate)
@@ -100,10 +83,10 @@ function Base.show(io::IO, ::MIME"text/plain", edf::EDFFile)
         nbl = count(==(EVENT_ENDBLINK), edf.events.type)
         nmsg = count(==(EVENT_MESSAGEEVENT), edf.events.type)
         parts = String[]
-        nfix > 0 && push!(parts, "$(_comma(nfix)) fixations")
-        nsac > 0 && push!(parts, "$(_comma(nsac)) saccades")
-        nbl > 0 && push!(parts, "$(_comma(nbl)) blinks")
-        nmsg > 0 && push!(parts, "$(_comma(nmsg)) messages")
+        nfix > 0 && push!(parts, "$(nfix) fixations")
+        nsac > 0 && push!(parts, "$(nsac) saccades")
+        nbl > 0 && push!(parts, "$(nbl) blinks")
+        nmsg > 0 && push!(parts, "$(nmsg) messages")
         !isempty(parts) && print(io, "  ", join(parts, ", "))
     end
 end

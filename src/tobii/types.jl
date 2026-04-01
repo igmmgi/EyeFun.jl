@@ -1,5 +1,3 @@
-# ── TobiiFile type ───────────────────────────────────────────────────────────── #
-
 """
     TobiiFile
 
@@ -28,18 +26,15 @@ mutable struct TobiiFile <: EyeFile
     screen_width_cm::Float64
     viewing_distance_cm::Float64
     subject::String
-
     function TobiiFile(
         filename::String,
-        screen_res::Tuple{Int,Int} = (1920, 1080),
-        screen_width_cm::Real = 53.0,
-        viewing_distance_cm::Real = 60.0
+        screen_res::Tuple{Int,Int}=(1920, 1080),
+        screen_width_cm::Real=53.0,
+        viewing_distance_cm::Real=60.0
     )
         new(filename, DataFrame(), DataFrame(), 0.0, screen_res, Float64(screen_width_cm), Float64(viewing_distance_cm), "")
     end
 end
-
-# ── Show ───────────────────────────────────────────────────────────────────── #
 
 function Base.show(io::IO, tob::TobiiFile)
     print(io, "TobiiFile(\"$(basename(tob.filename))\")")
@@ -56,11 +51,11 @@ function Base.show(io::IO, ::MIME"text/plain", tob::TobiiFile)
         sr > 0 && print(io, " ($(round(sr; digits=1)) Hz")
 
         # Eye presence
-        has_left  = hasproperty(tob.samples, :gxL) && any(!isnan, tob.samples.gxL)
+        has_left = hasproperty(tob.samples, :gxL) && any(!isnan, tob.samples.gxL)
         has_right = hasproperty(tob.samples, :gxR) && any(!isnan, tob.samples.gxR)
-        eye_str   = has_left && has_right ? "binocular" :
-                    has_left              ? "left eye"  :
-                    has_right             ? "right eye" : ""
+        eye_str = has_left && has_right ? "binocular" :
+                  has_left ? "left eye" :
+                  has_right ? "right eye" : ""
         !isempty(eye_str) && print(io, ", $eye_str")
         sr > 0 && print(io, ")")
         println(io)
@@ -85,8 +80,6 @@ function Base.show(io::IO, ::MIME"text/plain", tob::TobiiFile)
     end
 end
 
-# ── Event accessor stubs ────────────────────────────────────────────────────── #
-
 _tobii_event_error(fn) = error(
     "Cannot call $fn on a TobiiFile — events have not been detected yet.\n" *
     "Call create_eyefun_data(tob) first, then detect_events!(ed):\n\n" *
@@ -96,8 +89,8 @@ _tobii_event_error(fn) = error(
 )
 
 fixations(tob::TobiiFile; kwargs...) = _tobii_event_error("fixations")
-saccades(tob::TobiiFile;  kwargs...) = _tobii_event_error("saccades")
-blinks(tob::TobiiFile;    kwargs...) = _tobii_event_error("blinks")
+saccades(tob::TobiiFile; kwargs...) = _tobii_event_error("saccades")
+blinks(tob::TobiiFile; kwargs...) = _tobii_event_error("blinks")
 
 # ── EyeData constructor for TobiiFile ────────────────────────────────────────── #
 
@@ -117,17 +110,17 @@ function create_eyefun_data(tob::TobiiFile)
 
     # Work on a copy so the raw TobiiFile is left intact
     df = copy(samples)
-    
+
     # We join events into the samples table if possible, or just keep it separate
     # Tobii TSV files often merge messages into the sample rows during export 
     # (or they are intermixed). If we generated `message` column directly, we use it.
 
     return EyeData(
         df;
-        source              = :tobii,
-        sample_rate         = tob.sample_rate,
-        screen_res          = tob.screen_res,
-        screen_width_cm     = tob.screen_width_cm,
-        viewing_distance_cm = tob.viewing_distance_cm,
+        source=:tobii,
+        sample_rate=tob.sample_rate,
+        screen_res=tob.screen_res,
+        screen_width_cm=tob.screen_width_cm,
+        viewing_distance_cm=tob.viewing_distance_cm,
     )
 end

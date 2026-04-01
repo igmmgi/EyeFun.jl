@@ -134,6 +134,6 @@ include("plots/plot_dwell.jl")
 include("plots/plot_sequence.jl")
 include("plots/plot_transitions.jl")
 include("plots/plot_databrowser.jl")
-include("eyelink_edf/plotting_edf.jl")
+
 
 end

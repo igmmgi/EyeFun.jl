@@ -1,7 +1,7 @@
 # ── Tobii TSV Reader ───────────────────────────────────────────────────────── #
 
 # Helper: parse a float from a string, returning NaN on empty or unparseable input
-_tobii_parse_float(s) = something(tryparse(Float64, s), NaN)
+_tobii_parse_float(s) = something(tryparse(Float32, s), Float32(NaN))
 
 """
     read_tobii(path::String; kwargs...) -> TobiiFile
@@ -45,29 +45,30 @@ function read_tobii(
     times = sizehint!(Float64[], estimated_samples)
     participants = sizehint!(String[], estimated_samples)
     
-    gxLs = sizehint!(Float64[], estimated_samples)
-    gyLs = sizehint!(Float64[], estimated_samples)
-    gxRs = sizehint!(Float64[], estimated_samples)
-    gyRs = sizehint!(Float64[], estimated_samples)
-    paLs = sizehint!(Float64[], estimated_samples)
-    paRs = sizehint!(Float64[], estimated_samples)
+    gxLs = sizehint!(Float32[], estimated_samples)
+    gyLs = sizehint!(Float32[], estimated_samples)
+    gxRs = sizehint!(Float32[], estimated_samples)
+    gyRs = sizehint!(Float32[], estimated_samples)
+    paLs = sizehint!(Float32[], estimated_samples)
+    paRs = sizehint!(Float32[], estimated_samples)
     messages = sizehint!(String[], estimated_samples)
     
     event_times = sizehint!(Float64[], 100)
     event_types = sizehint!(String[], 100)
     event_msgs = sizehint!(String[], 100)
 
-    # Column mapping indices
-    col_map = Dict{String, Int}()
-    
-    # Pre-computed indices for hot path
-    idx_time = idx_evt = idx_evt_val = idx_stim = idx_valL = idx_valR = 0
-    idx_gxL = idx_gyL = idx_paL = idx_gxR = idx_gyR = idx_paR = idx_subj = 0
-    
     _get_val(parts, idx) = idx > 0 && idx <= length(parts) ? strip(parts[idx]) : ""
 
     open(path, "r") do io
         header_parsed = false
+        col_map = Dict{String, Int}()
+        
+        # Pre-computed indices for hot path dynamically scoped tightly inside closure
+        idx_time = idx_evt = idx_evt_val = idx_stim = idx_valL = idx_valR = 0
+        idx_gxL = idx_gyL = idx_paL = idx_gxR = idx_gyR = idx_paR = idx_subj = 0
+
+        last_subj_raw = ""
+        last_subj_str = ""
         
         for line in eachline(io)
             isempty(strip(line)) && continue
@@ -132,17 +133,23 @@ function read_tobii(
             gyR = _tobii_parse_float(_get_val(parts, idx_gyR))
             paR = _tobii_parse_float(_get_val(parts, idx_paR))
             
-            participant = _get_val(parts, idx_subj)
+            raw_part = _get_val(parts, idx_subj)
+            if raw_part != last_subj_raw
+                last_subj_raw = raw_part
+                last_subj_str = String(raw_part)
+            end
+            participant = last_subj_str
+
             if isempty(tob.subject) && !isempty(participant)
                 tob.subject = participant
             end
             
             # Gaze invalidity marking
             if lowercase(valL) == "invalid"
-                gxL = gyL = paL = NaN
+                gxL = gyL = paL = Float32(NaN)
             end
             if lowercase(valR) == "invalid"
-                gxR = gyR = paR = NaN
+                gxR = gyR = paR = Float32(NaN)
             end
             
             push!(times, t_ms)
@@ -168,10 +175,10 @@ function read_tobii(
         gxR = gxRs,
         gyR = gyRs,
         paR = paRs,
-        pupxL = fill(NaN, n),
-        pupyL = fill(NaN, n),
-        pupxR = fill(NaN, n),
-        pupyR = fill(NaN, n),
+        pupxL = fill(Float32(NaN), n),
+        pupyL = fill(Float32(NaN), n),
+        pupxR = fill(Float32(NaN), n),
+        pupyR = fill(Float32(NaN), n),
         message = messages
     )
     

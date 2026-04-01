@@ -26,21 +26,24 @@ function _build_heatmap_data(
         # Use fixation centers instead of raw samples
         # Find unique fixations by detecting transitions in fix_gavx/fix_gavy
         if hasproperty(samples, :fix_gavx) && hasproperty(samples, :fix_gavy)
-            fix_rows = filter(r -> r.in_fix == true, samples)
-            if nrow(fix_rows) > 0
-                fx = Float64.(fix_rows.fix_gavx)
-                fy = Float64.(fix_rows.fix_gavy)
-                # Deduplicate: consecutive identical fixation centers = same fixation
-                ux, uy = Float64[], Float64[]
-                for i in eachindex(fx)
-                    if isnan(fx[i]) || isnan(fy[i])
-                        continue
-                    end
-                    if isempty(ux) || fx[i] != ux[end] || fy[i] != uy[end]
-                        push!(ux, fx[i])
-                        push!(uy, fy[i])
-                    end
+            in_fix = samples.in_fix
+            fix_gx = samples.fix_gavx
+            fix_gy = samples.fix_gavy
+            
+            ux, uy = Float64[], Float64[]
+            for i in 1:nrow(samples)
+                in_fix[i] || continue
+                gx, gy = Float64(fix_gx[i]), Float64(fix_gy[i])
+                isnan(gx) && continue
+                isnan(gy) && continue
+
+                if isempty(ux) || gx != ux[end] || gy != uy[end]
+                    push!(ux, gx)
+                    push!(uy, gy)
                 end
+            end
+            
+            if !isempty(ux)
                 x_c, y_c, vals = _bin_samples(ux, uy, xlims, ylims, bins)
                 return x_c, y_c, vals, eye_label, "Fixation count"
             end
@@ -84,7 +87,7 @@ Plot a 2D gaze density heatmap from a wide DataFrame.
 - `:count` — fixation count (uses fixation centers)
 - `:proportion` — proportion of total (sums to 1.0)
 
-# Extra
+# Parameters
 - `background`: path to stimulus image to overlay
 - `facet`: column name (Symbol) for multi-panel comparison, e.g. `facet=:type`
 - `sigma=0` to disable Gaussian smoothing
@@ -136,7 +139,7 @@ function plot_heatmap(
         end
 
         # Find global min/max for shared colorbar
-        all_vals = vcat([vec(pd.vals) for pd in panel_data]...)
+        all_vals = reduce(vcat, [vec(pd.vals) for pd in panel_data])
         vmin, vmax = minimum(all_vals), maximum(all_vals)
         vmax == vmin && (vmax = vmin + 1.0)  # avoid degenerate range
 

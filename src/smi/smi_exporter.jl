@@ -50,7 +50,7 @@ function write_et_ascii(smi::SMIFile, path::String)
     has_message = hasproperty(df, :message)
 
     # ── Helper: NaN → 0.0  (SMI tracking-loss convention) ───────────────── #
-    _px(v::Float64) = isnan(v) ? 0.0 : v
+    _px(v::Real) = isnan(v) ? 0.0 : v
 
     open(path, "w") do io
         # ── Header ───────────────────────────────────────────────────────── #

@@ -13,10 +13,10 @@ Compute gaze velocity in °/s using 5-point central difference.
 Returns NaN for invalid samples and boundary samples.
 """
 function _compute_velocity_deg(
-    gx::Vector{Float64},
-    gy::Vector{Float64},
-    ppd::Float64,
-    sample_rate::Float64,
+    gx::AbstractVector{<:AbstractFloat},
+    gy::AbstractVector{<:AbstractFloat},
+    ppd::Real,
+    sample_rate::Real,
 )
     n = length(gx)
     vel = fill(NaN, n)
@@ -45,7 +45,7 @@ Classify samples using I-VT (velocity threshold identification).
 Returns a per-sample label vector: :fixation, :saccade, or :noise.
 """
 function _ivt_classify(
-    vel::Vector{Float64},
+    vel::AbstractVector{<:AbstractFloat},
     threshold::Float64,
     min_fix_samples::Int,
     min_sacc_samples::Int,
@@ -116,8 +116,8 @@ Classify samples using I-DT (dispersion threshold identification).
 Dispersion = (max_x - min_x) + (max_y - min_y) in degrees.
 """
 function _idt_classify(
-    gx::Vector{Float64},
-    gy::Vector{Float64},
+    gx::AbstractVector{<:AbstractFloat},
+    gy::AbstractVector{<:AbstractFloat},
     ppd::Float64,
     disp_threshold::Float64,
     min_fix_samples::Int,
@@ -198,7 +198,7 @@ function _write_event_columns!(
     gx::AbstractVector{<:AbstractFloat},
     gy::AbstractVector{<:AbstractFloat},
     pa::AbstractVector{<:AbstractFloat},
-    vel::Vector{Float64},
+    vel::AbstractVector{<:AbstractFloat},
     ppd::Float64,
     sample_rate::Float64,
     prefix::Union{Nothing,Symbol},

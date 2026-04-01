@@ -66,9 +66,8 @@ function plot_pupil(df::EyeData; selection = nothing, eye::Symbol = :auto, facet
         if has_trials && length(unique(skipmissing(sub_facet.trial))) > 1
             trial_data = filter(r -> !ismissing(r.trial), sub_facet)
             for g_df in groupby(trial_data, :trial)
-                sub_t = DataFrame(g_df)
-                t_sub, pa_sub = _get_trial_tp(sub_t)
-                _shade_blinks!(ax, sub_t, t_sub)
+                t_sub, pa_sub = _get_trial_tp(g_df)
+                _shade_blinks!(ax, g_df, t_sub)
                 lines!(ax, t_sub, pa_sub; color = :black, linewidth = 0.5)
             end
         else

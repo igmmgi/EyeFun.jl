@@ -327,72 +327,45 @@ function write_chronological_data(
         end
     end
 
-    # INPUT events — must appear before MSG at the same timestamp (edf2asc order)
-    if include_events && nrow(edf.events) > 0
-        for row in eachrow(
-            filter(
-                r ->
-                    r.type == EVENT_INPUTEVENT &&
-                    r.input > 0 &&
-                    in_msg_range(r.sttime) &&
-                    valid_ts(r.sttime),
-                edf.events,
-            ),
-        )
-            push!(ev_lines, (row.sttime, 0, "INPUT\t$(row.sttime)\t$(row.input)"))
-        end
-    end
+    if nrow(edf.events) > 0
+        has_eye = hasproperty(edf.events, :eye)
+        for row in eachrow(edf.events)
+            t = row.sttime
+            t_et = row.type
 
-    if include_messages && nrow(edf.events) > 0
-        # Include all MSG events from the recording start onward (no max_valid_ts filter
-        # so that system messages at recording start are always included)
-        msg_events = filter(
-            r ->
-                r.type == EVENT_MESSAGEEVENT &&
-                in_msg_range(r.sttime) &&
-                valid_ts(r.sttime),
-            edf.events,
-        )
-        for row in eachrow(msg_events)
-            clean = replace(row.message, '\0' => "")
-            # Skip messages with non-printable/garbage content
-            all(c -> isprint(c) || c == '\n' || c == '\t', clean) || continue
-            lines = split(clean, '\n')
-            for (i, ln) in enumerate(lines)
-                if i == 1
-                    push!(ev_lines, (row.sttime, 0, "MSG\t$(row.sttime) $(ln)"))
-                elseif strip(ln) != ""
-                    push!(ev_lines, (row.sttime, 0, ln))
+            # INPUT events
+            if include_events && t_et == EVENT_INPUTEVENT && row.input > 0 && in_msg_range(t) && valid_ts(t)
+                push!(ev_lines, (t, 0, "INPUT\t$(t)\t$(row.input)"))
+            end
+
+            # MSG events
+            if include_messages && t_et == EVENT_MESSAGEEVENT && in_msg_range(t) && valid_ts(t)
+                clean = replace(row.message, '\0' => "")
+                if all(c -> isprint(c) || c == '\n' || c == '\t', clean)
+                    lines = split(clean, '\n')
+                    for (i, ln) in enumerate(lines)
+                        if i == 1
+                            push!(ev_lines, (t, 0, "MSG\t$(t) $(ln)"))
+                        elseif strip(ln) != ""
+                            push!(ev_lines, (t, 0, ln))
+                        end
+                    end
                 end
             end
-        end
-    end
 
-    if include_events && nrow(edf.events) > 0
-        valid_event(ts) = valid_ts(ts) && in_recording(ts)
-
-        # Start events — must be in a real recording
-        # Reference format: label left-padded to 9 chars, then ts directly (no intervening tab)
-        for row in eachrow(
-            filter(r -> r.type == EVENT_STARTSACC && valid_event(r.sttime), edf.events),
-        )
-            eye = hasproperty(row, :eye) ? _eye_letter(row.eye) : "L"
-            push!(ev_lines, (row.sttime, 0, @sprintf("%-9s%d", "SSACC $(eye)", row.sttime)))
-        end
-        for row in eachrow(
-            filter(r -> r.type == EVENT_STARTFIX && valid_event(r.sttime), edf.events),
-        )
-            eye = hasproperty(row, :eye) ? _eye_letter(row.eye) : "L"
-            push!(ev_lines, (row.sttime, 0, @sprintf("%-9s%d", "SFIX $(eye)", row.sttime)))
-        end
-        for row in eachrow(
-            filter(r -> r.type == EVENT_STARTBLINK && valid_event(r.sttime), edf.events),
-        )
-            eye = hasproperty(row, :eye) ? _eye_letter(row.eye) : "L"
-            push!(
-                ev_lines,
-                (row.sttime, 0, @sprintf("%-9s%d", "SBLINK $(eye)", row.sttime)),
-            )
+            # START events
+            if include_events && valid_ts(t) && in_recording(t)
+                if t_et == EVENT_STARTSACC
+                    eye = has_eye ? _eye_letter(row.eye) : "L"
+                    push!(ev_lines, (t, 0, @sprintf("%-9s%d", "SSACC $(eye)", t)))
+                elseif t_et == EVENT_STARTFIX
+                    eye = has_eye ? _eye_letter(row.eye) : "L"
+                    push!(ev_lines, (t, 0, @sprintf("%-9s%d", "SFIX $(eye)", t)))
+                elseif t_et == EVENT_STARTBLINK
+                    eye = has_eye ? _eye_letter(row.eye) : "L"
+                    push!(ev_lines, (t, 0, @sprintf("%-9s%d", "SBLINK $(eye)", t)))
+                end
+            end
         end
     end
 
@@ -544,8 +517,7 @@ function write_chronological_data(
         # Out-of-order timestamps break the chronological event-interleaving loop
         # (a high garbage ts advances ei past all events; real samples then get none).
         # Solution: build a filtered, sorted index of valid sample positions.
-        valid_mask = [t >= min_rec_time && t <= max_valid_ts for t in times]
-        valid_idx = findall(valid_mask)
+        valid_idx = findall(t -> t >= min_rec_time && t <= max_valid_ts, times)
         # Sort by timestamp (valid samples should already be monotonic, but
         # garbage interleaved entries may have broken the order)
         sort!(valid_idx, by = i -> times[i])

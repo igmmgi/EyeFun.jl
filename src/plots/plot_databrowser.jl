@@ -787,7 +787,7 @@ end
 
 Open an interactive eye-tracking data viewer.
 
-# Arguments
+# Parameters
 - `split_by`: How to segment data for browsing.
   - `split_by=:trial` (default) — one page per trial
   - `split_by=[:block, :trial]` — multi-level grouping
