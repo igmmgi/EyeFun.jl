@@ -3,11 +3,6 @@
 # ════════════════════════════════════════════════════════════════════════════ #
 
 @testset "detect_events!" begin
-    if !isdefined(Main, :TEST1_EDF)
-        @warn "Global test1.edf fixture not found. Skipping event detection tests."
-        return
-    end
-
     edf = Main.TEST1_EDF
     df = Main.TEST1_DF
 

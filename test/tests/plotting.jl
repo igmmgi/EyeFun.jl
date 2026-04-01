@@ -3,11 +3,6 @@
 # ════════════════════════════════════════════════════════════════════════════ #
 
 @testset "Plotting functions" begin
-    if !isdefined(Main, :TEST1_EDF)
-        @warn "Global test1.edf fixture not found. Skipping plotting tests."
-        return
-    end
-
     edf = Main.TEST1_EDF
     df = Main.TEST1_DF
 

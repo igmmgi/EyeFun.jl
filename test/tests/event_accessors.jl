@@ -3,11 +3,6 @@
 # ════════════════════════════════════════════════════════════════════════════ #
 
 @testset "Event accessors" begin
-    if !isdefined(Main, :TEST1_EDF)
-        @warn "Global test1.edf fixture not found. Skipping event accessor tests."
-        return
-    end
-
     edf = Main.TEST1_EDF
 
         @testset "fixations" begin

@@ -3,11 +3,6 @@
 # ════════════════════════════════════════════════════════════════════════════ #
 
 @testset "create_eyefun_data" begin
-    if !isdefined(Main, :TEST1_EDF)
-        @warn "Global test1.edf fixture not found. Skipping dataframe tests."
-        return
-    end
-
     edf = Main.TEST1_EDF
     df = Main.TEST1_DF
 

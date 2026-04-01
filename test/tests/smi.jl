@@ -2,10 +2,6 @@
     smi_dir = joinpath(dirname(dirname(@__DIR__)), "resources", "data", "smi")
 
     @testset "read_smi (txt) — returns SMIFile" begin
-        if !isdefined(Main, :TEST_SMI_TXT)
-            @warn "Global SMI TXT fixture not found."
-            return
-        end
         raw = Main.TEST_SMI_TXT
         @test raw isa SMIFile
         @test raw.sample_rate == 50.0
@@ -29,10 +25,6 @@
     end
 
     @testset "create_eyefun_data (txt) — returns EyeData with events" begin
-        if !isdefined(Main, :TEST_SMI_TXT)
-            @warn "Global SMI TXT fixture not found."
-            return
-        end
         raw = Main.TEST_SMI_TXT
         # Create fresh DataFrame
         ed  = create_eyefun_data(deepcopy(raw))
@@ -73,10 +65,6 @@
     end
 
     @testset "read_smi (idf) — returns SMIFile" begin
-        if !isdefined(Main, :TEST_SMI_IDF)
-            @warn "Global SMI IDF fixture not found."
-            return
-        end
         raw = Main.TEST_SMI_IDF
         @test raw isa SMIFile
         @test nrow(raw.samples) > 0
@@ -86,10 +74,6 @@
     end
 
     @testset "write_et_ascii — IDF round-trip" begin
-        if !isdefined(Main, :TEST_SMI_IDF)
-            @warn "Global SMI IDF fixture not found."
-            return
-        end
         raw = Main.TEST_SMI_IDF
         out = tempname() * ".txt"
         try

@@ -3,11 +3,6 @@
 # ════════════════════════════════════════════════════════════════════════════ #
 
 @testset "Analysis functions" begin
-    if !isdefined(Main, :TEST1_EDF)
-        @warn "Global test1.edf fixture not found. Skipping analysis tests."
-        return
-    end
-
     edf = Main.TEST1_EDF
     df = Main.TEST1_DF
     edf_path = Main.TEST1_EDF_PATH

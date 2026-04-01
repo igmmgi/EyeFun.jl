@@ -2,10 +2,6 @@
     tobii_dir = joinpath(dirname(dirname(@__DIR__)), "resources", "data", "tobi")
 
     @testset "read_tobii — returns TobiiFile" begin
-        if !isdefined(Main, :TEST_TOBII_TSV)
-            @warn "Global Tobii TSV fixture not found."
-            return
-        end
         raw = Main.TEST_TOBII_TSV
         @test raw isa TobiiFile
         @test raw.sample_rate ≈ 500.0
@@ -37,10 +33,6 @@
     end
 
     @testset "create_eyefun_data(TobiiFile) — returns EyeData with events" begin
-        if !isdefined(Main, :TEST_TOBII_TSV)
-            @warn "Global Tobii TSV fixture not found."
-            return
-        end
         raw = Main.TEST_TOBII_TSV
         ed = create_eyefun_data(deepcopy(raw))
 
