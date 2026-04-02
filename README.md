@@ -31,6 +31,6 @@ dat = read_et_data("path/to/yout/eye_tracking_file/file.edf") # EyeLink (.edf or
 plot_databrowser(dat) # whole dataset
 plot_databrowser(dat) # split by some unique identifier within dataset, here trial
 
-https://github.com/user-attachments/assets/ea4537e4-b5e4-418b-b689-6ffc854998db
+<video controls autoplay loop muted src="https://github.com/user-attachments/assets/ea4537e4-b5e4-418b-b689-6ffc854998db"></video>
 
 
