@@ -14,6 +14,7 @@ mutable struct EyeViewerState
     show_fixations::Observable{Bool}
     show_blinks::Observable{Bool}
     show_messages::Observable{Bool}
+    show_aois::Observable{Bool}
     selected_saccade::Observable{Int}
     selected_fixation::Observable{Int}
     segments::Vector{Any}
@@ -25,6 +26,7 @@ mutable struct EyeViewerState
     pa_col::Symbol
     spatial_zoom::Union{Nothing,NTuple{4,Float64}}
     window_samples::Int         # 0 = show all, >0 = visible window size
+    aois::Union{Nothing,Vector{<:AOI}}
 end
 
 # ── Saccade info ───────────────────────────────────────────────────────────── #
@@ -320,6 +322,8 @@ function _draw_spatial!(
         end
     end
 
+
+    state.show_aois[] && !isnothing(state.aois) && _draw_aois!(ax, state.aois)
 
     if reset_zoom || isnothing(state.spatial_zoom)
         xlims!(ax, -50, sx + 50)
@@ -823,6 +827,7 @@ function plot_databrowser(
     eye::Symbol=:auto,
     split_by::Union{Nothing,Symbol,Vector{Symbol}}=nothing,
     display_plot::Bool=true,
+    aois::Union{Nothing,Vector{<:AOI}}=nothing,
 )
 
     # Resolve eye
@@ -863,6 +868,7 @@ function plot_databrowser(
         Observable(true),       # show_fixations
         Observable(false),      # show_blinks
         Observable(false),      # show_messages
+        Observable(true),       # show_aois
         Observable(0),          # selected_saccade
         Observable(0),          # selected_fixation
         segments,
@@ -873,7 +879,8 @@ function plot_databrowser(
         gy_col,
         pa_col,
         nothing,                # spatial_zoom
-        auto_window,             # window_samples
+        auto_window,            # window_samples
+        aois,                   # aois
     )
 
     # ── Figure layout ──────────────────────────────────────────────────────── #
@@ -1011,6 +1018,11 @@ function plot_databrowser(
         ("Blinks", state.show_blinks),
         ("Messages", state.show_messages),
     ]
+
+    # Only add the AOI checkbox if AOIs were actually provided
+    if !isnothing(state.aois) && !isempty(state.aois)
+        push!(toggles, ("AOIs", state.show_aois))
+    end
 
     tcol = 0
     for (i, (label, obs)) in enumerate(toggles)

@@ -96,7 +96,7 @@ Common in Visual World Paradigm (VWP) research.
 
 # Example
 ```julia
-aois = [RectAOI("Target", 100, 100, 400, 400), RectAOI("Distractor", 800, 100, 1100, 400)]
+aois = [RectAOI("Target", 250, 250, 300, 300), RectAOI("Distractor", 950, 250, 300, 300)]
 pol = proportion_of_looks(df, aois; bin_ms=20, selection=(trial=1:20,))
 ```
 """

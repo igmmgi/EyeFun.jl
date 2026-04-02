@@ -15,7 +15,7 @@ Returns a `NamedTuple` with:
 
 # Example
 ```julia
-aois = [RectAOI("Face", 400, 200, 800, 600), RectAOI("Text", 0, 700, 1280, 960)]
+aois = [RectAOI("Face", 600, 400, 400, 400), RectAOI("Text", 640, 830, 1280, 260)]
 result = scanpath_similarity(df, aois; selection1=(trial=1,), selection2=(trial=2,))
 println("Similarity: ", result.similarity)
 ```
@@ -56,7 +56,7 @@ Returns a `NamedTuple` with:
 
 # Example
 ```julia
-aois = [RectAOI("Face", 400, 200, 800, 600), RectAOI("Text", 0, 700, 1280, 960)]
+aois = [RectAOI("Face", 600, 400, 400, 400), RectAOI("Text", 640, 830, 1280, 260)]
 tm = transition_matrix(df, aois; selection=(trial=1:10,))
 tm.matrix   # 2×2 transition probability matrix
 tm.labels   # ["Face", "Text"]

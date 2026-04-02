@@ -155,24 +155,28 @@ abstract type AOI end
 # ── RectAOI ────────────────────────────────────────────────────────────────── #
 
 """
-    RectAOI(name, x1, y1, x2, y2)
+    RectAOI(name, cx, cy, width, height)
 
-Rectangular Area of Interest defined by (x1, y1) bottom-left and (x2, y2) top-right corners.
+Rectangular Area of Interest defined by its center `(cx, cy)` and dimensions `width` and `height`.
 
 ```julia
-aoi = RectAOI("Button", 100, 200, 300, 400)
+aoi = RectAOI("Button", 200, 300, 200, 200)
 in_aoi(aoi, 150, 300)  # true
 ```
 """
 struct RectAOI <: AOI
     name::String
-    x1::Float64
-    y1::Float64
-    x2::Float64
-    y2::Float64
+    cx::Float64
+    cy::Float64
+    width::Float64
+    height::Float64
+    color::Any
 end
+RectAOI(name, cx, cy, width, height; color=:grey) = RectAOI(name, cx, cy, width, height, color)
 
-in_aoi(aoi::RectAOI, x::Real, y::Real) = aoi.x1 <= x <= aoi.x2 && aoi.y1 <= y <= aoi.y2
+in_aoi(aoi::RectAOI, x::Real, y::Real) = 
+    aoi.cx - aoi.width/2 <= x <= aoi.cx + aoi.width/2 && 
+    aoi.cy - aoi.height/2 <= y <= aoi.cy + aoi.height/2
 
 # ── CircleAOI ──────────────────────────────────────────────────────────────── #
 
@@ -191,7 +195,9 @@ struct CircleAOI <: AOI
     cx::Float64
     cy::Float64
     radius::Float64
+    color::Any
 end
+CircleAOI(name, cx, cy, radius; color=:grey) = CircleAOI(name, cx, cy, radius, color)
 
 in_aoi(aoi::CircleAOI, x::Real, y::Real) = (x - aoi.cx)^2 + (y - aoi.cy)^2 <= aoi.radius^2
 
@@ -213,7 +219,9 @@ struct EllipseAOI <: AOI
     cy::Float64
     rx::Float64
     ry::Float64
+    color::Any
 end
+EllipseAOI(name, cx, cy, rx, ry; color=:grey) = EllipseAOI(name, cx, cy, rx, ry, color)
 
 in_aoi(aoi::EllipseAOI, x::Real, y::Real) =
     ((x - aoi.cx) / aoi.rx)^2 + ((y - aoi.cy) / aoi.ry)^2 <= 1.0
@@ -234,7 +242,9 @@ in_aoi(aoi, 200, 150)  # true
 struct PolygonAOI <: AOI
     name::String
     vertices::Vector{Tuple{Float64,Float64}}
+    color::Any
 end
+PolygonAOI(name, vertices; color=:grey) = PolygonAOI(name, vertices, color)
 
 """Point-in-polygon using the ray casting algorithm."""
 function in_aoi(aoi::PolygonAOI, x::Real, y::Real)
@@ -257,7 +267,7 @@ end
 # ── AOI Show methods ──────────────────────────────────────────────────────── #
 
 Base.show(io::IO, a::RectAOI) =
-    print(io, "RectAOI(\"$(a.name)\", $(a.x1), $(a.y1), $(a.x2), $(a.y2))")
+    print(io, "RectAOI(\"$(a.name)\", $(a.cx), $(a.cy), $(a.width)x$(a.height))")
 Base.show(io::IO, a::CircleAOI) =
     print(io, "CircleAOI(\"$(a.name)\", $(a.cx), $(a.cy), r=$(a.radius))")
 Base.show(io::IO, a::EllipseAOI) =

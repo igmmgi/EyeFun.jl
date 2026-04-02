@@ -9,7 +9,7 @@ Plot an AOI transition probability heatmap.
 
 # Example
 ```julia
-aois = [RectAOI("Face", 400, 200, 800, 600), RectAOI("Text", 0, 700, 1280, 960)]
+aois = [RectAOI("Face", 600, 400, 400, 400), RectAOI("Text", 640, 830, 1280, 260)]
 plot_transitions(df, aois; selection=(trial=1:10,))
 ```
 """

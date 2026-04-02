@@ -17,7 +17,7 @@ Returns a DataFrame with columns:
 
 # Example
 ```julia
-aois = [RectAOI("Word1", 100, 400, 200, 440), RectAOI("Word2", 220, 400, 320, 440)]
+aois = [RectAOI("Word1", 150, 420, 100, 40), RectAOI("Word2", 270, 420, 100, 40)]
 fm = fixation_metrics(df, aois; selection=(trial=1:20,))
 # Filter skipped AOIs
 filter(r -> !r.skipped, fm)

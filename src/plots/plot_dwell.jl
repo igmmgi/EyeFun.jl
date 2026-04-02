@@ -8,7 +8,7 @@ Bar chart of dwell time (ms) per Area of Interest.
 
 # Example
 ```julia
-aois = [RectAOI("Face", 400, 200, 800, 600), CircleAOI("Cross", 640, 480, 50)]
+aois = [RectAOI("Face", 600, 400, 400, 400), CircleAOI("Cross", 640, 480, 50)]
 plot_dwell(df, aois; selection=(trial=1,))
 ```
 """

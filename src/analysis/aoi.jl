@@ -22,7 +22,7 @@ Compute standard Area of Interest metrics per group. Returns a DataFrame with:
 
 # Example
 ```julia
-aois = [RectAOI("Face", 400, 200, 800, 600)]
+aois = [RectAOI("Face", 600, 400, 400, 400)]
 am = aoi_metrics(df, aois; group_by=[:block, :trial])
 ```
 """

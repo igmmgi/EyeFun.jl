@@ -73,20 +73,21 @@ function _draw_aois!(ax, aois::Vector{<:AOI})
     isempty(aois) && return
     colors = Makie.wong_colors()
     for (i, aoi) in enumerate(sort(aois; by = a -> a.name))
-        c = colors[mod1(i, length(colors))]
+        c = isnothing(aoi.color) ? colors[mod1(i, length(colors))] : aoi.color
         _draw_single_aoi!(ax, aoi, c)
     end
 end
 
 function _draw_single_aoi!(ax, aoi::RectAOI, c)
+    y1 = aoi.cy - aoi.height / 2
     poly!(
         ax,
-        Makie.Rect(aoi.x1, aoi.y1, aoi.x2 - aoi.x1, aoi.y2 - aoi.y1);
+        Makie.Rect(aoi.cx - aoi.width / 2, y1, aoi.width, aoi.height);
         color = (c, 0.15),
         strokewidth = 2,
         strokecolor = c,
     )
-    _aoi_label!(ax, (aoi.x1 + aoi.x2) / 2, aoi.y1, aoi.name, c)
+    _aoi_label!(ax, aoi.cx, y1, aoi.name, c)
 end
 
 function _draw_single_aoi!(ax, aoi::CircleAOI, c)

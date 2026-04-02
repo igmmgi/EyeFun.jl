@@ -6,7 +6,7 @@
     df = Main.TEST1_DF
 
     aoi_regions =
-        [RectAOI("Center", 440, 280, 840, 680), RectAOI("TopLeft", 0, 0, 320, 240)]
+        [RectAOI("Center", 640, 480, 400, 400), RectAOI("TopLeft", 160, 120, 320, 240)]
 
     @testset "plot_gaze (DataFrame)" begin
         fig = plot_gaze(df; selection=(trial=1,))
