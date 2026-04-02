@@ -252,3 +252,84 @@ function smooth_pupil!(df::EyeData; eye::Symbol=:auto, window_ms::Int=50)
     df.df[!, pa_col] = smoothed
     return df
 end
+
+"""
+    pupil_peak_metrics(df::EyeData; selection=nothing, group_by=:trial,
+                       eye=:auto, time_window=nothing)
+
+Compute advanced pupil summary metrics, including peak dilation and latency to peak,
+for each group (e.g. each trial) within an optional time window.
+
+`time_window` supports `(start, end)` tuples with numbers or column symbols to define
+a boundary dynamically per-trial (e.g., `(:target_onset, :target_offset)`).
+
+Returns a DataFrame with columns:
+- Group columns (e.g., `:trial`)
+- `mean_pupil` — average dilation
+- `max_pupil` — peak dilation
+- `min_pupil` — minimum dilation (trough)
+- `max_pupil_time` — time of peak relative to the trial start
+- `time_to_peak` — time of peak relative to the `time_window` start (or trial start if no window)
+"""
+function pupil_peak_metrics(
+    df::EyeData;
+    selection=nothing,
+    eye::Symbol=:auto,
+    group_by=:trial,
+    time_window::Union{Nothing,Tuple}=nothing,
+)
+    samples = _apply_selection(df, selection)
+    nrow(samples) == 0 && error("No samples found for the given selection.")
+
+    grouped, group_cols = _valid_groups(samples, group_by)
+
+    eye = _resolve_eye(samples, eye; cols=:pupil)
+    pa_col = _eye_columns(eye).pa
+
+    res = combine(grouped) do g
+        tr = _trial_relative_time(g)
+        pa = Float64.(g[!, pa_col])
+
+        # Apply time window if provided
+        t_start = 0.0
+        valid = @. !isnan(tr) && !isnan(pa)
+        
+        if !isnothing(time_window)
+            tw_start, tw_end = _resolve_time_window(g, time_window)
+            t_start = Float64(tw_start)
+            time_mask = t_start .<= tr .<= Float64(tw_end)
+            valid .&= time_mask
+        end
+
+        v_pa = pa[valid]
+        v_tr = tr[valid]
+
+        if isempty(v_pa)
+            return (;
+                mean_pupil=NaN,
+                max_pupil=NaN,
+                min_pupil=NaN,
+                max_pupil_time=NaN,
+                time_to_peak=NaN,
+            )
+        end
+
+        mean_val = mean(v_pa)
+        min_val = minimum(v_pa)
+        
+        max_idx = argmax(v_pa)
+        max_val = v_pa[max_idx]
+        max_time = v_tr[max_idx]
+
+        return (;
+            mean_pupil=round(mean_val; digits=4),
+            max_pupil=round(max_val; digits=4),
+            min_pupil=round(min_val; digits=4),
+            max_pupil_time=round(max_time; digits=1),
+            time_to_peak=round(max_time - t_start; digits=1),
+        )
+    end
+
+    expected_cols = vcat(group_cols, [:mean_pupil, :max_pupil, :min_pupil, :max_pupil_time, :time_to_peak])
+    return select!(res, expected_cols)
+end

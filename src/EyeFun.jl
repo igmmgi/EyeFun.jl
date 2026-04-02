@@ -38,6 +38,7 @@ export baseline_correct_pupil!
 export smooth_pupil!
 export drift_correct!
 export exclude_trials!
+export pupil_peak_metrics
 
 # Coordinates
 export pixels_per_degree
@@ -47,10 +48,12 @@ export to_center_coords!
 
 # Transitions & scanpath
 export transition_matrix
+export transition_entropy
 export scanpath_similarity
 
 # Fixation metrics
 export fixation_metrics
+export saccade_metrics
 
 # Time course
 export time_bin
@@ -104,10 +107,13 @@ include("smi/smi_exporter.jl")
 include("tobii/types.jl")
 include("tobii/tobii_reader.jl")
 
+# Data I/O
+include("io/read.jl")
+include("io/write.jl")
+
+# Analysis
 include("analysis/analysis.jl")
 include("analysis/aoi.jl")
-include("analysis/read.jl")
-include("analysis/write.jl")
 include("analysis/coordinates.jl")
 include("analysis/detect_events.jl")
 include("analysis/drift.jl")
@@ -116,6 +122,7 @@ include("analysis/filtering.jl")
 include("analysis/fixation_metrics.jl")
 include("analysis/microsaccades.jl")
 include("analysis/pupil.jl")
+include("analysis/saccade_metrics.jl")
 include("analysis/scanpath.jl")
 include("analysis/statistics.jl")
 include("analysis/time_course.jl")

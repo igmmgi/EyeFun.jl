@@ -32,6 +32,7 @@ function aoi_metrics(
     selection = nothing,
     eye::Symbol = :auto,
     group_by = :trial,
+    time_window::Union{Nothing,Tuple} = nothing,
 )
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found.")
@@ -44,10 +45,19 @@ function aoi_metrics(
     sr = df.sample_rate
 
     return combine(grouped) do g
-        gx = g[!, gx_col]
-        gy = g[!, gy_col]
+        gx_full = g[!, gx_col]
+        gy_full = g[!, gy_col]
+        t_full = _trial_relative_time(g)
 
-        t = _trial_relative_time(g)
+        if !isnothing(time_window)
+            t_start, t_end = _resolve_time_window(g, time_window)
+            time_mask = t_start .<= t_full .<= t_end
+            gx = gx_full[time_mask]
+            gy = gy_full[time_mask]
+            t = t_full[time_mask]
+        else
+            gx, gy, t = gx_full, gy_full, t_full
+        end
 
         group_rows = NamedTuple[]
 
@@ -75,16 +85,44 @@ function aoi_metrics(
                 
                 fx = g.fix_gavx[valid_onsets]
                 fy = g.fix_gavy[valid_onsets]
-                fd = g.fix_dur[valid_onsets]
-                ft = t[valid_onsets]
-                
+                fd = Float64.(g.fix_dur[valid_onsets])
+                ft = t_full[valid_onsets]
+
+                if !isnothing(time_window)
+                    t_start, t_end = _resolve_time_window(g, time_window)
+                    valid_idx = Int[]
+                    for i in eachindex(ft)
+                        onset = ft[i]
+                        dur = fd[i]
+                        f_end = onset + dur
+                        if f_end > t_start && onset < t_end
+                            if onset < t_start
+                                dur -= (t_start - onset)
+                                onset = t_start
+                            end
+                            if onset + dur > t_end
+                                dur -= (onset + dur - t_end)
+                            end
+                            if dur > 0
+                                ft[i] = onset
+                                fd[i] = dur
+                                push!(valid_idx, i)
+                            end
+                        end
+                    end
+                    fx = fx[valid_idx]
+                    fy = fy[valid_idx]
+                    fd = fd[valid_idx]
+                    ft = ft[valid_idx]
+                end
+
                 in_aoi_fix = Bool[in_aoi(aoi, x, y) for (x, y) in zip(fx, fy)]
                 fix_count = count(in_aoi_fix)
                 
                 if fix_count > 0
                     first_idx = findfirst(in_aoi_fix)
                     first_fix_time = ft[first_idx]
-                    first_fix_dur = Float64(fd[first_idx])
+                    first_fix_dur = fd[first_idx]
                 end
             else
                 first_idx = findfirst(aoi_mask .& .!isnan.(t))

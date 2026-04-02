@@ -1,5 +1,3 @@
-# ── Fixation Metrics ───────────────────────────────────────────────────────── #
-
 """
     fixation_metrics(df::EyeData, aois::Vector{<:AOI};
                      selection=nothing, eye=:auto, group_by=:trial)
@@ -28,9 +26,9 @@ filter(r -> !r.skipped, fm)
 function fixation_metrics(
     df::EyeData,
     aois::Vector{<:AOI};
-    selection = nothing,
-    eye::Symbol = :auto,
-    group_by = :trial,
+    selection=nothing,
+    group_by=:trial,
+    time_window::Union{Nothing,Tuple}=nothing,
 )
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
@@ -38,11 +36,11 @@ function fixation_metrics(
     hasproperty(samples, :fix_gavx) ||
         error("No fixation columns. Run event detection first.")
 
-    grouped, group_cols = _valid_groups(samples, group_by)
+    grouped, _ = _valid_groups(samples, group_by)
 
     return combine(grouped) do g
         # Extract ordered fixation sequence for this trial
-        fixations = _extract_trial_fixations(g, aois)
+        fixations = _extract_trial_fixations(g, aois, time_window)
 
         group_rows = NamedTuple[]
 
@@ -54,14 +52,14 @@ function fixation_metrics(
                 push!(
                     group_rows,
                     (;
-                        aoi = aoi.name,
-                        first_fixation_duration = NaN,
-                        first_fixation_onset = NaN,
-                        gaze_duration = NaN,
-                        total_time = 0.0,
-                        fixation_count = 0,
-                        revisits = 0,
-                        skipped = true,
+                        aoi=aoi.name,
+                        first_fixation_duration=NaN,
+                        first_fixation_onset=NaN,
+                        gaze_duration=NaN,
+                        total_time=0.0,
+                        fixation_count=0,
+                        revisits=0,
+                        skipped=true,
                     )
                 )
                 continue
@@ -106,14 +104,14 @@ function fixation_metrics(
             push!(
                 group_rows,
                 (;
-                    aoi = aoi.name,
-                    first_fixation_duration = ffd,
-                    first_fixation_onset = ff_onset,
-                    gaze_duration = gaze_dur,
-                    total_time = total,
-                    fixation_count = length(aoi_fixes),
-                    revisits = revisits,
-                    skipped = false,
+                    aoi=aoi.name,
+                    first_fixation_duration=ffd,
+                    first_fixation_onset=ff_onset,
+                    gaze_duration=gaze_dur,
+                    total_time=total,
+                    fixation_count=length(aoi_fixes),
+                    revisits=revisits,
+                    skipped=false,
                 )
             )
         end
@@ -122,7 +120,7 @@ function fixation_metrics(
 end
 
 """Extract ordered fixation list with AOI assignments for a trial group."""
-function _extract_trial_fixations(g::AbstractDataFrame, aois::Vector{<:AOI})
+function _extract_trial_fixations(g::AbstractDataFrame, aois::Vector{<:AOI}, time_window)
     fixations = NamedTuple{(:aoi_idx, :dur_ms, :onset_ms),Tuple{Int,Float64,Float64}}[]
 
     t0 = Float64(g.time[1])
@@ -139,6 +137,26 @@ function _extract_trial_fixations(g::AbstractDataFrame, aois::Vector{<:AOI})
         dur_ms = Float64(g.fix_dur[i])
         onset_ms = Float64(g.time[i]) - t0
 
+        if !isnothing(time_window)
+            t_start, t_end = _resolve_time_window(g, time_window)
+            fix_end = onset_ms + dur_ms
+
+            if fix_end <= t_start || onset_ms >= t_end
+                continue
+            end
+
+            if onset_ms < t_start
+                dur_ms -= (t_start - onset_ms)
+                onset_ms = t_start
+            end
+
+            if onset_ms + dur_ms > t_end
+                dur_ms -= (onset_ms + dur_ms - t_end)
+            end
+            
+            dur_ms <= 0 && continue
+        end
+
         # Find AOI (0 = outside all AOIs)
         aoi_idx = 0
         for (ai, aoi) in enumerate(aois)
@@ -148,7 +166,7 @@ function _extract_trial_fixations(g::AbstractDataFrame, aois::Vector{<:AOI})
             end
         end
 
-        push!(fixations, (aoi_idx = aoi_idx, dur_ms = dur_ms, onset_ms = onset_ms))
+        push!(fixations, (aoi_idx=aoi_idx, dur_ms=dur_ms, onset_ms=onset_ms))
     end
 
     return fixations

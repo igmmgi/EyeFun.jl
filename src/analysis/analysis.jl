@@ -67,6 +67,24 @@ function _valid_groups(df_or_samples, group_by)
 end
 
 """
+    _resolve_time_window(g::AbstractDataFrame, time_window)
+
+Resolve the time window for a specific group of samples `g`.
+Supports `(start, end)` tuples with real numbers, or tuples of Symbols representing
+column names in `g` containing the window bounds (e.g. `(:target_onset, :target_offset)`).
+"""
+function _resolve_time_window(g::AbstractDataFrame, time_window)
+    isnothing(time_window) && return nothing
+    if time_window isa Tuple && length(time_window) == 2
+        t_start, t_end = time_window
+        start_val = t_start isa Symbol ? Float64(g[1, t_start]) : Float64(t_start)
+        end_val   = t_end isa Symbol ? Float64(g[1, t_end]) : Float64(t_end)
+        return (start_val, end_val)
+    end
+    error("time_window must be nothing, or a tuple of two numbers or column symbols.")
+end
+
+"""
     counts(v::AbstractVector{Bool}) -> Int
 
 Count the number of onset transitions (false → true) in a Bool vector.

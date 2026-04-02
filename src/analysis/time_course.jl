@@ -1,5 +1,3 @@
-# ── Time Course Analysis ───────────────────────────────────────────────────── #
-
 """
     time_bin(df::EyeData; selection=nothing, bin_ms=50, measure=:pupil,
              eye=:auto, group_by=:trial)
@@ -26,11 +24,12 @@ binned = time_bin(df; bin_ms=100, measure=:pupil, selection=(trial=1:10,))
 """
 function time_bin(
     df::EyeData;
-    selection = nothing,
-    bin_ms::Int = 50,
-    measure::Symbol = :pupil,
-    eye::Symbol = :auto,
-    group_by = :trial,
+    selection=nothing,
+    bin_ms::Int=50,
+    measure::Symbol=:pupil,
+    eye::Symbol=:auto,
+    group_by=:trial,
+    time_window::Union{Nothing,Tuple}=nothing,
 )
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
@@ -57,15 +56,22 @@ function time_bin(
 
         # Filter NaNs
         valid = @. !isnan(t) && !isnan(vals)
-        t_valid = t[valid]
-        v_valid = vals[valid]
+        v_valid = Float64.(g[valid, val_col])
+        t_valid = Float64.(t[valid])
+
+        if !isnothing(time_window)
+            t_start, t_end = _resolve_time_window(g, time_window)
+            time_mask = t_start .<= t_valid .<= t_end
+            t_valid = t_valid[time_mask]
+            v_valid = v_valid[time_mask]
+        end
 
         # Anchor bins using robust integer division based on 0
         bin_centers = @. (fld(t_valid, bin_ms) * bin_ms) + (bin_ms / 2.0)
 
-        sub_df = DataFrame(time_bin = bin_centers, value = v_valid; copycols=false)
+        sub_df = DataFrame(time_bin=bin_centers, value=v_valid; copycols=false)
         if nrow(sub_df) == 0
-            return DataFrame(time_bin = Float64[], value = Float64[], n = Int[])
+            return DataFrame(time_bin=Float64[], value=Float64[], n=Int[])
         end
         return combine(groupby(sub_df, :time_bin), :value => mean => :value, nrow => :n)
     end
@@ -97,10 +103,11 @@ pol = proportion_of_looks(df, aois; bin_ms=20, selection=(trial=1:20,))
 function proportion_of_looks(
     df::EyeData,
     aois::Vector{<:AOI};
-    selection = nothing,
-    bin_ms::Int = 50,
-    eye::Symbol = :auto,
-    group_by = :trial,
+    selection=nothing,
+    bin_ms::Int=50,
+    eye::Symbol=:auto,
+    group_by=:trial,
+    time_window::Union{Nothing,Tuple}=nothing,
 )
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
@@ -121,31 +128,40 @@ function proportion_of_looks(
         gy = Float64.(g[!, gy_col])
 
         valid = @. !isnan(t) && !isnan(gx) && !isnan(gy)
-        t_valid = t[valid]
-        gx_valid = gx[valid]
-        gy_valid = gy[valid]
+        t_valid = Float64.(t[valid])
+        fx = g[valid, gx_col]
+        fy = g[valid, gy_col]
 
+        if !isnothing(time_window)
+            t_start, t_end = _resolve_time_window(g, time_window)
+            time_mask = t_start .<= t_valid .<= t_end
+            t_valid = t_valid[time_mask]
+            fx = fx[time_mask]
+            fy = fy[time_mask]
+        end
+
+        # Anchor bins
         bin_centers = @. (fld(t_valid, bin_ms) * bin_ms) + (bin_ms / 2.0)
 
         # Map each valid point to exactly one AOI (the first that contains it), or 0 for outside
         aoi_idx = zeros(Int, length(t_valid))
-        for i in eachindex(gx_valid)
+        for i in eachindex(t_valid)
             for ai = 1:n_aois
-                if in_aoi(aois[ai], gx_valid[i], gy_valid[i])
+                if in_aoi(aois[ai], fx[i], fy[i])
                     aoi_idx[i] = ai
                     break
                 end
             end
         end
 
-        sub_df = DataFrame(time_bin = bin_centers; copycols=false)
+        sub_df = DataFrame(time_bin=bin_centers; copycols=false)
         for ai = 1:n_aois
             sub_df[!, aoi_syms[ai]] = (aoi_idx .== ai)
         end
         sub_df[!, :outside] = (aoi_idx .== 0)
 
         if nrow(sub_df) == 0
-            empty_res = DataFrame(time_bin = Float64[])
+            empty_res = DataFrame(time_bin=Float64[])
             for sym in aoi_syms
                 empty_res[!, sym] = Float64[]
             end

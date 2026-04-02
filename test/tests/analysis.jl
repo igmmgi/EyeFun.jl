@@ -102,11 +102,15 @@
         @test result.n_excluded >= 0
     end
 
-    @testset "transition_matrix" begin
+    @testset "transition_matrix and entropy" begin
         tm = transition_matrix(df, aoi_regions; selection=(trial=1:5,))
         @test tm.matrix isa Matrix{Float64}
         @test length(tm.labels) == length(aoi_regions)
         @test size(tm.matrix) == (length(aoi_regions), length(aoi_regions))
+        
+        ent = transition_entropy(tm)
+        @test ent isa Float64
+        @test ent >= 0.0
     end
 
     @testset "fixation_metrics" begin
@@ -120,6 +124,29 @@
         @test hasproperty(fm, :fixation_count)
         @test hasproperty(fm, :revisits)
         @test hasproperty(fm, :skipped)
+    end
+
+    @testset "saccade_metrics" begin
+        sm = saccade_metrics(df; selection=(trial=1:5,))
+        @test sm isa DataFrame
+        @test nrow(sm) > 0
+        @test hasproperty(sm, :trial)
+        @test hasproperty(sm, :saccade_idx)
+        @test hasproperty(sm, :max_curvature_px)
+        @test hasproperty(sm, :amplitude_deg)
+        @test hasproperty(sm, :curvature_ratio)
+    end
+
+    @testset "pupil_peak_metrics" begin
+        # Needs trial relative time
+        df_copy = deepcopy(df)
+        df_copy.df[!, :time_rel] = df_copy.df.time
+        pm = pupil_peak_metrics(df_copy; selection=(trial=1:5,))
+        @test pm isa DataFrame
+        @test nrow(pm) > 0
+        @test hasproperty(pm, :trial)
+        @test hasproperty(pm, :max_pupil)
+        @test hasproperty(pm, :time_to_peak)
     end
 
     @testset "scanpath_similarity" begin
