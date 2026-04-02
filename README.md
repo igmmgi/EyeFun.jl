@@ -32,4 +32,4 @@ plot_databrowser(dat) # whole dataset
 plot_databrowser(dat) # split by some unique identifier within dataset, here trial
 ```
 
-<video controls autoplay loop muted src="https://github.com/user-attachments/assets/ea4537e4-b5e4-418b-b689-6ffc854998db"></video>
+<video controls autoplay loop muted src="https://github.com/user-attachments/assets/89daec56-2699-47ff-96a2-3110d4acdda5"></video>
