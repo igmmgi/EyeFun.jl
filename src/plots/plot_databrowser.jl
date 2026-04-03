@@ -45,27 +45,27 @@ const SaccadeInfo = @NamedTuple{
 function _extract_saccades(g::DataFrame)
     saccades = SaccadeInfo[]
     !hasproperty(g, :sacc_gstx) && return saccades
-    prev_stx = NaN
     for i in eachindex(g.sacc_gstx)
-        if g.in_sacc[i] && !isnan(g.sacc_gstx[i]) && Float64(g.sacc_gstx[i]) != prev_stx
-            x1, y1 = Float64(g.sacc_gstx[i]), Float64(g.sacc_gsty[i])
-            x2, y2 = Float64(g.sacc_genx[i]), Float64(g.sacc_geny[i])
-            if !isnan(x1) && !isnan(y1) && !isnan(x2) && !isnan(y2)
-                dx, dy = x2 - x1, -(y2 - y1)  # flip Y for screen coords
-                push!(
-                    saccades,
-                    (
-                        x1=x1,
-                        y1=y1,
-                        x2=x2,
-                        y2=y2,
-                        time_idx=i,
-                        angle=atan(dx, dy),  # compass bearing: 0=up, π/2=right
-                        amplitude=sqrt(dx^2 + dy^2),
-                    ),
-                )
-            end
-            prev_stx = Float64(g.sacc_gstx[i])
+        g.in_sacc[i] || continue
+        # Detect saccade onset: first sample of a new saccade run
+        i > 1 && g.in_sacc[i-1] && continue
+        !isnan(g.sacc_gstx[i]) || continue
+        x1, y1 = Float64(g.sacc_gstx[i]), Float64(g.sacc_gsty[i])
+        x2, y2 = Float64(g.sacc_genx[i]), Float64(g.sacc_geny[i])
+        if !isnan(x1) && !isnan(y1) && !isnan(x2) && !isnan(y2)
+            dx, dy = x2 - x1, -(y2 - y1)  # flip Y for screen coords
+            push!(
+                saccades,
+                (
+                    x1=x1,
+                    y1=y1,
+                    x2=x2,
+                    y2=y2,
+                    time_idx=i,
+                    angle=atan(dx, dy),  # compass bearing: 0=up, π/2=right
+                    amplitude=sqrt(dx^2 + dy^2),
+                ),
+            )
         end
     end
     return saccades
@@ -85,11 +85,11 @@ function _extract_fixations(g::DataFrame)
     while i <= n
         if g.in_fix[i] && !isnan(g.fix_gavx[i]) && !isnan(g.fix_gavy[i])
             fx = Float64(g.fix_gavx[i])
-            # Find extent of this fixation
+            # Find extent of this fixation run via in_fix mask
             t_start = i
             t_end = i
-            for j = i:n
-                if g.in_fix[j] && Float64(g.fix_gavx[j]) == fx
+            for j = (i+1):n
+                if g.in_fix[j]
                     t_end = j
                 else
                     break

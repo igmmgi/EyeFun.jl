@@ -34,27 +34,24 @@ function plot_velocity(df::EyeData; selection = nothing, split_by = nothing)
     for (idx, fval) in enumerate(split_vals)
         sub_split = isnothing(fval) ? groups : filter(r -> r[split_by] == fval, groups)
 
-        # Extract unique saccades
-        sacc_rows = filter(r -> r.in_sacc == true && !isnan(r.sacc_pvel), sub_split)
-
+        # Extract unique saccades via onset detection
         t_mid, pvel = Float64[], Float64[]
         use_rel =
             !isnothing(selection) &&
-            hasproperty(sacc_rows, :time_rel) &&
-            !all(ismissing, sacc_rows.time_rel)
+            hasproperty(sub_split, :time_rel) &&
+            !all(ismissing, sub_split.time_rel)
 
-        prev_stx = NaN
-        for r in eachrow(sacc_rows)
-            stx = Float64(r.sacc_gstx)
-            if stx != prev_stx
-                if use_rel && !ismissing(r.time_rel)
-                    push!(t_mid, Float64(r.time_rel))
-                else
-                    push!(t_mid, Float64(r.time))
-                end
-                push!(pvel, Float64(r.sacc_pvel))
-                prev_stx = stx
+        for i in 1:nrow(sub_split)
+            sub_split.in_sacc[i] || continue
+            # Detect saccade onset: first sample of a new saccade run
+            i > 1 && sub_split.in_sacc[i-1] && continue
+            isnan(sub_split.sacc_pvel[i]) && continue
+            if use_rel && !ismissing(sub_split.time_rel[i])
+                push!(t_mid, Float64(sub_split.time_rel[i]))
+            else
+                push!(t_mid, Float64(sub_split.time[i]))
             end
+            push!(pvel, Float64(sub_split.sacc_pvel[i]))
         end
 
         ax = Axis(

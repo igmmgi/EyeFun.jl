@@ -84,16 +84,16 @@ function plot_fixations(
             
             for i in 1:nrow(sub)
                 in_fix[i] || continue
-                gx, gy = Float64(fix_gx[i]), Float64(fix_gy[i])
-                isnan(gx) && continue
-                isnan(gy) && continue
+                # Detect fixation onset: first sample of a new fixation run
+                i > 1 && in_fix[i-1] && continue
+                fix_x, fix_y = Float64(fix_gx[i]), Float64(fix_gy[i])
+                isnan(fix_x) && continue
+                isnan(fix_y) && continue
                 
                 dur = Float64(fix_dur[i])
-                if isempty(fx) || gx != fx[end] || gy != fy[end]
-                    push!(fx, gx)
-                    push!(fy, gy)
-                    push!(fdur, dur)
-                end
+                push!(fx, fix_x)
+                push!(fy, fix_y)
+                push!(fdur, dur)
             end
         end
         

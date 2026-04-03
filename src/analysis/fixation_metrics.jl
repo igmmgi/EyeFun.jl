@@ -124,14 +124,13 @@ function _extract_trial_fixations(g::AbstractDataFrame, aois::Vector{<:AOI}, tim
     fixations = NamedTuple{(:aoi_idx, :dur_ms, :onset_ms),Tuple{Int,Float64,Float64}}[]
 
     t0 = Float64(g.time[1])
-    prev_fx = NaN
 
     for i = 1:nrow(g)
         g.in_fix[i] || continue
+        # Detect fixation onset: first sample of a new fixation run
+        i > 1 && g.in_fix[i-1] && continue
         fx = Float64(g.fix_gavx[i])
         isnan(fx) && continue
-        fx == prev_fx && continue  # same fixation
-        prev_fx = fx
 
         fy = Float64(g.fix_gavy[i])
         dur_ms = Float64(g.fix_dur[i])

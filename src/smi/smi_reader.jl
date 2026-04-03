@@ -15,11 +15,11 @@ these header fields are absent, conservative defaults are used (30 cm / 50 cm).
 TODO: Can they be missing? Not familiar with SMI files.
 
 To obtain an analysis-ready `EyeData` with events detected, pass the result to
-`create_smi_dataframe`:
+`create_eyefun_data`:
 
 ```julia
 raw = read_smi("pp23671_rest1_samples.txt")
-ed  = create_smi_dataframe(raw)
+ed  = create_eyefun_data(raw)
 fixations(ed)
 saccades(ed)
 blinks(ed)

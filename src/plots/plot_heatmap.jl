@@ -33,14 +33,14 @@ function _build_heatmap_data(
             ux, uy = Float64[], Float64[]
             for i in 1:nrow(samples)
                 in_fix[i] || continue
-                gx, gy = Float64(fix_gx[i]), Float64(fix_gy[i])
-                isnan(gx) && continue
-                isnan(gy) && continue
+                # Detect fixation onset: first sample of a new fixation run
+                i > 1 && in_fix[i-1] && continue
+                fx_val, fy_val = Float64(fix_gx[i]), Float64(fix_gy[i])
+                isnan(fx_val) && continue
+                isnan(fy_val) && continue
 
-                if isempty(ux) || gx != ux[end] || gy != uy[end]
-                    push!(ux, gx)
-                    push!(uy, gy)
-                end
+                push!(ux, fx_val)
+                push!(uy, fy_val)
             end
             
             if !isempty(ux)

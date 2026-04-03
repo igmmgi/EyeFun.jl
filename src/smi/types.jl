@@ -6,7 +6,7 @@
 Raw data container returned by `read_smi`. Analogous to `EDFFile` for EyeLink.
 
 Contains the parsed sample data and recording metadata, *before* event detection.
-Pass to `create_smi_dataframe` to obtain an analysis-ready `EyeData`.
+Pass to `create_eyefun_data` to obtain an analysis-ready `EyeData`.
 
 # Fields
 - `filename::String` — path to the source file
@@ -25,7 +25,7 @@ raw.subject          # "pp23671"
 raw.sample_rate      # 50.0
 raw.samples          # DataFrame with raw gaze columns
 
-ed = create_smi_dataframe(raw)
+ed = create_eyefun_data(raw)
 fixations(ed)        # now works
 ```
 """

@@ -97,15 +97,14 @@ function transition_matrix(
         fix_gy = fix_gy[valid_idx]
     end
 
-    # Extract unique fixations
+    # Extract unique fixations via onset detection
     fix_sequence = Int[]  # AOI index for each fixation (0 = outside all AOIs)
-    prev_fx = NaN
     for i = 1:nrow(samples)
         in_fix[i] || continue
+        # Detect fixation onset: first sample of a new fixation run
+        i > 1 && in_fix[i-1] && continue
         fx = Float64(fix_gx[i])
         isnan(fx) && continue
-        fx == prev_fx && continue  # same fixation
-        prev_fx = fx
 
         fy = Float64(fix_gy[i])
         # Find which AOI this fixation falls in
@@ -186,7 +185,6 @@ function _aoi_sequence(df::EyeData, aois::Vector{<:AOI}, selection, time_window)
     length(aois) > 26 && error("Maximum 26 AOIs supported for scanpath comparison.")
 
     seq = Char[]
-    prev_fx = NaN
 
     in_fix = samples.in_fix
     fix_gx = samples.fix_gavx
@@ -207,10 +205,10 @@ function _aoi_sequence(df::EyeData, aois::Vector{<:AOI}, selection, time_window)
 
     for i = 1:nrow(samples)
         in_fix[i] || continue
+        # Detect fixation onset: first sample of a new fixation run
+        i > 1 && in_fix[i-1] && continue
         fx = Float64(fix_gx[i])
         isnan(fx) && continue
-        fx == prev_fx && continue
-        prev_fx = fx
 
         fy = Float64(fix_gy[i])
         for (ai, aoi) in enumerate(aois)
