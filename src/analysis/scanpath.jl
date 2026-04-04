@@ -70,6 +70,11 @@ function transition_matrix(
     time_window::Union{Nothing,Tuple} = nothing,
 )
     samples = _apply_selection(df, selection)
+    """
+        nrow
+
+    Internal documentation.
+    """
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
     n_aois = length(aois)
@@ -170,6 +175,11 @@ function transition_entropy(mat::Matrix{Float64})
     return H
 end
 
+"""
+    transition_entropy
+
+Internal documentation.
+"""
 transition_entropy(tm::NamedTuple) = transition_entropy(tm.matrix)
 
 """Extract AOI fixation sequence as a string of single characters."""

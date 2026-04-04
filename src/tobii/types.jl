@@ -26,6 +26,11 @@ mutable struct TobiiFile <: EyeFile
     screen_width_cm::Float64
     viewing_distance_cm::Float64
     subject::String
+    """
+        TobiiFile
+
+    Internal documentation.
+    """
     function TobiiFile(
         filename::String,
         screen_res::Tuple{Int,Int} = (1920, 1080),
@@ -45,10 +50,20 @@ mutable struct TobiiFile <: EyeFile
     end
 end
 
+"""
+    Base
+
+Internal documentation.
+"""
 function Base.show(io::IO, tob::TobiiFile)
     print(io, "TobiiFile(\"$(basename(tob.filename))\")")
 end
 
+"""
+    Base
+
+Internal documentation.
+"""
 function Base.show(io::IO, ::MIME"text/plain", tob::TobiiFile)
     println(io, "TobiiFile(\"$(basename(tob.filename))\")")
 

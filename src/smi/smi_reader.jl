@@ -41,6 +41,11 @@ end
 
 # ── Text export reader ─────────────────────────────────────────────────────── #
 
+"""
+    _read_smi_txt
+
+Internal documentation.
+"""
 function _read_smi_txt(path::String)
     lines = readlines(path)
 
@@ -89,6 +94,11 @@ function _read_smi_txt(path::String)
     # ── Parse column header ───────────────────────────────────────────────── #
     col_header = split(strip(lines[header_end]), "\t")
 
+    """
+        find_col
+
+    Internal documentation.
+    """
     function find_col(names...)
         for n in names
             idx = findfirst(h -> strip(h) == n, col_header)
@@ -142,6 +152,11 @@ function _read_smi_txt(path::String)
         isempty(line) && continue
         fields = split(line, "\t")
         length(fields) < idx_type && continue
+        """
+            strip
+
+        Internal documentation.
+        """
         strip(fields[idx_type]) == "SMP" || continue
 
         row += 1
@@ -276,6 +291,11 @@ end
 
 # ── IDF binary reader ──────────────────────────────────────────────────────── #
 
+"""
+    _read_smi_idf
+
+Internal documentation.
+"""
 function _read_smi_idf(path::String)
 
     data = read(path)

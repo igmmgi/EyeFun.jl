@@ -54,6 +54,11 @@ function write_et_ascii(files::AbstractVector{<:AbstractString}; kwargs...)
     return nothing
 end
 
+"""
+    _write_et_ascii_dir
+
+Internal documentation.
+"""
 function _write_et_ascii_dir(
     dir::AbstractString;
     ext::Union{String,Nothing} = nothing,

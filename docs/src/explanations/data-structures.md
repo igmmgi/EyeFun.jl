@@ -1,46 +1,92 @@
-# Data Structures
+# EyeTracking Data Structures
 
-EyeFun.jl uses two main data structures:
+Understanding `EyeFun.jl`'s core data structures and how they leverage Julia's type system.
 
-## `EDFFile`
+## Julia Types & Multiple Dispatch
 
-Returned by `read_eyelink_edf()`, holds all raw data from an EDF or ASC file:
+If you're coming from Python or MATLAB, Julia's type system works a little differently. The full details are in the [Julia documentation](https://docs.julialang.org/en/v1/manual/types/), but the key idea for everyday `EyeFun.jl` use is **multiple dispatch**.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `preamble` | `String` | File header text |
-| `events` | `DataFrame` | All parsed events (fixations, saccades, blinks, messages, input) |
-| `samples` | `DataFrame` | Continuous gaze/pupil sample data |
-| `recordings` | `DataFrame` | Recording block metadata (sample rate, eye, state) |
+This means a function can have the same name but do different things depending on the *type* of data passed to it:
 
-### Samples columns
+```julia
+# Same function, different file formats → different internal parsing behaviour
+read_et_data(EDFFile, "data.edf")
+read_et_data(SMIFile, "data.idf")
+```
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `time` | `UInt32` | Timestamp (ms) |
-| `gxL` / `gxR` | `Float32` | Gaze X (left/right eye, NaN if missing) |
-| `gyL` / `gyR` | `Float32` | Gaze Y |
-| `paL` / `paR` | `Float32` | Pupil area |
-| `trial` | `Int32` | Trial number |
-| `time_rel` | `Int32` | ms since trial start |
+If you are ever unsure what type a variable is, use `typeof()`:
+
+```julia
+typeof(dat)   # e.g. EyeFun.EyeData
+```
+
+### Abstract vs Concrete Types
+
+Julia distinguishes between **concrete** and **abstract** types:
+
+- **Concrete types** are the actual data structures you create and work with — for example `EyeData`, `EDFFile`, or `RectAOI`. These hold real data.
+- **Abstract types** are categories or groupings — you can never create one directly, but they let functions accept a *family* of related types. For example, `EyeFile` is abstract; it simply stands for "any supported eye-tracking file format".
+
+---
+
+## Type Hierarchy
+
+```
+Any
+├── EyeFile (abstract) - Representation of raw files
+│   ├── EDFFile
+│   ├── SMIFile
+│   └── TobiiFile
+├── EyeData - Processed and unified continuous data
+└── AOI (abstract) - Spatial Areas of Interest
+    ├── RectAOI
+    ├── CircleAOI
+    ├── EllipseAOI
+    └── PolygonAOI
+```
+
+See the [Types Reference](../reference/types.md) for full field-by-field documentation of each type.
+
+## `EyeFile` (Format Specs)
+
+The `EyeFile` types (`EDFFile`, `SMIFile`, `TobiiFile`) are structural types used during parsing. `read_et_data` automatically dispatches on the file extension to read the raw proprietary components utilizing these types before automatically packaging everything into the singular `EyeData` object.
 
 ## `EyeData`
 
-Returned by `create_eyelink_edf_dataframe()`, wraps a wide DataFrame with one row per sample:
+The central data structure you will work with. `EyeData` wraps a wide `DataFrame` with one row per sample, interpolating parsed discrete events across the continuous time series.
 
-```julia
-df = create_eyelink_edf_dataframe(edf; trial_time_zero="Stimulus On")
-df.df  # access the underlying DataFrame
+| Field | Type | Description |
+|-------|------|-------------|
+| `df` | `DataFrame` | The continuous data (time × variables) |
+| `source` | `String` | Source filename |
+| `sample_rate` | `Float64` | Sampling frequency in Hz |
+| `screen_res` | `Tuple{Float64, Float64}` | Display resolution (width, height) |
+| `screen_width_cm` | `Float64` | Physical monitor width |
+| `viewing_distance_cm` | `Float64` | Distance from participant to screen |
+
+### Continuous DataFrame (`df`) columns
+
+The underlying `df` contains continuous gaze coordinates (`gx`, `gy`), pupil sizes (`pa`), and binary state masks annotating whether the sample occurred during a specific event category (`in_fix`, `in_sacc`, `in_blink`). It also contains dynamic string annotations like `message` when system triggers appear on the timeline.
+
+## `AOI`
+
+Areas of Interest define spatial boundaries on the stimulus screen to extract semantic gaze metrics.
+
+| Concrete Type | Primitive Fields | 
+|---------------|------------------|
+| `RectAOI` | `x`, `y`, `width`, `height` |
+| `CircleAOI` | `x`, `y`, `radius` |
+| `EllipseAOI` | `x`, `y`, `radius_x`, `radius_y` |
+| `PolygonAOI` | `points::Vector{Tuple{Float64, Float64}}` |
+
+## Data Flow
+
 ```
-
-Includes all sample columns plus event annotations:
-
-| Column | Description |
-|--------|-------------|
-| `in_fix` | `Bool` — currently in a fixation? |
-| `fix_gavx` / `fix_gavy` | Average gaze during fixation |
-| `fix_dur` | Fixation duration (ms) |
-| `in_sacc` | `Bool` — currently in a saccade? |
-| `sacc_ampl` / `sacc_pvel` | Saccade amplitude/peak velocity |
-| `in_blink` | `Bool` — currently in a blink? |
-| `message` | Message string at this timestamp |
+Raw Eye-Tracking File (.edf, .idf, .tsv)
+    ↓ read_et_data()
+EyeData
+    ↓ (pupil processing, drift correction, event detection...)
+EyeData (cleaned)
+    ↓ fixation_metrics() / aoi_metrics() / group_summary()
+DataFrame (Aggregated Statistics)
+```

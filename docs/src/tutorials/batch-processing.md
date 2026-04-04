@@ -1,3 +1,7 @@
 # Batch Processing
 
-## TODO
+```julia
+using EyeFun
+
+dat = read_et_data("dataset/", ext=".edf")
+```

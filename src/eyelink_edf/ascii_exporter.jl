@@ -273,6 +273,11 @@ function write_chronological_data(
             UInt32(min(UInt64(min_rec_time) + 3_600_000, typemax(UInt32)))
         end
     end
+    """
+        valid_ts
+
+    Internal documentation.
+    """
     valid_ts(ts) = ts <= max_valid_ts
     # Events must be at or after the first real recording start.
     # Subtract 10ms slack so system messages that arrive just before START are included
@@ -281,6 +286,11 @@ function write_chronological_data(
     # edf2asc includes ALL messages in the file (pre/post recording calibration etc.).
     # We only exclude ts=0 garbage from binary parse artifacts.
     min_msg_time = UInt32(1)  # include everything with a non-zero timestamp
+    """
+        in_recording
+
+    Internal documentation.
+    """
     in_recording(ts) = ts >= min_rec_time
     in_msg_range(ts) = ts > UInt32(0) && valid_ts(ts)
 
@@ -498,6 +508,11 @@ function write_chronological_data(
         has_gxR = hasproperty(sam, :gxR)
         # Columns from binary reader are concrete Float32[] with NaN for missing.
         # Columns from ASC reader may be Union{Float32,Nothing} — coerce if needed.
+        """
+            _col
+
+        Internal documentation.
+        """
         _col(c) =
             eltype(c) == Float32 ? c :
             Float32[isnothing(v) || ismissing(v) ? Float32(NaN) : Float32(v) for v in c]

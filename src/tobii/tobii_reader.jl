@@ -1,6 +1,11 @@
 # ── Tobii TSV Reader ───────────────────────────────────────────────────────── #
 
 # Helper: parse a float from a string, returning NaN on empty or unparseable input
+"""
+    _tobii_parse_float
+
+Internal documentation.
+"""
 _tobii_parse_float(s) = something(tryparse(Float32, s), Float32(NaN))
 
 """
@@ -57,6 +62,11 @@ function read_tobii(
     event_types = sizehint!(String[], 100)
     event_msgs = sizehint!(String[], 100)
 
+    """
+        _get_val
+
+    Internal documentation.
+    """
     _get_val(parts, idx) = idx > 0 && idx <= length(parts) ? strip(parts[idx]) : ""
 
     open(path, "r") do io

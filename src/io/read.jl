@@ -38,10 +38,20 @@ function read_et_data(
     )
 end
 
+"""
+    read_et_data
+
+Internal documentation.
+"""
 function read_et_data(::Type{SMIFile}, path::AbstractString; kwargs...)
     return create_eyefun_data(EyeFun.read_smi(path; kwargs...))
 end
 
+"""
+    read_et_data
+
+Internal documentation.
+"""
 function read_et_data(::Type{TobiiFile}, path::AbstractString; kwargs...)
     return create_eyefun_data(EyeFun.read_tobii(path; kwargs...))
 end
@@ -80,9 +90,19 @@ function read_et_data(
     participant_labels = nothing,
     kwargs...,
 )
+    """
+        length
+
+    Internal documentation.
+    """
     length(files) == 0 && error("No files provided.")
 
     if !isnothing(participant_labels)
+        """
+            length
+
+        Internal documentation.
+        """
         length(participant_labels) == length(files) ||
             error("participant_labels must have same length as files.")
         labels = String.(participant_labels)
@@ -117,6 +137,11 @@ function read_et_data(
     )
 end
 
+"""
+    _read_et_data_dir
+
+Internal documentation.
+"""
 function _read_et_data_dir(
     dir::AbstractString;
     ext::Union{String,Nothing} = nothing,

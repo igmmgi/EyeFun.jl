@@ -40,6 +40,11 @@ function prepare_analysis_data(
     measures::Vector{Symbol} = [:pupil],
 )
     samples = _apply_selection(df, selection)
+    """
+        nrow
+
+    Internal documentation.
+    """
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
     grouped, group_cols = _valid_groups(samples, group_by)
@@ -112,6 +117,11 @@ gcd = growth_curve_data(binned; degree=3)
 function growth_curve_data(df::DataFrame; time_col::Symbol = :time_bin, degree::Int = 3)
     hasproperty(df, time_col) ||
         error("Column :$time_col not found. Specify time_col= or use time_bin() first.")
+    """
+        nrow
+
+    Internal documentation.
+    """
     nrow(df) == 0 && error("Empty DataFrame.")
 
     # Get unique sorted time values

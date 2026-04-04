@@ -17,8 +17,8 @@ hero:
 features:
   - icon: 
       src: /icon_eye.png
-    title: Pure Julia EDF Reader
-    details: Read EyeLink EDF files directly — no SR Research SDK needed
+    title: Data Readers
+    details: Read EyeLink (EDF, ASC), SMI, and Tobii eye-tracking data formats
   - icon: 
       src: /icon_df.png
     title: Tidy DataFrames
@@ -48,27 +48,34 @@ Read and analyse eye-tracking data:
 ```julia
 using EyeFun
 
-# Read an EDF file 
-edf = read_eyelink_edf("path/to/file.edf")
+# Read an eye-tracking data file (format auto-detected)
+dat = read_et_data("path/to/file.edf")
 
-# Access event tables
-fix = fixations(edf)   # DataFrame: sttime, entime, gavx, gavy, ava, …
-sac = saccades(edf)    # DataFrame: sttime, entime, gstx, gsty, genx, geny, …
-blk = blinks(edf)      # DataFrame: sttime, entime, duration
+# Interactive databrowser
+plot_databrowser(dat)
+plot_databrowser(dat; split_by=:trial)
 
-# Create a wide per-sample DataFrame with event annotations
-df = create_eyelink_edf_dataframe(edf)
+# Plot types
+plot_gaze(dat; selection=(trial=1,))
+plot_scanpath(dat; selection=(trial=1,))
+plot_heatmap(dat; selection=(trial=1,))
+plot_fixations(dat; selection=(trial=1,))
+plot_pupil(dat; split_by=:trial)
+plot_velocity(dat; selection=(trial=1,))
 
-# Plot gaze data
-plot_gaze(df; selection=(trial=1,))
-plot_scanpath(df; selection=(trial=1,))
-plot_heatmap(df; selection=(trial=1,))
+plot_dwell(dat)
+plot_sequence(dat)
+plot_transitions(dat)
+
+# Access event tables directly from the processed dataset
+fix = fixation_metrics(dat)
+sac = saccade_metrics(dat)
 
 # Data quality analysis
-dq = data_quality(df)
+dq = data_quality(dat)
 
 # Export to ASC format
-write_eyelink_edf_to_ascii("recording.edf")  # → recording.asc
+write_et_ascii("recording.edf")  # → recording.asc
 ```
 
 ## Documentation

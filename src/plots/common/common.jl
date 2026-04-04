@@ -78,6 +78,11 @@ function _draw_aois!(ax, aois::Vector{<:AOI})
     end
 end
 
+"""
+    _draw_single_aoi
+
+Internal documentation.
+"""
 function _draw_single_aoi!(ax, aoi::RectAOI, c)
     y1 = aoi.cy - aoi.height / 2
     poly!(
@@ -90,6 +95,11 @@ function _draw_single_aoi!(ax, aoi::RectAOI, c)
     _aoi_label!(ax, aoi.cx, y1, aoi.name, c)
 end
 
+"""
+    _draw_single_aoi
+
+Internal documentation.
+"""
 function _draw_single_aoi!(ax, aoi::CircleAOI, c)
     θ = range(0, 2π; length = 64)
     xs = aoi.cx .+ aoi.radius .* cos.(θ)
@@ -98,6 +108,11 @@ function _draw_single_aoi!(ax, aoi::CircleAOI, c)
     _aoi_label!(ax, aoi.cx, aoi.cy - aoi.radius, aoi.name, c)
 end
 
+"""
+    _draw_single_aoi
+
+Internal documentation.
+"""
 function _draw_single_aoi!(ax, aoi::EllipseAOI, c)
     θ = range(0, 2π; length = 64)
     xs = aoi.cx .+ aoi.rx .* cos.(θ)
@@ -106,6 +121,11 @@ function _draw_single_aoi!(ax, aoi::EllipseAOI, c)
     _aoi_label!(ax, aoi.cx, aoi.cy - aoi.ry, aoi.name, c)
 end
 
+"""
+    _draw_single_aoi
+
+Internal documentation.
+"""
 function _draw_single_aoi!(ax, aoi::PolygonAOI, c)
     pts = Point2f.(aoi.vertices)
     poly!(ax, pts; color = (c, 0.15), strokewidth = 2, strokecolor = c)
@@ -115,6 +135,11 @@ function _draw_single_aoi!(ax, aoi::PolygonAOI, c)
     _aoi_label!(ax, cx, cy, aoi.name, c)
 end
 
+"""
+    _aoi_label
+
+Internal documentation.
+"""
 function _aoi_label!(ax, x, y, name, c)
     Makie.text!(
         ax,

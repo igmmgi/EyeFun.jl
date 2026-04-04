@@ -38,11 +38,21 @@ mutable struct EDFFile <: EyeFile
     events::DataFrame
     samples::Union{DataFrame,Nothing}
     recordings::DataFrame
+    """
+        EDFFile
+
+    Internal documentation.
+    """
     function EDFFile(filename::String)
         new(filename, "", DataFrame(), nothing, DataFrame())
     end
 end
 
+"""
+    Base
+
+Internal documentation.
+"""
 function Base.show(io::IO, ::MIME"text/plain", edf::EDFFile)
     println(io, "EDFFile(\"$(basename(edf.filename))\")")
 
@@ -91,6 +101,11 @@ function Base.show(io::IO, ::MIME"text/plain", edf::EDFFile)
     end
 end
 
+"""
+    Base
+
+Internal documentation.
+"""
 function Base.show(io::IO, edf::EDFFile)
     print(io, "EDFFile(\"$(basename(edf.filename))\")")
 end

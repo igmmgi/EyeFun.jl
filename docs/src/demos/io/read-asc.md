@@ -1,3 +1,7 @@
-# Read Asc
+# Read ASC
 
-## TODO
+```julia
+using EyeFun
+
+dat = read_et_data("recording.asc")
+```

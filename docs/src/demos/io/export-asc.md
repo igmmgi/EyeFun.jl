@@ -1,3 +1,7 @@
-# Export Asc
+# Export to ASC
 
-## TODO
+```julia
+using EyeFun
+
+write_et_ascii("experiment.edf")
+```

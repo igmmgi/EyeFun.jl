@@ -79,6 +79,11 @@ function detect_microsaccades!(
         thresh_y = lambda * σy
 
         # ── Detect and classify in a single pass ──
+        """
+            _above
+
+        Internal documentation.
+        """
         _above(i) =
             !isnan(vx[i]) &&
             !isnan(vy[i]) &&

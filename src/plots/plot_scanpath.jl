@@ -19,6 +19,11 @@ function plot_scanpath(
     aois = nothing,
 )
     samples = _apply_selection(df, selection)
+    """
+        nrow
+
+    Internal documentation.
+    """
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
     if !isnothing(split_by)
@@ -78,6 +83,11 @@ function plot_scanpath(
                 v = .!isnan.(gx_t) .& .!isnan.(gy_t)
                 tx = Float64.(gx_t[v])
                 ty = Float64.(gy_t[v])
+                """
+                    length
+
+                Internal documentation.
+                """
                 length(tx) == 0 && continue
                 lines!(ax, tx, ty; color = :black, linewidth = 0.5)
                 scatter!(

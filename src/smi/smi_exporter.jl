@@ -37,6 +37,11 @@ function write_et_ascii(smi::SMIFile)
     write_et_ascii(smi, path)
 end
 
+"""
+    write_et_ascii
+
+Internal documentation.
+"""
 function write_et_ascii(smi::SMIFile, path::String)
     df = smi.samples
     nrow(df) > 0 || error("SMIFile has no sample data to write.")
@@ -50,6 +55,11 @@ function write_et_ascii(smi::SMIFile, path::String)
     has_message = hasproperty(df, :message)
 
     # ── Helper: NaN → 0.0  (SMI tracking-loss convention) ───────────────── #
+    """
+        _px
+
+    Internal documentation.
+    """
     _px(v::Real) = isnan(v) ? 0.0 : v
 
     open(path, "w") do io
