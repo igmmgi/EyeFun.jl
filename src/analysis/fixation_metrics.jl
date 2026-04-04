@@ -26,9 +26,9 @@ filter(r -> !r.skipped, fm)
 function fixation_metrics(
     df::EyeData,
     aois::Vector{<:AOI};
-    selection=nothing,
-    group_by=:trial,
-    time_window::Union{Nothing,Tuple}=nothing,
+    selection = nothing,
+    group_by = :trial,
+    time_window::Union{Nothing,Tuple} = nothing,
 )
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
@@ -52,15 +52,15 @@ function fixation_metrics(
                 push!(
                     group_rows,
                     (;
-                        aoi=aoi.name,
-                        first_fixation_duration=NaN,
-                        first_fixation_onset=NaN,
-                        gaze_duration=NaN,
-                        total_time=0.0,
-                        fixation_count=0,
-                        revisits=0,
-                        skipped=true,
-                    )
+                        aoi = aoi.name,
+                        first_fixation_duration = NaN,
+                        first_fixation_onset = NaN,
+                        gaze_duration = NaN,
+                        total_time = 0.0,
+                        fixation_count = 0,
+                        revisits = 0,
+                        skipped = true,
+                    ),
                 )
                 continue
             end
@@ -104,15 +104,15 @@ function fixation_metrics(
             push!(
                 group_rows,
                 (;
-                    aoi=aoi.name,
-                    first_fixation_duration=ffd,
-                    first_fixation_onset=ff_onset,
-                    gaze_duration=gaze_dur,
-                    total_time=total,
-                    fixation_count=length(aoi_fixes),
-                    revisits=revisits,
-                    skipped=false,
-                )
+                    aoi = aoi.name,
+                    first_fixation_duration = ffd,
+                    first_fixation_onset = ff_onset,
+                    gaze_duration = gaze_dur,
+                    total_time = total,
+                    fixation_count = length(aoi_fixes),
+                    revisits = revisits,
+                    skipped = false,
+                ),
             )
         end
         return DataFrame(group_rows)
@@ -152,7 +152,7 @@ function _extract_trial_fixations(g::AbstractDataFrame, aois::Vector{<:AOI}, tim
             if onset_ms + dur_ms > t_end
                 dur_ms -= (onset_ms + dur_ms - t_end)
             end
-            
+
             dur_ms <= 0 && continue
         end
 
@@ -165,7 +165,7 @@ function _extract_trial_fixations(g::AbstractDataFrame, aois::Vector{<:AOI}, tim
             end
         end
 
-        push!(fixations, (aoi_idx=aoi_idx, dur_ms=dur_ms, onset_ms=onset_ms))
+        push!(fixations, (aoi_idx = aoi_idx, dur_ms = dur_ms, onset_ms = onset_ms))
     end
 
     return fixations

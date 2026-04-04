@@ -54,7 +54,7 @@ function Base.show(io::IO, ::MIME"text/plain", edf::EDFFile)
         # Sample rate from recordings
         if nrow(edf.recordings) > 0 && hasproperty(edf.recordings, :sample_rate)
             sr = first(edf.recordings.sample_rate)
-            sr_str = string(round(sr; digits=2))
+            sr_str = string(round(sr; digits = 2))
             sr > 0 && print(io, " ($(sr_str) Hz")
             # Eye mode
             if hasproperty(edf.recordings, :eye)

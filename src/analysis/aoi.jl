@@ -78,11 +78,13 @@ function aoi_metrics(
             first_fix_time = NaN
             first_fix_dur = NaN
             fix_count = 0
-            if hasproperty(g, :in_fix) && hasproperty(g, :fix_gavx) && hasproperty(g, :fix_gavy)
+            if hasproperty(g, :in_fix) &&
+               hasproperty(g, :fix_gavx) &&
+               hasproperty(g, :fix_gavy)
                 in_fix = g.in_fix
-                onset_mask = in_fix .& .![false; in_fix[1:end-1]]
+                onset_mask = in_fix .& .![false; in_fix[1:(end-1)]]
                 valid_onsets = onset_mask .& .!isnan.(g.fix_gavx) .& .!isnan.(g.fix_gavy)
-                
+
                 fx = g.fix_gavx[valid_onsets]
                 fy = g.fix_gavy[valid_onsets]
                 fd = Float64.(g.fix_dur[valid_onsets])
@@ -118,7 +120,7 @@ function aoi_metrics(
 
                 in_aoi_fix = Bool[in_aoi(aoi, x, y) for (x, y) in zip(fx, fy)]
                 fix_count = count(in_aoi_fix)
-                
+
                 if fix_count > 0
                     first_idx = findfirst(in_aoi_fix)
                     first_fix_time = ft[first_idx]
@@ -142,7 +144,7 @@ function aoi_metrics(
                     first_fixation_duration_ms = isnan(first_fix_dur) ? missing :
                                                  round(first_fix_dur; digits = 1),
                     entry_count = entries,
-                )
+                ),
             )
         end
         return DataFrame(group_rows)

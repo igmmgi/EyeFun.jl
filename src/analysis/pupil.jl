@@ -21,9 +21,9 @@ interpolate_blinks!(df; margin_ms=100) # wider margin
 """
 function interpolate_blinks!(
     df::EyeData;
-    eye::Symbol=:auto,
-    margin_ms::Int=50,
-    method::Symbol=:linear,
+    eye::Symbol = :auto,
+    margin_ms::Int = 50,
+    method::Symbol = :linear,
 )
 
     if method ∉ (:linear, :cubic)
@@ -33,7 +33,7 @@ function interpolate_blinks!(
         error("No :in_blink column. Ensure your DataFrame includes blink annotations.")
     end
 
-    eye = _resolve_eye(df, eye; cols=:pupil)
+    eye = _resolve_eye(df, eye; cols = :pupil)
     pa_col = _eye_columns(eye).pa
 
     pa = collect(df.df[!, pa_col])
@@ -158,24 +158,26 @@ baseline_correct_pupil!(df; group_by=[:block, :trial])   # multi-block design
 """
 function baseline_correct_pupil!(
     df::EyeData;
-    eye::Symbol=:auto,
-    window::Tuple{Real,Real}=(-200, 0),
-    method::Symbol=:subtractive,
-    group_by=:trial,
+    eye::Symbol = :auto,
+    window::Tuple{Real,Real} = (-200, 0),
+    method::Symbol = :subtractive,
+    group_by = :trial,
 )
 
     if method ∉ (:subtractive, :percent, :zscore)
         error("Invalid method=:$method. Use :subtractive, :percent, or :zscore.")
     end
     if !hasproperty(df.df, :time_rel)
-        error("No :time_rel column. Ensure DataFrame includes relative time (e.g. using trial_time_zero).")
+        error(
+            "No :time_rel column. Ensure DataFrame includes relative time (e.g. using trial_time_zero).",
+        )
     end
 
-    eye = _resolve_eye(df, eye; cols=:pupil)
+    eye = _resolve_eye(df, eye; cols = :pupil)
     pa_col = _eye_columns(eye).pa
 
     group_cols = _resolve_group_cols(df, group_by)
-    grouped = groupby(df.df, group_cols; skipmissing=true)
+    grouped = groupby(df.df, group_cols; skipmissing = true)
 
     for g in grouped
         idxs = parentindices(g)[1]
@@ -215,8 +217,8 @@ end
 Apply a moving-average smoothing to the pupil signal. `window_ms` is the
 full width of the smoothing window in milliseconds. Modifies in-place.
 """
-function smooth_pupil!(df::EyeData; eye::Symbol=:auto, window_ms::Int=50)
-    eye = _resolve_eye(df, eye; cols=:pupil)
+function smooth_pupil!(df::EyeData; eye::Symbol = :auto, window_ms::Int = 50)
+    eye = _resolve_eye(df, eye; cols = :pupil)
     pa_col = _eye_columns(eye).pa
 
     pa = collect(df.df[!, pa_col])
@@ -273,17 +275,17 @@ Returns a DataFrame with columns:
 """
 function pupil_peak_metrics(
     df::EyeData;
-    selection=nothing,
-    eye::Symbol=:auto,
-    group_by=:trial,
-    time_window::Union{Nothing,Tuple}=nothing,
+    selection = nothing,
+    eye::Symbol = :auto,
+    group_by = :trial,
+    time_window::Union{Nothing,Tuple} = nothing,
 )
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
     grouped, group_cols = _valid_groups(samples, group_by)
 
-    eye = _resolve_eye(samples, eye; cols=:pupil)
+    eye = _resolve_eye(samples, eye; cols = :pupil)
     pa_col = _eye_columns(eye).pa
 
     res = combine(grouped) do g
@@ -293,7 +295,7 @@ function pupil_peak_metrics(
         # Apply time window if provided
         t_start = 0.0
         valid = @. !isnan(tr) && !isnan(pa)
-        
+
         if !isnothing(time_window)
             tw_start, tw_end = _resolve_time_window(g, time_window)
             t_start = Float64(tw_start)
@@ -306,30 +308,33 @@ function pupil_peak_metrics(
 
         if isempty(v_pa)
             return (;
-                mean_pupil=NaN,
-                max_pupil=NaN,
-                min_pupil=NaN,
-                max_pupil_time=NaN,
-                time_to_peak=NaN,
+                mean_pupil = NaN,
+                max_pupil = NaN,
+                min_pupil = NaN,
+                max_pupil_time = NaN,
+                time_to_peak = NaN,
             )
         end
 
         mean_val = mean(v_pa)
         min_val = minimum(v_pa)
-        
+
         max_idx = argmax(v_pa)
         max_val = v_pa[max_idx]
         max_time = v_tr[max_idx]
 
         return (;
-            mean_pupil=round(mean_val; digits=4),
-            max_pupil=round(max_val; digits=4),
-            min_pupil=round(min_val; digits=4),
-            max_pupil_time=round(max_time; digits=1),
-            time_to_peak=round(max_time - t_start; digits=1),
+            mean_pupil = round(mean_val; digits = 4),
+            max_pupil = round(max_val; digits = 4),
+            min_pupil = round(min_val; digits = 4),
+            max_pupil_time = round(max_time; digits = 1),
+            time_to_peak = round(max_time - t_start; digits = 1),
         )
     end
 
-    expected_cols = vcat(group_cols, [:mean_pupil, :max_pupil, :min_pupil, :max_pupil_time, :time_to_peak])
+    expected_cols = vcat(
+        group_cols,
+        [:mean_pupil, :max_pupil, :min_pupil, :max_pupil_time, :time_to_peak],
+    )
     return select!(res, expected_cols)
 end

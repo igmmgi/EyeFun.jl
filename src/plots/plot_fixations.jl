@@ -29,7 +29,8 @@ function plot_fixations(
     )
 
     if !isnothing(split_by)
-        hasproperty(samples, split_by) || error("Column :$split_by not found for splitting.")
+        hasproperty(samples, split_by) ||
+            error("Column :$split_by not found for splitting.")
         groups = filter(r -> !ismissing(r[split_by]), samples)
         split_vals = sort(unique(groups[!, split_by]))
     else
@@ -81,22 +82,22 @@ function plot_fixations(
             fix_gx = sub.fix_gavx
             fix_gy = sub.fix_gavy
             fix_dur = sub.fix_dur
-            
-            for i in 1:nrow(sub)
+
+            for i = 1:nrow(sub)
                 in_fix[i] || continue
                 # Detect fixation onset: first sample of a new fixation run
                 i > 1 && in_fix[i-1] && continue
                 fix_x, fix_y = Float64(fix_gx[i]), Float64(fix_gy[i])
                 isnan(fix_x) && continue
                 isnan(fix_y) && continue
-                
+
                 dur = Float64(fix_dur[i])
                 push!(fx, fix_x)
                 push!(fy, fix_y)
                 push!(fdur, dur)
             end
         end
-        
+
         if length(fx) > 0
 
             # Scanpath line connecting fixations

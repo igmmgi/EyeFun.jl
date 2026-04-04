@@ -334,12 +334,19 @@ function write_chronological_data(
             t_et = row.type
 
             # INPUT events
-            if include_events && t_et == EVENT_INPUTEVENT && row.input > 0 && in_msg_range(t) && valid_ts(t)
+            if include_events &&
+               t_et == EVENT_INPUTEVENT &&
+               row.input > 0 &&
+               in_msg_range(t) &&
+               valid_ts(t)
                 push!(ev_lines, (t, 0, "INPUT\t$(t)\t$(row.input)"))
             end
 
             # MSG events
-            if include_messages && t_et == EVENT_MESSAGEEVENT && in_msg_range(t) && valid_ts(t)
+            if include_messages &&
+               t_et == EVENT_MESSAGEEVENT &&
+               in_msg_range(t) &&
+               valid_ts(t)
                 clean = replace(row.message, '\0' => "")
                 if all(c -> isprint(c) || c == '\n' || c == '\t', clean)
                     lines = split(clean, '\n')

@@ -24,12 +24,12 @@ binned = time_bin(df; bin_ms=100, measure=:pupil, selection=(trial=1:10,))
 """
 function time_bin(
     df::EyeData;
-    selection=nothing,
-    bin_ms::Int=50,
-    measure::Symbol=:pupil,
-    eye::Symbol=:auto,
-    group_by=:trial,
-    time_window::Union{Nothing,Tuple}=nothing,
+    selection = nothing,
+    bin_ms::Int = 50,
+    measure::Symbol = :pupil,
+    eye::Symbol = :auto,
+    group_by = :trial,
+    time_window::Union{Nothing,Tuple} = nothing,
 )
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
@@ -69,9 +69,9 @@ function time_bin(
         # Anchor bins using robust integer division based on 0
         bin_centers = @. (fld(t_valid, bin_ms) * bin_ms) + (bin_ms / 2.0)
 
-        sub_df = DataFrame(time_bin=bin_centers, value=v_valid; copycols=false)
+        sub_df = DataFrame(time_bin = bin_centers, value = v_valid; copycols = false)
         if nrow(sub_df) == 0
-            return DataFrame(time_bin=Float64[], value=Float64[], n=Int[])
+            return DataFrame(time_bin = Float64[], value = Float64[], n = Int[])
         end
         return combine(groupby(sub_df, :time_bin), :value => mean => :value, nrow => :n)
     end
@@ -103,11 +103,11 @@ pol = proportion_of_looks(df, aois; bin_ms=20, selection=(trial=1:20,))
 function proportion_of_looks(
     df::EyeData,
     aois::Vector{<:AOI};
-    selection=nothing,
-    bin_ms::Int=50,
-    eye::Symbol=:auto,
-    group_by=:trial,
-    time_window::Union{Nothing,Tuple}=nothing,
+    selection = nothing,
+    bin_ms::Int = 50,
+    eye::Symbol = :auto,
+    group_by = :trial,
+    time_window::Union{Nothing,Tuple} = nothing,
 )
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
@@ -154,14 +154,14 @@ function proportion_of_looks(
             end
         end
 
-        sub_df = DataFrame(time_bin=bin_centers; copycols=false)
+        sub_df = DataFrame(time_bin = bin_centers; copycols = false)
         for ai = 1:n_aois
             sub_df[!, aoi_syms[ai]] = (aoi_idx .== ai)
         end
         sub_df[!, :outside] = (aoi_idx .== 0)
 
         if nrow(sub_df) == 0
-            empty_res = DataFrame(time_bin=Float64[])
+            empty_res = DataFrame(time_bin = Float64[])
             for sym in aoi_syms
                 empty_res[!, sym] = Float64[]
             end
@@ -170,7 +170,10 @@ function proportion_of_looks(
         end
 
         # Computing mean over booleans yields exact grouped proportions natively
-        return combine(groupby(sub_df, :time_bin), [n => mean => n for n in propertynames(sub_df) if n != :time_bin])
+        return combine(
+            groupby(sub_df, :time_bin),
+            [n => mean => n for n in propertynames(sub_df) if n != :time_bin],
+        )
     end
 
     expected_cols = vcat(group_cols, [:time_bin], aoi_syms, [:outside])

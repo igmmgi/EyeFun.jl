@@ -7,12 +7,18 @@ Plot pupil size over time. Shades blink periods in gray.
 
 Uses `time_rel` for X axis if available, otherwise absolute time offset.
 """
-function plot_pupil(df::EyeData; selection = nothing, eye::Symbol = :auto, split_by = nothing)
+function plot_pupil(
+    df::EyeData;
+    selection = nothing,
+    eye::Symbol = :auto,
+    split_by = nothing,
+)
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
     if !isnothing(split_by)
-        hasproperty(samples, split_by) || error("Column :$split_by not found for splitting.")
+        hasproperty(samples, split_by) ||
+            error("Column :$split_by not found for splitting.")
         groups = filter(r -> !ismissing(r[split_by]), samples)
         split_vals = sort(unique(groups[!, split_by]))
     else

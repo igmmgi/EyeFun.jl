@@ -4,7 +4,11 @@
 Read a single eye-tracking file (e.g. .edf, .idf) and write it as ASCII text.
 If `out_path` is not provided, it saves the file with an `_exported.asc` or `.txt` suffix next to the original.
 """
-function write_et_ascii(path::AbstractString, out_path::Union{String,Nothing}=nothing; kwargs...)
+function write_et_ascii(
+    path::AbstractString,
+    out_path::Union{String,Nothing} = nothing;
+    kwargs...,
+)
     isfile(path) || isdir(path) || error("Path not found: $path")
 
     # If it's a directory, delegate to the directory dispatcher
@@ -21,7 +25,9 @@ function write_et_ascii(path::AbstractString, out_path::Union{String,Nothing}=no
     elseif fmt == SMIFile
         EyeFun.read_smi(path; kwargs...)
     elseif fmt == TobiiFile
-        error("Formatting to ASCII for Tobii files (.tsv) is strictly redundant and thus not supported.")
+        error(
+            "Formatting to ASCII for Tobii files (.tsv) is strictly redundant and thus not supported.",
+        )
     else
         error("Formatting to ASCII for $fmt is not supported")
     end
@@ -50,8 +56,8 @@ end
 
 function _write_et_ascii_dir(
     dir::AbstractString;
-    ext::Union{String,Nothing}=nothing,
-    recursive::Bool=false,
+    ext::Union{String,Nothing} = nothing,
+    recursive::Bool = false,
     kwargs...,
 )
     isdir(dir) || error("Not a directory: $dir")

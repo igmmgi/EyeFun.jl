@@ -15,7 +15,9 @@ function detect_format(path::AbstractString)
     elseif ext == ".tsv"
         return TobiiFile
     else
-        error("Unsupported eye-tracking data format for extension: `\$ext`. Please use a supported format (.edf, .asc, .idf, .tsv)")
+        error(
+            "Unsupported eye-tracking data format for extension: `\$ext`. Please use a supported format (.edf, .asc, .idf, .tsv)",
+        )
     end
 end
 
@@ -24,8 +26,16 @@ end
 
 Internal format-specific dispatchers returning `EyeData`.
 """
-function read_et_data(::Type{EDFFile}, path::AbstractString; trial_time_zero=nothing, kwargs...)
-    return create_eyefun_data(EyeFun.read_eyelink(path; kwargs...); trial_time_zero=trial_time_zero)
+function read_et_data(
+    ::Type{EDFFile},
+    path::AbstractString;
+    trial_time_zero = nothing,
+    kwargs...,
+)
+    return create_eyefun_data(
+        EyeFun.read_eyelink(path; kwargs...);
+        trial_time_zero = trial_time_zero,
+    )
 end
 
 function read_et_data(::Type{SMIFile}, path::AbstractString; kwargs...)
@@ -67,7 +77,7 @@ Format is auto-detected from the first file.
 """
 function read_et_data(
     files::AbstractVector{<:AbstractString};
-    participant_labels=nothing,
+    participant_labels = nothing,
     kwargs...,
 )
     length(files) == 0 && error("No files provided.")
@@ -96,24 +106,26 @@ function read_et_data(
         @warn "Files have different sample rates: $(rates). Using $(eds[1].sample_rate) Hz from first file."
     end
 
-    combined = reduce(vcat, [ed.df for ed in eds]; cols=:union)
+    combined = reduce(vcat, [ed.df for ed in eds]; cols = :union)
     return EyeData(
         combined;
-        source=eds[1].source,
-        sample_rate=eds[1].sample_rate,
-        screen_res=eds[1].screen_res,
-        screen_width_cm=eds[1].screen_width_cm,
-        viewing_distance_cm=eds[1].viewing_distance_cm,
+        source = eds[1].source,
+        sample_rate = eds[1].sample_rate,
+        screen_res = eds[1].screen_res,
+        screen_width_cm = eds[1].screen_width_cm,
+        viewing_distance_cm = eds[1].viewing_distance_cm,
     )
 end
 
 function _read_et_data_dir(
     dir::AbstractString;
-    ext::Union{String,Nothing}=nothing,
-    recursive::Bool=false,
+    ext::Union{String,Nothing} = nothing,
+    recursive::Bool = false,
     kwargs...,
 )
-    isnothing(ext) && error("When providing a directory path to `read_et_data`, you must specify the file extension via the `ext` keyword argument (e.g., ext=\".edf\").")
+    isnothing(ext) && error(
+        "When providing a directory path to `read_et_data`, you must specify the file extension via the `ext` keyword argument (e.g., ext=\".edf\").",
+    )
 
     ext_lower = lowercase(ext)
     files = if recursive

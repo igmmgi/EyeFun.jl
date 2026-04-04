@@ -19,7 +19,8 @@ function plot_gaze(
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
     if !isnothing(split_by)
-        hasproperty(samples, split_by) || error("Column :$split_by not found for splitting.")
+        hasproperty(samples, split_by) ||
+            error("Column :$split_by not found for splitting.")
         groups = filter(r -> !ismissing(r[split_by]), samples)
         split_vals = sort(unique(groups[!, split_by]))
     else

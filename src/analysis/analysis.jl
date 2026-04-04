@@ -5,7 +5,7 @@
 Resolve `:auto` eye selection to `:left` or `:right`. `cols` determines which
 columns to check: `:gaze` checks `gxL/gxR`, `:pupil` checks `paL/paR`.
 """
-function _resolve_eye(dat, eye::Symbol; cols::Symbol=:gaze)
+function _resolve_eye(dat, eye::Symbol; cols::Symbol = :gaze)
 
     if eye ∉ (:left, :L, :l, :right, :R, :r, :auto)
         error("Invalid eye=:$eye. Use :left, :right, :L, :R, or :auto.")
@@ -19,7 +19,8 @@ function _resolve_eye(dat, eye::Symbol; cols::Symbol=:gaze)
     eye in (:right, :R, :r) && return :right
 
     # From here on, eye MUST be :auto. We try to infer the active eye from the data.
-    has_valid(col) = hasproperty(df, col) && any(v -> !ismissing(v) && !isnan(v), df[!, col])
+    has_valid(col) =
+        hasproperty(df, col) && any(v -> !ismissing(v) && !isnan(v), df[!, col])
 
     if cols == :pupil
         has_valid(:paL) && return :left
@@ -38,7 +39,8 @@ end
 
 Return the column names for gaze X, gaze Y, and pupil area for the given eye.
 """
-_eye_columns(eye::Symbol) = eye == :left ? (gx=:gxL, gy=:gyL, pa=:paL) : (gx=:gxR, gy=:gyR, pa=:paR)
+_eye_columns(eye::Symbol) =
+    eye == :left ? (gx = :gxL, gy = :gyL, pa = :paL) : (gx = :gxR, gy = :gyR, pa = :paR)
 
 """
     _resolve_group_cols(df, group_by) -> Vector{Symbol}
@@ -49,7 +51,8 @@ Accepts `:trial`, `[:block, :trial]`, or any Symbol/Vector{Symbol}.
 function _resolve_group_cols(dat, group_by)
     df = dat isa EyeData ? dat.df : dat
     cols = group_by isa Symbol ? [group_by] : collect(Symbol, group_by)
-    issubset(cols, propertynames(df)) || error("Grouping columns $cols not found in DataFrame.")
+    issubset(cols, propertynames(df)) ||
+        error("Grouping columns $cols not found in DataFrame.")
     return cols
 end
 """
@@ -78,7 +81,7 @@ function _resolve_time_window(g::AbstractDataFrame, time_window)
     if time_window isa Tuple && length(time_window) == 2
         t_start, t_end = time_window
         start_val = t_start isa Symbol ? Float64(g[1, t_start]) : Float64(t_start)
-        end_val   = t_end isa Symbol ? Float64(g[1, t_end]) : Float64(t_end)
+        end_val = t_end isa Symbol ? Float64(g[1, t_end]) : Float64(t_end)
         return (start_val, end_val)
     end
     error("time_window must be nothing, or a tuple of two numbers or column symbols.")
@@ -126,7 +129,7 @@ filter(r -> r.tracking_loss_pct > 50, dq)  # find bad trials
 dq = data_quality(df; group_by=[:block, :trial])
 ```
 """
-function data_quality(df::EyeData; eye::Symbol=:auto, group_by=:trial)
+function data_quality(df::EyeData; eye::Symbol = :auto, group_by = :trial)
     eye = _resolve_eye(df, eye)
     ecols = _eye_columns(eye)
     gx_col, pa_col = ecols.gx, ecols.pa
@@ -154,13 +157,13 @@ function data_quality(df::EyeData; eye::Symbol=:auto, group_by=:trial)
         mean_pa = isempty(pa_valid) ? NaN : mean(pa_valid)
 
         (;
-            total_samples=n,
-            valid_samples=valid,
-            tracking_loss_pct=round(loss_pct; digits=1),
-            blink_count=blink_n,
-            blink_rate=round(blink_rate; digits=2),
-            mean_pupil=round(mean_pa; digits=1),
-            duration_ms=round(Int, dur_ms),
+            total_samples = n,
+            valid_samples = valid,
+            tracking_loss_pct = round(loss_pct; digits = 1),
+            blink_count = blink_n,
+            blink_rate = round(blink_rate; digits = 2),
+            mean_pupil = round(mean_pa; digits = 1),
+            duration_ms = round(Int, dur_ms),
         )
     end
 end
@@ -191,7 +194,7 @@ group_summary(df; by=:type)
 group_summary(df; group_by=[:block, :trial], by=[:participant, :type])
 ```
 """
-function group_summary(df::EyeData; group_by=:trial, by=nothing, eye::Symbol=:auto)
+function group_summary(df::EyeData; group_by = :trial, by = nothing, eye::Symbol = :auto)
     eye = _resolve_eye(df, eye)
     ecols = _eye_columns(eye)
     gx_col, pa_col = ecols.gx, ecols.pa
@@ -209,14 +212,14 @@ function group_summary(df::EyeData; group_by=:trial, by=nothing, eye::Symbol=:au
         # Tracking loss
         n_samples = nrow(g)
         valid_n = count(!isnan, gx)
-        loss_pct = round((n_samples - valid_n) / n_samples * 100.0; digits=1)
+        loss_pct = round((n_samples - valid_n) / n_samples * 100.0; digits = 1)
 
         # Fixation stats using vectorized onset detection
         n_fix = 0
         fix_durs = Float64[]
         if hasproperty(g, :in_fix) && hasproperty(g, :fix_gavx)
             in_fix = g.in_fix
-            onset_mask = in_fix .& .![false; in_fix[1:end-1]]
+            onset_mask = in_fix .& .![false; in_fix[1:(end-1)]]
             valid_onsets = onset_mask .& .!isnan.(g.fix_gavx)
 
             n_fix = count(valid_onsets)
@@ -229,7 +232,7 @@ function group_summary(df::EyeData; group_by=:trial, by=nothing, eye::Symbol=:au
         sacc_pvels = Float64[]
         if hasproperty(g, :in_sacc) && hasproperty(g, :sacc_pvel)
             in_sacc = g.in_sacc
-            onset_mask = in_sacc .& .![false; in_sacc[1:end-1]]
+            onset_mask = in_sacc .& .![false; in_sacc[1:(end-1)]]
             valid_onsets = onset_mask .& .!isnan.(g.sacc_pvel)
 
             n_sacc = count(valid_onsets)
@@ -242,18 +245,20 @@ function group_summary(df::EyeData; group_by=:trial, by=nothing, eye::Symbol=:au
 
         # Mean pupil
         pa_valid = filter(!isnan, pa)
-        mean_pa = isempty(pa_valid) ? NaN : round(mean(pa_valid); digits=1)
+        mean_pa = isempty(pa_valid) ? NaN : round(mean(pa_valid); digits = 1)
 
         (;
-            n_fixations=n_fix,
-            mean_fix_dur=isempty(fix_durs) ? NaN : round(mean(fix_durs); digits=1),
-            median_fix_dur=isempty(fix_durs) ? NaN : round(median(fix_durs); digits=1),
-            n_saccades=n_sacc,
-            mean_sacc_ampl=isempty(sacc_ampls) ? NaN : round(mean(sacc_ampls); digits=2),
-            mean_sacc_pvel=isempty(sacc_pvels) ? NaN : round(mean(sacc_pvels); digits=1),
-            n_blinks=n_blinks,
-            mean_pupil=mean_pa,
-            tracking_loss_pct=loss_pct,
+            n_fixations = n_fix,
+            mean_fix_dur = isempty(fix_durs) ? NaN : round(mean(fix_durs); digits = 1),
+            median_fix_dur = isempty(fix_durs) ? NaN : round(median(fix_durs); digits = 1),
+            n_saccades = n_sacc,
+            mean_sacc_ampl = isempty(sacc_ampls) ? NaN :
+                             round(mean(sacc_ampls); digits = 2),
+            mean_sacc_pvel = isempty(sacc_pvels) ? NaN :
+                             round(mean(sacc_pvels); digits = 1),
+            n_blinks = n_blinks,
+            mean_pupil = mean_pa,
+            tracking_loss_pct = loss_pct,
         )
     end
 end

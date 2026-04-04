@@ -35,7 +35,7 @@
     end
 
     @testset "messages summary" begin
-        summary = messages(ed; summary=true)
+        summary = messages(ed; summary = true)
         @test summary isa DataFrame
         @test nrow(summary) > 0
         @test hasproperty(summary, :message)

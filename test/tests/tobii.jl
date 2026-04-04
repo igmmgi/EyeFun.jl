@@ -4,7 +4,7 @@
         @test raw isa EyeFun.TobiiFile
         @test raw.sample_rate ≈ 500.0
         @test raw.subject == "P1"
-        
+
         # Defaults
         @test raw.screen_res == (1920, 1080)
         @test raw.screen_width_cm == 53.0
@@ -21,9 +21,9 @@
         @test hasproperty(raw.samples, :participant)
         @test hasproperty(raw.samples, :message)
         @test !hasproperty(raw.samples, :in_fix)    # not yet detected
-        
+
         @test any(!isnan, raw.samples.gxL)
-        
+
         # Events
         @test hasproperty(raw.events, :type)
         @test hasproperty(raw.events, :message)

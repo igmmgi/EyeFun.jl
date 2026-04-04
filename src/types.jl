@@ -94,14 +94,14 @@ end
 # ── Show ───────────────────────────────────────────────────────────────────── #
 
 function Base.show(io::IO, ed::EyeData)
-    sr = round(ed.sample_rate; digits=2)
+    sr = round(ed.sample_rate; digits = 2)
     w, h = ed.screen_res
     print(io, "EyeData($(ed.source), $(sr) Hz, $(w)×$(h))")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", ed::EyeData)
     df = ed.df
-    sr = round(ed.sample_rate; digits=2)
+    sr = round(ed.sample_rate; digits = 2)
     w, h = ed.screen_res
     println(io, "EyeData ($(ed.source), $(sr) Hz, $(w)×$(h))")
 
@@ -172,10 +172,11 @@ struct RectAOI <: AOI
     height::Float64
     color::Any
 end
-RectAOI(name, cx, cy, width, height; color=:grey) = RectAOI(name, cx, cy, width, height, color)
+RectAOI(name, cx, cy, width, height; color = :grey) =
+    RectAOI(name, cx, cy, width, height, color)
 
-in_aoi(aoi::RectAOI, x::Real, y::Real) = 
-    aoi.cx - aoi.width/2 <= x <= aoi.cx + aoi.width/2 && 
+in_aoi(aoi::RectAOI, x::Real, y::Real) =
+    aoi.cx - aoi.width/2 <= x <= aoi.cx + aoi.width/2 &&
     aoi.cy - aoi.height/2 <= y <= aoi.cy + aoi.height/2
 
 # ── CircleAOI ──────────────────────────────────────────────────────────────── #
@@ -197,7 +198,7 @@ struct CircleAOI <: AOI
     radius::Float64
     color::Any
 end
-CircleAOI(name, cx, cy, radius; color=:grey) = CircleAOI(name, cx, cy, radius, color)
+CircleAOI(name, cx, cy, radius; color = :grey) = CircleAOI(name, cx, cy, radius, color)
 
 in_aoi(aoi::CircleAOI, x::Real, y::Real) = (x - aoi.cx)^2 + (y - aoi.cy)^2 <= aoi.radius^2
 
@@ -221,7 +222,7 @@ struct EllipseAOI <: AOI
     ry::Float64
     color::Any
 end
-EllipseAOI(name, cx, cy, rx, ry; color=:grey) = EllipseAOI(name, cx, cy, rx, ry, color)
+EllipseAOI(name, cx, cy, rx, ry; color = :grey) = EllipseAOI(name, cx, cy, rx, ry, color)
 
 in_aoi(aoi::EllipseAOI, x::Real, y::Real) =
     ((x - aoi.cx) / aoi.rx)^2 + ((y - aoi.cy) / aoi.ry)^2 <= 1.0
@@ -244,7 +245,7 @@ struct PolygonAOI <: AOI
     vertices::Vector{Tuple{Float64,Float64}}
     color::Any
 end
-PolygonAOI(name, vertices; color=:grey) = PolygonAOI(name, vertices, color)
+PolygonAOI(name, vertices; color = :grey) = PolygonAOI(name, vertices, color)
 
 """Point-in-polygon using the ray casting algorithm."""
 function in_aoi(aoi::PolygonAOI, x::Real, y::Real)
@@ -311,7 +312,10 @@ function fixations(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
             end
             push!(sttime, times[i])
             push!(entime, times[j-1])
-            push!(dur, has_dur ? df[i, col(:fix_dur)] : round(Int32, times[j-1] - times[i] + 1))
+            push!(
+                dur,
+                has_dur ? df[i, col(:fix_dur)] : round(Int32, times[j-1] - times[i] + 1),
+            )
             push!(gavx, has_gavx ? df[i, col(:fix_gavx)] : NaN)
             push!(gavy, has_gavy ? df[i, col(:fix_gavy)] : NaN)
             push!(ava, has_ava ? df[i, col(:fix_ava)] : NaN)
@@ -365,7 +369,10 @@ function saccades(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
             end
             push!(sttime, times[i])
             push!(entime, times[j-1])
-            push!(dur, has_dur ? df[i, col(:sacc_dur)] : round(Int32, times[j-1] - times[i] + 1))
+            push!(
+                dur,
+                has_dur ? df[i, col(:sacc_dur)] : round(Int32, times[j-1] - times[i] + 1),
+            )
             push!(gstx, has_gstx ? df[i, col(:sacc_gstx)] : NaN)
             push!(gsty, has_gsty ? df[i, col(:sacc_gsty)] : NaN)
             push!(genx, has_genx ? df[i, col(:sacc_genx)] : NaN)
@@ -417,7 +424,10 @@ function blinks(ed::EyeData; prefix::Union{Nothing,Symbol} = nothing)
             end
             push!(sttime, times[i])
             push!(entime, times[j-1])
-            push!(dur, has_dur ? df[i, col(:blink_dur)] : round(Int32, times[j-1] - times[i] + 1))
+            push!(
+                dur,
+                has_dur ? df[i, col(:blink_dur)] : round(Int32, times[j-1] - times[i] + 1),
+            )
             i = j
         else
             i += 1

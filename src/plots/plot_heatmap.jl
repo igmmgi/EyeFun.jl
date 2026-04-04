@@ -29,9 +29,9 @@ function _build_heatmap_data(
             in_fix = samples.in_fix
             fix_gx = samples.fix_gavx
             fix_gy = samples.fix_gavy
-            
+
             ux, uy = Float64[], Float64[]
-            for i in 1:nrow(samples)
+            for i = 1:nrow(samples)
                 in_fix[i] || continue
                 # Detect fixation onset: first sample of a new fixation run
                 i > 1 && in_fix[i-1] && continue
@@ -42,7 +42,7 @@ function _build_heatmap_data(
                 push!(ux, fx_val)
                 push!(uy, fy_val)
             end
-            
+
             if !isempty(ux)
                 x_c, y_c, vals = _bin_samples(ux, uy, xlims, ylims, bins)
                 return x_c, y_c, vals, eye_label, "Fixation count"
@@ -112,7 +112,8 @@ function plot_heatmap(
 
     # ── Faceted multi-panel heatmap ──
     if !isnothing(split_by)
-        hasproperty(samples, split_by) || error("Column :$split_by not found for splitting.")
+        hasproperty(samples, split_by) ||
+            error("Column :$split_by not found for splitting.")
         groups = filter(r -> !ismissing(r[split_by]), samples)
         split_vals = sort(unique(groups[!, split_by]))
         n_panels = length(split_vals)

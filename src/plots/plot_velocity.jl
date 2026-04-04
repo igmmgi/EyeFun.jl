@@ -14,7 +14,8 @@ function plot_velocity(df::EyeData; selection = nothing, split_by = nothing)
     )
 
     if !isnothing(split_by)
-        hasproperty(samples, split_by) || error("Column :$split_by not found for splitting.")
+        hasproperty(samples, split_by) ||
+            error("Column :$split_by not found for splitting.")
         groups = filter(r -> !ismissing(r[split_by]), samples)
         split_vals = sort(unique(groups[!, split_by]))
     else
@@ -41,7 +42,7 @@ function plot_velocity(df::EyeData; selection = nothing, split_by = nothing)
             hasproperty(sub_split, :time_rel) &&
             !all(ismissing, sub_split.time_rel)
 
-        for i in 1:nrow(sub_split)
+        for i = 1:nrow(sub_split)
             sub_split.in_sacc[i] || continue
             # Detect saccade onset: first sample of a new saccade run
             i > 1 && sub_split.in_sacc[i-1] && continue

@@ -28,11 +28,20 @@ mutable struct TobiiFile <: EyeFile
     subject::String
     function TobiiFile(
         filename::String,
-        screen_res::Tuple{Int,Int}=(1920, 1080),
-        screen_width_cm::Real=53.0,
-        viewing_distance_cm::Real=60.0
+        screen_res::Tuple{Int,Int} = (1920, 1080),
+        screen_width_cm::Real = 53.0,
+        viewing_distance_cm::Real = 60.0,
     )
-        new(filename, DataFrame(), DataFrame(), 0.0, screen_res, Float64(screen_width_cm), Float64(viewing_distance_cm), "")
+        new(
+            filename,
+            DataFrame(),
+            DataFrame(),
+            0.0,
+            screen_res,
+            Float64(screen_width_cm),
+            Float64(viewing_distance_cm),
+            "",
+        )
     end
 end
 
@@ -53,9 +62,9 @@ function Base.show(io::IO, ::MIME"text/plain", tob::TobiiFile)
         # Eye presence
         has_left = hasproperty(tob.samples, :gxL) && any(!isnan, tob.samples.gxL)
         has_right = hasproperty(tob.samples, :gxR) && any(!isnan, tob.samples.gxR)
-        eye_str = has_left && has_right ? "binocular" :
-                  has_left ? "left eye" :
-                  has_right ? "right eye" : ""
+        eye_str =
+            has_left && has_right ? "binocular" :
+            has_left ? "left eye" : has_right ? "right eye" : ""
         !isempty(eye_str) && print(io, ", $eye_str")
         sr > 0 && print(io, ")")
         println(io)
@@ -104,10 +113,10 @@ function create_eyefun_data(tob::TobiiFile)
 
     return EyeData(
         df;
-        source=:tobii,
-        sample_rate=tob.sample_rate,
-        screen_res=tob.screen_res,
-        screen_width_cm=tob.screen_width_cm,
-        viewing_distance_cm=tob.viewing_distance_cm,
+        source = :tobii,
+        sample_rate = tob.sample_rate,
+        screen_res = tob.screen_res,
+        screen_width_cm = tob.screen_width_cm,
+        viewing_distance_cm = tob.viewing_distance_cm,
     )
 end

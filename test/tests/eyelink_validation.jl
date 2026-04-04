@@ -155,21 +155,21 @@ function compare_asc_files(ref_path::String, jul_path::String)
     jul_msgs = get(jul_groups, :msg, String[])
 
     return (
-        ref_counts=ref_counts,
-        jul_counts=jul_counts,
-        n_ref_samples=length(ref_samples),
-        n_jul_samples=length(jul_samples),
-        sample_mismatches=sample_mismatches,
-        n_compared=n_compare,
-        n_efix=n_efix,
-        efix_value_matches=efix_value_matches,
-        n_esacc=n_esacc,
-        esacc_gaze_matches=esacc_gaze_matches,
-        esacc_ampl_matches=esacc_ampl_matches,
-        n_eblink=n_eblink,
-        eblink_matches=eblink_matches,
-        n_ref_msgs=length(ref_msgs),
-        n_jul_msgs=length(jul_msgs),
+        ref_counts = ref_counts,
+        jul_counts = jul_counts,
+        n_ref_samples = length(ref_samples),
+        n_jul_samples = length(jul_samples),
+        sample_mismatches = sample_mismatches,
+        n_compared = n_compare,
+        n_efix = n_efix,
+        efix_value_matches = efix_value_matches,
+        n_esacc = n_esacc,
+        esacc_gaze_matches = esacc_gaze_matches,
+        esacc_ampl_matches = esacc_ampl_matches,
+        n_eblink = n_eblink,
+        eblink_matches = eblink_matches,
+        n_ref_msgs = length(ref_msgs),
+        n_jul_msgs = length(jul_msgs),
     )
 end
 
@@ -200,8 +200,11 @@ nrow_or(d::Dict, k::Symbol, default::Int) = get(d, k, default)
             @testset "Event line counts" begin
                 efix_tol = is_mono ? 0 : 5
                 esacc_tol = is_mono ? 0 : 5
-                @test abs(get(cmp.ref_counts, :efix, 0) - get(cmp.jul_counts, :efix, 0)) <= efix_tol
-                @test abs(get(cmp.ref_counts, :esacc, 0) - get(cmp.jul_counts, :esacc, 0)) <= esacc_tol
+                @test abs(get(cmp.ref_counts, :efix, 0) - get(cmp.jul_counts, :efix, 0)) <=
+                      efix_tol
+                @test abs(
+                    get(cmp.ref_counts, :esacc, 0) - get(cmp.jul_counts, :esacc, 0),
+                ) <= esacc_tol
                 @test abs(cmp.n_ref_msgs - cmp.n_jul_msgs) <= 10
             end
 

@@ -16,7 +16,7 @@
         @test hasproperty(raw.samples, :participant)
         @test hasproperty(raw.samples, :message)
         @test !hasproperty(raw.samples, :in_fix)    # not yet detected
-        
+
         # The test files are uncalibrated mock recordings: 0.0 is successfully cast to NaN
         @test all(isnan, raw.samples.gxL)
         @test all(==("pp23671"), raw.samples.participant)
@@ -25,7 +25,7 @@
     @testset "create_eyefun_data (txt) — returns EyeData with events" begin
         raw = Main.TEST_SMI_TXT
         # Create fresh DataFrame
-        ed  = EyeFun.create_eyefun_data(deepcopy(raw))
+        ed = EyeFun.create_eyefun_data(deepcopy(raw))
 
         @test ed isa EyeData
         @test ed.source == :smi
@@ -107,20 +107,24 @@
         try
             write_et_ascii(raw, out)
 
-            begaze   = filter(l -> !startswith(l, "##") && !startswith(l, "Time"), readlines(ref_txt_path))
-            exported = filter(l -> !startswith(l, "##") && !startswith(l, "Time"), readlines(out))
+            begaze = filter(
+                l -> !startswith(l, "##") && !startswith(l, "Time"),
+                readlines(ref_txt_path),
+            )
+            exported =
+                filter(l -> !startswith(l, "##") && !startswith(l, "Time"), readlines(out))
 
             total = min(length(begaze), length(exported))
             # Allow at most 1 row difference (trailing sub-record edge case)
             @test abs(length(begaze) - length(exported)) <= 1
 
             mismatches = 0
-            for i in 1:total
+            for i = 1:total
                 bg_parts = split(begaze[i], '\t')
                 ex_parts = split(exported[i], '\t')
 
                 # Skip Time (1), Type (2), Trial (3), col 15 (Frame/Aux)
-                for j in 4:length(bg_parts)-1
+                for j = 4:(length(bg_parts)-1)
                     j == 15 && continue
                     j > length(ex_parts) && continue
 
@@ -167,4 +171,3 @@
         end
     end
 end
-

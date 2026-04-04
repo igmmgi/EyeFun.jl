@@ -4,6 +4,8 @@ layout: home
 hero:
   name: EyeFun.jl
   text: Eye-tracking analysis in Julia
+  image:
+    src: /EyeFunLogo.png
   actions:
     - theme: alt
       text: Get Started

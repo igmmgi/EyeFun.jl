@@ -34,10 +34,10 @@ df = prepare_analysis_data(df; measures=[:pupil, :gaze_x], selection=(trial=1:20
 """
 function prepare_analysis_data(
     df::EyeData;
-    selection=nothing,
-    eye::Symbol=:auto,
-    group_by=:trial,
-    measures::Vector{Symbol}=[:pupil],
+    selection = nothing,
+    eye::Symbol = :auto,
+    group_by = :trial,
+    measures::Vector{Symbol} = [:pupil],
 )
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
@@ -48,14 +48,16 @@ function prepare_analysis_data(
     ecols = _eye_columns(eye)
 
     # Pre-resolve measure columns
-    measure_map = (pupil=ecols.pa, gaze_x=ecols.gx, gaze_y=ecols.gy)
+    measure_map = (pupil = ecols.pa, gaze_x = ecols.gx, gaze_y = ecols.gy)
     measure_cols = map(measures) do m
-        hasproperty(measure_map, m) || error("Unknown measure :$m. Use :pupil, :gaze_x, or :gaze_y.")
+        hasproperty(measure_map, m) ||
+            error("Unknown measure :$m. Use :pupil, :gaze_x, or :gaze_y.")
         getproperty(measure_map, m)
     end
 
     # Collect event columns that exist in the DataFrame
-    event_cols = Symbol[ec for ec in (:in_fix, :in_sacc, :in_blink) if hasproperty(samples, ec)]
+    event_cols =
+        Symbol[ec for ec in (:in_fix, :in_sacc, :in_blink) if hasproperty(samples, ec)]
 
     df_model = combine(grouped) do g
         t = _trial_relative_time(g)
@@ -81,7 +83,7 @@ function prepare_analysis_data(
             cols[ec] = g[idx, ec]
         end
 
-        return DataFrame(cols; copycols=false)
+        return DataFrame(cols; copycols = false)
     end
 
     # DataFrames `combine` puts grouping columns first, but order of columns
@@ -107,7 +109,7 @@ gcd = growth_curve_data(binned; degree=3)
 # gcd now has columns: ..., ot1, ot2, ot3
 ```
 """
-function growth_curve_data(df::DataFrame; time_col::Symbol=:time_bin, degree::Int=3)
+function growth_curve_data(df::DataFrame; time_col::Symbol = :time_bin, degree::Int = 3)
     hasproperty(df, time_col) ||
         error("Column :$time_col not found. Specify time_col= or use time_bin() first.")
     nrow(df) == 0 && error("Empty DataFrame.")
@@ -165,4 +167,3 @@ function _orthogonal_polynomials(x::Vector{<:Real}, degree::Int)
     # Return columns 2:(degree+1) — skip the intercept (constant)
     return ortho[:, 2:(degree+1)]
 end
-

@@ -54,8 +54,9 @@ function write_et_ascii(smi::SMIFile, path::String)
 
     open(path, "w") do io
         # ── Header ───────────────────────────────────────────────────────── #
-        sr_str = isinteger(smi.sample_rate) ? "$(Int(smi.sample_rate))" :
-                 @sprintf("%.4f", smi.sample_rate)
+        sr_str =
+            isinteger(smi.sample_rate) ? "$(Int(smi.sample_rate))" :
+            @sprintf("%.4f", smi.sample_rate)
 
         w_px, h_px = smi.screen_res
         w_mm = round(Int, smi.screen_width_cm * 10)
@@ -65,7 +66,10 @@ function write_et_ascii(smi::SMIFile, path::String)
 
         subject = isempty(smi.subject) ? splitext(basename(smi.filename))[1] : smi.subject
 
-        println(io, "## [BeGaze TXT Export — recreated by EyeFun.jl from $(basename(smi.filename))]")
+        println(
+            io,
+            "## [BeGaze TXT Export — recreated by EyeFun.jl from $(basename(smi.filename))]",
+        )
         println(io, "## ")
         println(io, "## Subject:\t$(subject)")
         println(io, "## Sample Rate:\t$(sr_str)")
@@ -83,19 +87,44 @@ function write_et_ascii(smi::SMIFile, path::String)
         fmt_comps = String[]
         (has_left || has_pupxL) && push!(fmt_comps, "LEFT")
         (has_right || has_pupxR) && push!(fmt_comps, "RIGHT")
-        append!(fmt_comps, ["RAW", "DIAMETER", "CR", "POR", "QUALITY", "TRIGGER", "MSG", "FRAMECOUNTER"])
+        append!(
+            fmt_comps,
+            ["RAW", "DIAMETER", "CR", "POR", "QUALITY", "TRIGGER", "MSG", "FRAMECOUNTER"],
+        )
         println(io, "## Format:\t" * join(fmt_comps, ", "))
         println(io, "## ")
 
         # ── Column header row ─────────────────────────────────────────────── #
         cols = String["Time", "Type", "Trial"]
         if has_left || has_pupxL
-            append!(cols, ["L Raw X [px]", "L Raw Y [px]", "L Dia X [px]", "L Dia Y [px]",
-                "L CR1 X [px]", "L CR1 Y [px]", "L POR X [px]", "L POR Y [px]"])
+            append!(
+                cols,
+                [
+                    "L Raw X [px]",
+                    "L Raw Y [px]",
+                    "L Dia X [px]",
+                    "L Dia Y [px]",
+                    "L CR1 X [px]",
+                    "L CR1 Y [px]",
+                    "L POR X [px]",
+                    "L POR Y [px]",
+                ],
+            )
         end
         if has_right || has_pupxR
-            append!(cols, ["R Raw X [px]", "R Raw Y [px]", "R Dia X [px]", "R Dia Y [px]",
-                "R CR1 X [px]", "R CR1 Y [px]", "R POR X [px]", "R POR Y [px]"])
+            append!(
+                cols,
+                [
+                    "R Raw X [px]",
+                    "R Raw Y [px]",
+                    "R Dia X [px]",
+                    "R Dia Y [px]",
+                    "R CR1 X [px]",
+                    "R CR1 Y [px]",
+                    "R POR X [px]",
+                    "R POR Y [px]",
+                ],
+            )
         end
         append!(cols, ["Timing", "Pupil Confidence", "Trigger", "Frame", "Aux1"])
         println(io, join(cols, "\t"))
@@ -119,7 +148,18 @@ function write_et_ascii(smi::SMIFile, path::String)
                 cy = hasproperty(df, :cryL) && !isnan(df.cryL[i]) ? df.cryL[i] : 0.0
                 gx = has_left ? _px(df.gxL[i]) : 0.0
                 gy = has_left ? _px(df.gyL[i]) : 0.0
-                @printf(io, "\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f", px, py, dx, dy, cx, cy, gx, gy)
+                @printf(
+                    io,
+                    "\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f",
+                    px,
+                    py,
+                    dx,
+                    dy,
+                    cx,
+                    cy,
+                    gx,
+                    gy
+                )
             end
 
             if has_right || has_pupxR
@@ -131,7 +171,18 @@ function write_et_ascii(smi::SMIFile, path::String)
                 cy = hasproperty(df, :cryR) && !isnan(df.cryR[i]) ? df.cryR[i] : 0.0
                 gx = has_right ? _px(df.gxR[i]) : 0.0
                 gy = has_right ? _px(df.gyR[i]) : 0.0
-                @printf(io, "\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f", px, py, dx, dy, cx, cy, gx, gy)
+                @printf(
+                    io,
+                    "\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f",
+                    px,
+                    py,
+                    dx,
+                    dy,
+                    cx,
+                    cy,
+                    gx,
+                    gy
+                )
             end
 
             # Trailing columns: Timing, Confidence, Trigger, Frame, Aux1

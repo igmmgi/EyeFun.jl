@@ -183,8 +183,9 @@ function _read_smi_txt(path::String)
         pa_l = 0.0
         if !isnothing(idx_ldx) && idx_ldx <= length(fields)
             pdx = parse(Float64, strip(fields[idx_ldx]))
-            pdy = (!isnothing(idx_ldy) && idx_ldy <= length(fields)) ?
-                  parse(Float64, strip(fields[idx_ldy])) : pdx
+            pdy =
+                (!isnothing(idx_ldy) && idx_ldy <= length(fields)) ?
+                parse(Float64, strip(fields[idx_ldy])) : pdx
             pa_l = (pdx + pdy) / 2.0
         end
         # SMI encodes missing data as explicitly zero. Decouple gaze validity from pupil.
@@ -217,8 +218,9 @@ function _read_smi_txt(path::String)
         pa_r = 0.0
         if !isnothing(idx_rdx) && idx_rdx <= length(fields)
             rdx = parse(Float64, strip(fields[idx_rdx]))
-            rdy = (!isnothing(idx_rdy) && idx_rdy <= length(fields)) ?
-                  parse(Float64, strip(fields[idx_rdy])) : rdx
+            rdy =
+                (!isnothing(idx_rdy) && idx_rdy <= length(fields)) ?
+                parse(Float64, strip(fields[idx_rdy])) : rdx
             pa_r = (rdx + rdy) / 2.0
         end
         gxR[row] = (rx == 0.0 && ry == 0.0) ? NaN : rx
@@ -243,20 +245,20 @@ function _read_smi_txt(path::String)
     resize!(pupyR, n)
 
     df = DataFrame(
-        time=time_vec,
-        trial=trial_vec,
-        participant=fill(subject, n),
-        gxL=gxL,
-        gyL=gyL,
-        paL=paL,
-        gxR=gxR,
-        gyR=gyR,
-        paR=paR,
-        pupxL=pupxL,
-        pupyL=pupyL,
-        pupxR=pupxR,
-        pupyR=pupyR,
-        message=msg_vec,
+        time = time_vec,
+        trial = trial_vec,
+        participant = fill(subject, n),
+        gxL = gxL,
+        gyL = gyL,
+        paL = paL,
+        gxR = gxR,
+        gyR = gyR,
+        paR = paR,
+        pupxL = pupxL,
+        pupyL = pupyL,
+        pupxR = pupxR,
+        pupyR = pupyR,
+        message = msg_vec,
     )
 
     @info "SMI TXT: $n samples, $sample_rate Hz, subject=$subject"
@@ -290,9 +292,12 @@ function _read_smi_idf(path::String)
     header_str = ""
     col_offset = 0
     for i = 1:(n_bytes-9)
-        if data[i] == UInt8('T') && data[i+1] == UInt8('i') &&
-           data[i+2] == UInt8('m') && data[i+3] == UInt8('e') &&
-           data[i+4] == UInt8('S') && data[i+5] == UInt8('t')
+        if data[i] == UInt8('T') &&
+           data[i+1] == UInt8('i') &&
+           data[i+2] == UInt8('m') &&
+           data[i+3] == UInt8('e') &&
+           data[i+4] == UInt8('S') &&
+           data[i+5] == UInt8('t')
             j = i
             while j <= n_bytes && data[j] >= 0x20 && data[j] <= 0x7e
                 j += 1
@@ -305,7 +310,8 @@ function _read_smi_idf(path::String)
     isempty(header_str) && error("Could not find column header in IDF file.")
 
     col_names = split(strip(header_str))
-    float_cols = filter(c -> c ∉ ("TimeStamp", "SetNum", "Quality", "Trig", "Aux"), col_names)
+    float_cols =
+        filter(c -> c ∉ ("TimeStamp", "SetNum", "Quality", "Trig", "Aux"), col_names)
 
     # ── Sample rate (heuristic: fixed offset for IDF v9) ─────────────────── #
     sample_rate = 0.0
@@ -334,12 +340,18 @@ function _read_smi_idf(path::String)
     data_start = 0
     found_data = false
 
-    for try_offset = pos:4:min(pos + 64, n_bytes - 4 * sub_record_size)
-        ts1 = reinterpret(UInt32, data[try_offset+4:try_offset+7])[1]
+    for try_offset = pos:4:min(pos+64, n_bytes-4*sub_record_size)
+        ts1 = reinterpret(UInt32, data[(try_offset+4):(try_offset+7)])[1]
         ts1 > 1_000_000 || continue
 
-        ts2 = reinterpret(UInt32, data[try_offset+sub_record_size+4:try_offset+sub_record_size+7])[1]
-        ts3 = reinterpret(UInt32, data[try_offset+2*sub_record_size+4:try_offset+2*sub_record_size+7])[1]
+        ts2 = reinterpret(
+            UInt32,
+            data[(try_offset+sub_record_size+4):(try_offset+sub_record_size+7)],
+        )[1]
+        ts3 = reinterpret(
+            UInt32,
+            data[(try_offset+2*sub_record_size+4):(try_offset+2*sub_record_size+7)],
+        )[1]
 
         d1 = (ts2 >= ts1) ? (ts2 - ts1) : ((0xFFFFFFFF - ts1) + ts2 + 1)
         d2 = (ts3 >= ts2) ? (ts3 - ts2) : ((0xFFFFFFFF - ts2) + ts3 + 1)
@@ -351,7 +363,8 @@ function _read_smi_idf(path::String)
         end
     end
 
-    found_data || error("Could not locate IDF sub-record data. Use the .txt export instead.")
+    found_data ||
+        error("Could not locate IDF sub-record data. Use the .txt export instead.")
 
     # ── Sub-record layout (106 bytes each) ───────────────────────────────── #
     # Bytes 1-4  : record header / set number (LE UInt32)
@@ -399,7 +412,7 @@ function _read_smi_idf(path::String)
     last_raw_ts = UInt32(0)
     time_high_bits = Int64(0)
 
-    for s = 0:(n_sub_records - 1)
+    for s = 0:(n_sub_records-1)
         sub_off = data_start + s * sub_record_size
         sub_off + sub_record_size - 1 > n_bytes && break
 
@@ -408,7 +421,7 @@ function _read_smi_idf(path::String)
         # Timestamp: bytes 5-8 of sub-record (LE UInt32, units of 1/256 µs)
         # The scan uses reinterpret(UInt32, data[try_offset+4:try_offset+7]),
         # and manual LE assembly from the same bytes:
-        raw_ts = reinterpret(UInt32, data[sub_off+4:sub_off+7])[1]
+        raw_ts = reinterpret(UInt32, data[(sub_off+4):(sub_off+7)])[1]
 
         # Wrap protection for UInt32 overflow
         if row > 1 && raw_ts < last_raw_ts
@@ -421,23 +434,26 @@ function _read_smi_idf(path::String)
         # Calibrated gaze, raw pupil position, and pupil size
         # These offsets are 1-indexed from sub_off matching the original
         # working convention (verified against BeGaze exports)
-        gx = reinterpret(Float64, data[sub_off+72:sub_off+79])[1]
-        gy = reinterpret(Float64, data[sub_off+80:sub_off+87])[1]
-        px = reinterpret(Float64, data[sub_off+24:sub_off+31])[1]   # PupX (camera)
-        py = reinterpret(Float64, data[sub_off+32:sub_off+39])[1]   # PupY (camera)
-        pupdx = reinterpret(Float64, data[sub_off+40:sub_off+47])[1]
-        pupdy = reinterpret(Float64, data[sub_off+48:sub_off+55])[1]
-        cx = reinterpret(Float64, data[sub_off+56:sub_off+63])[1]   # CR X
-        cy = reinterpret(Float64, data[sub_off+64:sub_off+71])[1]   # CR Y
+        gx = reinterpret(Float64, data[(sub_off+72):(sub_off+79)])[1]
+        gy = reinterpret(Float64, data[(sub_off+80):(sub_off+87)])[1]
+        px = reinterpret(Float64, data[(sub_off+24):(sub_off+31)])[1]   # PupX (camera)
+        py = reinterpret(Float64, data[(sub_off+32):(sub_off+39)])[1]   # PupY (camera)
+        pupdx = reinterpret(Float64, data[(sub_off+40):(sub_off+47)])[1]
+        pupdy = reinterpret(Float64, data[(sub_off+48):(sub_off+55)])[1]
+        cx = reinterpret(Float64, data[(sub_off+56):(sub_off+63)])[1]   # CR X
+        cy = reinterpret(Float64, data[(sub_off+64):(sub_off+71)])[1]   # CR Y
         pa = (pupdx + pupdy) / 2.0
 
         # ── Trigger value from bytes 102-103 (BCD encoding: 4 packed decimal digits)
         # byte102: low nibble = units, high nibble = tens
         # byte103: low nibble = hundreds, high nibble = thousands
-        b102 = data[sub_off + 102]
-        b103 = data[sub_off + 103]
-        trig_val = Int(b103 >> 4) * 1000 + Int(b103 & 0x0F) * 100 +
-                   Int(b102 >> 4) * 10 + Int(b102 & 0x0F)
+        b102 = data[sub_off+102]
+        b103 = data[sub_off+103]
+        trig_val =
+            Int(b103 >> 4) * 1000 +
+            Int(b103 & 0x0F) * 100 +
+            Int(b102 >> 4) * 10 +
+            Int(b102 & 0x0F)
         if trig_val > 0
             msg_vec[row] = string(trig_val)
         end
@@ -523,28 +539,28 @@ function _read_smi_idf(path::String)
     evt_msgs = msg_vec[evt_mask]
 
     df = DataFrame(
-        time=time_vec,
-        trial=trial_vec,
-        participant=fill("", row),
-        gxL=gxL,
-        gyL=gyL,
-        paL=paL,
-        gxR=gxR,
-        gyR=gyR,
-        paR=paR,
-        pupxL=pupxL,
-        pupyL=pupyL,
-        pupxR=pupxR,
-        pupyR=pupyR,
-        diaxL=diaxL,
-        diayL=diayL,
-        diaxR=diaxR,
-        diayR=diayR,
-        crxL=crxL,
-        cryL=cryL,
-        crxR=crxR,
-        cryR=cryR,
-        message=msg_vec,
+        time = time_vec,
+        trial = trial_vec,
+        participant = fill("", row),
+        gxL = gxL,
+        gyL = gyL,
+        paL = paL,
+        gxR = gxR,
+        gyR = gyR,
+        paR = paR,
+        pupxL = pupxL,
+        pupyL = pupyL,
+        pupxR = pupxR,
+        pupyR = pupyR,
+        diaxL = diaxL,
+        diayL = diayL,
+        diaxR = diaxR,
+        diayR = diayR,
+        crxL = crxL,
+        cryL = cryL,
+        crxR = crxR,
+        cryR = cryR,
+        message = msg_vec,
     )
 
     @info "SMI IDF: $row samples ($n_sub_records sub-records) at $sample_rate Hz"
@@ -552,7 +568,11 @@ function _read_smi_idf(path::String)
 
     smi = SMIFile(path)
     smi.samples = df
-    smi.events  = DataFrame(time=evt_times, type=fill("MSG", length(evt_times)), message=evt_msgs)
+    smi.events = DataFrame(
+        time = evt_times,
+        type = fill("MSG", length(evt_times)),
+        message = evt_msgs,
+    )
     smi.sample_rate = sample_rate
     smi.screen_res = screen_res
     smi.screen_width_cm = Float64(screen_width_cm)

@@ -36,8 +36,8 @@
             EyeFun.write_et_ascii(
                 edf,
                 out_path;
-                include_events=false,
-                include_messages=false,
+                include_events = false,
+                include_messages = false,
             )
             @test isfile(out_path)
             lines = readlines(out_path)
@@ -52,7 +52,7 @@
         # Events only (no samples)
         out_path = tempname() * ".asc"
         try
-            EyeFun.write_et_ascii(edf, out_path; include_samples=false)
+            EyeFun.write_et_ascii(edf, out_path; include_samples = false)
             @test isfile(out_path)
             lines = readlines(out_path)
             # Should have event/message lines but no sample lines

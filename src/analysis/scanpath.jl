@@ -25,7 +25,7 @@ function scanpath_similarity(
     aois::Vector{<:AOI};
     selection1,
     selection2,
-    time_window::Union{Nothing,Tuple}=nothing,
+    time_window::Union{Nothing,Tuple} = nothing,
 )
 
     seq1 = _aoi_sequence(df, aois, selection1, time_window)
@@ -37,10 +37,10 @@ function scanpath_similarity(
     similarity = 1.0 - norm_dist
 
     return (
-        distance=dist,
-        similarity=round(similarity; digits=4),
-        seq1=seq1,
-        seq2=seq2,
+        distance = dist,
+        similarity = round(similarity; digits = 4),
+        seq1 = seq1,
+        seq2 = seq2,
     )
 end
 
@@ -67,7 +67,7 @@ function transition_matrix(
     aois::Vector{<:AOI};
     selection = nothing,
     normalize::Bool = true,
-    time_window::Union{Nothing,Tuple}=nothing,
+    time_window::Union{Nothing,Tuple} = nothing,
 )
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
@@ -89,7 +89,7 @@ function transition_matrix(
         t_start, t_end = _resolve_time_window(samples, time_window)
         t0 = Float64(samples.time[1])
         t_relative = Float64.(samples.time) .- t0
-        
+
         valid_idx = findall(t_start .<= t_relative .<= t_end)
         samples = samples[valid_idx, :]
         in_fix = in_fix[valid_idx]
@@ -157,10 +157,10 @@ ent = transition_entropy(tm)
 function transition_entropy(mat::Matrix{Float64})
     total_transitions = sum(mat)
     total_transitions == 0 && return 0.0
-    
+
     # Normalize the entire matrix to sum to 1 to compute joint probabilities
     p_matrix = mat ./ total_transitions
-    
+
     H = 0.0
     for p in p_matrix
         if p > 0.0
@@ -195,7 +195,7 @@ function _aoi_sequence(df::EyeData, aois::Vector{<:AOI}, selection, time_window)
         t_start, t_end = _resolve_time_window(samples, time_window)
         t0 = Float64(samples.time[1])
         t_relative = Float64.(samples.time) .- t0
-        
+
         valid_idx = findall(t_start .<= t_relative .<= t_end)
         samples = samples[valid_idx, :]
         in_fix = in_fix[valid_idx]

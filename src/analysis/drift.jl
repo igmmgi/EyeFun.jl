@@ -21,14 +21,14 @@ drift_correct!(df; target=(960, 540), use_first_fixation=false)  # mean-based
 """
 function drift_correct!(
     df::EyeData;
-    target::Tuple{Real,Real}=(640, 480),
-    eye::Symbol=:auto,
-    use_first_fixation::Bool=true,
-    window_ms::Int=200,
-    group_by=:trial,
+    target::Tuple{Real,Real} = (640, 480),
+    eye::Symbol = :auto,
+    use_first_fixation::Bool = true,
+    window_ms::Int = 200,
+    group_by = :trial,
 )
     group_cols = _resolve_group_cols(df, group_by)
-    grouped = groupby(df.df, group_cols; skipmissing=true)
+    grouped = groupby(df.df, group_cols; skipmissing = true)
 
     eye = _resolve_eye(df, eye)
     ecols = _eye_columns(eye)

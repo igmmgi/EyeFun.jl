@@ -401,7 +401,9 @@ function detect_events!(
     # Process whole continuous recording
     gx = Vector{Float64}(df.df[!, gx_col])
     gy = Vector{Float64}(df.df[!, gy_col])
-    pa = hasproperty(df.df, pa_col) ? Vector{Float64}(df.df[!, pa_col]) : fill(NaN, nrow(df.df))
+    pa =
+        hasproperty(df.df, pa_col) ? Vector{Float64}(df.df[!, pa_col]) :
+        fill(NaN, nrow(df.df))
 
     all_vel = _compute_velocity_deg(gx, gy, ppd, sample_rate)
     if method == :ivt
@@ -433,10 +435,10 @@ as the EyeLink pipeline.
 """
 function _detect_nan_blinks!(ed::EyeData, min_blink_ms::Int, eye::Symbol)
     df = ed.df
-    n  = nrow(df)
+    n = nrow(df)
 
     ecols = _eye_columns(eye)
-    
+
     # Determine which eye column to use for NaN detection (preferred: gaze, fallback: pupil)
     detect_col = if hasproperty(df, ecols.gx)
         ecols.gx
@@ -474,7 +476,7 @@ function _detect_nan_blinks!(ed::EyeData, min_blink_ms::Int, eye::Symbol)
         end
     end
 
-    df[!, :in_blink]  = in_blink
+    df[!, :in_blink] = in_blink
     df[!, :blink_dur] = blink_dur
     return
 end

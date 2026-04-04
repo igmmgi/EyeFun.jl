@@ -839,4 +839,3 @@ function create_eyefun_data(
     end
     return EyeData(result; source = :eyelink, sample_rate = sr, screen_res = screen_res)
 end
-

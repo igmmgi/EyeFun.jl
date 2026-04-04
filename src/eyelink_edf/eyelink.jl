@@ -321,7 +321,8 @@ function read_eyelink_edf(
                 EVENT_STARTEVENTS,
                 EVENT_ENDEVENTS,
             )
-                rec, pos = _recording_bytes(binary_data, pos, ts, in_trial ? trial : nothing)
+                rec, pos =
+                    _recording_bytes(binary_data, pos, ts, in_trial ? trial : nothing)
                 if !isnothing(rec)
                     push!(recordings_data, rec)
                     # Only update parsing state from recording blocks with plausible
@@ -586,5 +587,3 @@ function read_eyelink(filename::String; kwargs...)
         error("Unknown file extension '$ext'. Expected .edf or .asc")
     end
 end
-
-

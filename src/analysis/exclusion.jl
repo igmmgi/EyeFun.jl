@@ -24,12 +24,12 @@ result = exclude_trials!(df; max_tracking_loss=30, group_by=[:block, :trial])
 """
 function exclude_trials!(
     ed::EyeData;
-    max_tracking_loss::Real=50.0,
-    max_blink_count::Union{Nothing,Int}=nothing,
-    min_duration_ms::Union{Nothing,Real}=nothing,
-    group_by=:trial
+    max_tracking_loss::Real = 50.0,
+    max_blink_count::Union{Nothing,Int} = nothing,
+    min_duration_ms::Union{Nothing,Real} = nothing,
+    group_by = :trial,
 )
-    dq = data_quality(ed; group_by=group_by)
+    dq = data_quality(ed; group_by = group_by)
     group_cols = _resolve_group_cols(ed, group_by)
 
     # Identify bad trials
@@ -48,16 +48,16 @@ function exclude_trials!(
 
     # Build exclusion filter: keep only rows whose group keys are NOT in excluded_rows
     if n_excluded > 0
-        keep = antijoin(ed.df, excluded_rows[!, group_cols]; on=group_cols)
+        keep = antijoin(ed.df, excluded_rows[!, group_cols]; on = group_cols)
         empty!(ed.df)
         append!(ed.df, keep)
     end
 
     result = (
-        n_before=n_before,
-        n_excluded=n_excluded,
-        n_after=n_before - n_excluded,
-        excluded=[NamedTuple(row) for row in eachrow(excluded_rows[!, group_cols])],
+        n_before = n_before,
+        n_excluded = n_excluded,
+        n_after = n_before - n_excluded,
+        excluded = [NamedTuple(row) for row in eachrow(excluded_rows[!, group_cols])],
     )
 
     @info "Trial exclusion: $(n_excluded)/$(n_before) trials removed ($(result.n_after) remaining)"
