@@ -436,11 +436,6 @@ function _draw_xy_trace!(
 
     !isnan(t[1]) && !isnan(t[end]) && t[1] < t[end] && xlims!(ax, t[1], t[end])
 end
-"""
-    _draw_velocity
-
-Internal documentation.
-"""
 function _draw_velocity!(
     ax,
     g::AbstractDataFrame,
@@ -492,11 +487,6 @@ function _draw_velocity!(
 
     !isnan(t[1]) && !isnan(t[end]) && t[1] < t[end] && xlims!(ax, t[1], t[end])
 end
-"""
-    _draw_pupil
-
-Internal documentation.
-"""
 function _draw_pupil!(
     ax,
     g::AbstractDataFrame,
@@ -569,11 +559,6 @@ function _draw_saccade_polar!(
     end
     bin_centers = [(bin_edges[b] + bin_edges[b+1]) / 2 for b = 1:n_bins]
 
-    """
-        maximum
-
-    Internal documentation.
-    """
     maximum(counts) == 0 && return
     p = barplot!(
         ax,
@@ -769,11 +754,6 @@ end
 function _update_cursor!(cursor_obs, cache::Dict{Symbol,Any}, state)
     haskey(cache, :g) || return
     g = cache[:g]::DataFrame
-    """
-        nrow
-
-    Internal documentation.
-    """
     nrow(g) == 0 && return
     f = clamp(state.frame[], 1, nrow(g))
 
@@ -1231,11 +1211,6 @@ function plot_databrowser(
 
     # ── Trial navigation helper ─────────────────────────────────────────────── #
 
-    """
-        _goto_trial
-
-    Internal documentation.
-    """
     function _goto_trial!(idx::Int)
         idx = clamp(idx, 1, length(state.segments))
         _playing[] = false
@@ -1366,11 +1341,6 @@ function plot_databrowser(
     _hl_fix_vis = Observable(false)
 
     # Create/recreate persistent overlay plots (must be called after any _draw_all!)
-    """
-        _create_overlay_plots
-
-    Internal documentation.
-    """
     function _create_overlay_plots!()
         lines!(
             axes[1],
@@ -1408,11 +1378,6 @@ function plot_databrowser(
         poly!(axes[4], _hl_fix_vel_pts; color = (:red, 0.5), visible = _hl_fix_vis)
     end
 
-    """
-        _update_highlight_overlay
-
-    Internal documentation.
-    """
     function _update_highlight_overlay!()
         haskey(_cache, :saccades_win) || return
         saccades = _cache[:saccades_win]::Vector{SaccadeInfo}
@@ -1476,11 +1441,6 @@ function plot_databrowser(
 
 
     # Helper: select or clear fixation
-    """
-        _toggle_fixation
-
-    Internal documentation.
-    """
     function _toggle_fixation!(idx::Int, within_threshold::Bool)
         if within_threshold && state.selected_fixation[] == idx
             state.selected_fixation[] = 0   # toggle off
@@ -1494,11 +1454,6 @@ function plot_databrowser(
     end
 
     # Helper: select or clear saccade
-    """
-        _toggle_saccade
-
-    Internal documentation.
-    """
     function _toggle_saccade!(idx::Int, within_threshold::Bool)
         if within_threshold && state.selected_saccade[] == idx
             state.selected_saccade[] = 0   # toggle off
@@ -1561,11 +1516,6 @@ function plot_databrowser(
     end
 
     # Time-series helper: select saccade or fixation by time
-    """
-        _make_time_select_handler
-
-    Internal documentation.
-    """
     function _make_time_select_handler()
         return (event::MouseEvent, axis) -> begin
             if event.type === MouseEventTypes.leftclick

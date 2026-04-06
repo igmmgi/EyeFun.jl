@@ -18,11 +18,6 @@ function _estimate_sample_rate(df::DataFrame)
     return round(1000.0 / median_dt_ms)
 end
 
-"""
-    events_to_dataframe
-
-Internal documentation.
-"""
 function events_to_dataframe(events::Vector{EDFEvent})
     isempty(events) && return DataFrame()
     return DataFrame(
@@ -68,11 +63,6 @@ function events_to_dataframe(events::Vector{EDFEvent})
     )
 end
 
-"""
-    recordings_to_dataframe
-
-Internal documentation.
-"""
 function recordings_to_dataframe(recordings::Vector{EDFRecording})
     isempty(recordings) && return DataFrame()
     fields = fieldnames(EDFRecording)
@@ -634,11 +624,6 @@ function create_eyefun_data(
     # ── helpers ──────────────────────────────────────────────────────────── #
     # Forward the strictly-typed Float32 arrays produced by the Eyelink parsers
     # directly as pointers, bypassing complete array duplication.
-    """
-        _f32_col
-
-    Internal documentation.
-    """
     function _f32_col(col)
         T = eltype(col)
         T === Float32 && return col

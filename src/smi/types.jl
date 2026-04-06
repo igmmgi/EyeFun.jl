@@ -39,11 +39,6 @@ mutable struct SMIFile <: EyeFile
     viewing_distance_cm::Float64
     subject::String
 
-    """
-        SMIFile
-
-    Internal documentation.
-    """
     function SMIFile(filename::String)
         new(filename, DataFrame(), DataFrame(), 0.0, (1280, 1024), 30.0, 50.0, "")
     end
@@ -51,20 +46,10 @@ end
 
 # ── Show ───────────────────────────────────────────────────────────────────── #
 
-"""
-    Base
-
-Internal documentation.
-"""
 function Base.show(io::IO, smi::SMIFile)
     print(io, "SMIFile(\"$(basename(smi.filename))\")")
 end
 
-"""
-    Base
-
-Internal documentation.
-"""
 function Base.show(io::IO, ::MIME"text/plain", smi::SMIFile)
     println(io, "SMIFile(\"$(basename(smi.filename))\")")
 
@@ -77,11 +62,6 @@ function Base.show(io::IO, ::MIME"text/plain", smi::SMIFile)
         sr > 0 && print(io, " ($(sr_str) Hz")
 
         # Eye presence (limit to first 1000 samples to avoid O(N) scan on missing eyes)
-        """
-            check_eye
-
-        Internal documentation.
-        """
         check_eye(col) =
             hasproperty(smi.samples, col) &&
             any(!isnan, view(smi.samples[!, col], 1:min(1000, nrow(smi.samples))))

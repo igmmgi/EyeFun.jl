@@ -32,11 +32,6 @@ function time_bin(
     time_window::Union{Nothing,Tuple} = nothing,
 )
     samples = _apply_selection(df, selection)
-    """
-        nrow
-
-    Internal documentation.
-    """
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
     grouped, group_cols = _valid_groups(samples, group_by)
@@ -115,11 +110,6 @@ function proportion_of_looks(
     time_window::Union{Nothing,Tuple} = nothing,
 )
     samples = _apply_selection(df, selection)
-    """
-        nrow
-
-    Internal documentation.
-    """
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
     grouped, group_cols = _valid_groups(samples, group_by)

@@ -19,11 +19,6 @@ function _resolve_eye(dat, eye::Symbol; cols::Symbol = :gaze)
     eye in (:right, :R, :r) && return :right
 
     # From here on, eye MUST be :auto. We try to infer the active eye from the data.
-    """
-        has_valid
-
-    Internal documentation.
-    """
     has_valid(col) =
         hasproperty(df, col) && any(v -> !ismissing(v) && !isnan(v), df[!, col])
 

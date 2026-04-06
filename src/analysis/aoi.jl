@@ -35,11 +35,6 @@ function aoi_metrics(
     time_window::Union{Nothing,Tuple} = nothing,
 )
     samples = _apply_selection(df, selection)
-    """
-        nrow
-
-    Internal documentation.
-    """
     nrow(samples) == 0 && error("No samples found.")
     grouped, group_cols = _valid_groups(samples, group_by)
 

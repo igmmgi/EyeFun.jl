@@ -206,11 +206,6 @@ function _write_event_columns!(
     n = length(labels)
 
     # Build column name helper
-    """
-        col
-
-    Internal documentation.
-    """
     col(name) = isnothing(prefix) ? name : Symbol(string(prefix) * "_" * string(name))
 
     # ── Fixation columns ──

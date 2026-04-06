@@ -93,22 +93,12 @@ end
 
 # ── Show ───────────────────────────────────────────────────────────────────── #
 
-"""
-    Base
-
-Internal documentation.
-"""
 function Base.show(io::IO, ed::EyeData)
     sr = round(ed.sample_rate; digits = 2)
     w, h = ed.screen_res
     print(io, "EyeData($(ed.source), $(sr) Hz, $(w)×$(h))")
 end
 
-"""
-    Base
-
-Internal documentation.
-"""
 function Base.show(io::IO, ::MIME"text/plain", ed::EyeData)
     df = ed.df
     sr = round(ed.sample_rate; digits = 2)
@@ -182,19 +172,9 @@ struct RectAOI <: AOI
     height::Float64
     color::Any
 end
-"""
-    RectAOI
-
-Internal documentation.
-"""
 RectAOI(name, cx, cy, width, height; color = :grey) =
     RectAOI(name, cx, cy, width, height, color)
 
-"""
-    in_aoi
-
-Internal documentation.
-"""
 in_aoi(aoi::RectAOI, x::Real, y::Real) =
     aoi.cx - aoi.width/2 <= x <= aoi.cx + aoi.width/2 &&
     aoi.cy - aoi.height/2 <= y <= aoi.cy + aoi.height/2
@@ -218,11 +198,6 @@ struct CircleAOI <: AOI
     radius::Float64
     color::Any
 end
-"""
-    CircleAOI
-
-Internal documentation.
-"""
 CircleAOI(name, cx, cy, radius; color = :grey) = CircleAOI(name, cx, cy, radius, color)
 
 in_aoi(aoi::CircleAOI, x::Real, y::Real) = (x - aoi.cx)^2 + (y - aoi.cy)^2 <= aoi.radius^2
@@ -247,11 +222,6 @@ struct EllipseAOI <: AOI
     ry::Float64
     color::Any
 end
-"""
-    EllipseAOI
-
-Internal documentation.
-"""
 EllipseAOI(name, cx, cy, rx, ry; color = :grey) = EllipseAOI(name, cx, cy, rx, ry, color)
 
 in_aoi(aoi::EllipseAOI, x::Real, y::Real) =
@@ -275,11 +245,6 @@ struct PolygonAOI <: AOI
     vertices::Vector{Tuple{Float64,Float64}}
     color::Any
 end
-"""
-    PolygonAOI
-
-Internal documentation.
-"""
 PolygonAOI(name, vertices; color = :grey) = PolygonAOI(name, vertices, color)
 
 """Point-in-polygon using the ray casting algorithm."""
@@ -518,11 +483,6 @@ function messages(ed::EyeData; summary::Bool = false)
     !summary && return msg
 
     # ── Summary mode: frequency table ───────────────────────────────────── #
-    """
-        nrow
-
-    Internal documentation.
-    """
     nrow(msg) == 0 && return DataFrame(message = String[], count = Int[])
 
     msg_counts = Dict{String,Int}()

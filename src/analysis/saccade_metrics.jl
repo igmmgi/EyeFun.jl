@@ -26,11 +26,6 @@ function saccade_metrics(
     time_window::Union{Nothing,Tuple} = nothing,
 )
     samples = _apply_selection(df, selection)
-    """
-        nrow
-
-    Internal documentation.
-    """
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
     hasproperty(samples, :in_sacc) ||

@@ -10,11 +10,6 @@
     isnothing(v) ? Float32(NaN) : v
 end
 
-"""
-    _eye_code
-
-Internal documentation.
-"""
 function _eye_code(s::AbstractString)
     s == "R" && return Int16(EYE_RIGHT)
     s == "L" && return Int16(EYE_LEFT)
@@ -116,11 +111,6 @@ end
     return (t1, t2, t3, t4, t5, t6, t7), count
 end
 
-"""
-    _parse_msg
-
-Internal documentation.
-"""
 function _parse_msg(parts)
     length(parts) < 2 && return nothing
     ts = tryparse(UInt32, parts[2])
@@ -143,11 +133,6 @@ function _parse_msg(parts)
     return EDFEvent(basic, ZERO_POSITIONS, ZERO_VELOCITIES)
 end
 
-"""
-    _parse_efix
-
-Internal documentation.
-"""
 function _parse_efix(line)
     parts = split(line)
     length(parts) < 8 && return nothing
@@ -194,11 +179,6 @@ function _parse_efix(line)
     return EDFEvent(basic, pos, ZERO_VELOCITIES)
 end
 
-"""
-    _parse_esacc
-
-Internal documentation.
-"""
 function _parse_esacc(line)
     parts = split(line)
     length(parts) < 11 && return nothing
@@ -249,11 +229,6 @@ function _parse_esacc(line)
     return EDFEvent(basic, pos, vel)
 end
 
-"""
-    _parse_eblink
-
-Internal documentation.
-"""
 function _parse_eblink(line)
     parts = split(line)
     length(parts) < 5 && return nothing
@@ -279,11 +254,6 @@ function _parse_eblink(line)
     return EDFEvent(basic, ZERO_POSITIONS, ZERO_VELOCITIES)
 end
 
-"""
-    _parse_input
-
-Internal documentation.
-"""
 function _parse_input(line)
     parts = split(line)
     length(parts) < 3 && return nothing
@@ -308,11 +278,6 @@ function _parse_input(line)
     return EDFEvent(basic, ZERO_POSITIONS, ZERO_VELOCITIES)
 end
 
-"""
-    _parse_start
-
-Internal documentation.
-"""
 function _parse_start(line, in_trial, trial)
     parts = split(line)
     length(parts) < 2 && return nothing
@@ -338,11 +303,6 @@ function _parse_start(line, in_trial, trial)
     )
 end
 
-"""
-    _parse_end
-
-Internal documentation.
-"""
 function _parse_end(line)
     parts = split(line)
     length(parts) < 2 && return nothing
