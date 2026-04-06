@@ -84,8 +84,8 @@ end
 """
     create_eyefun_data(df::DataFrame; kwargs...) -> EyeData
 
-Create an analysis-ready `EyeData` wrapper from a plain `DataFrame`.
-This delegates to the underlying `EyeData` constructor.
+Internal helper — delegates to the `EyeData(df; ...)` constructor.
+Not exported; use `EyeData(df; ...)` directly or `read_et_data(path)`.
 """
 function create_eyefun_data(df::DataFrame; kwargs...)
     return EyeData(df; kwargs...)

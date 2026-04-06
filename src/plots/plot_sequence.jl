@@ -21,11 +21,6 @@ function plot_sequence(
     max_trials::Int = 20,
 )
     samples = _apply_selection(df, selection)
-    """
-        nrow
-
-    Internal documentation.
-    """
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
     grouped, group_cols = _valid_groups(samples, group_by)

@@ -91,6 +91,11 @@ function transition_matrix(
 
     # Apply time window prior to sequence extraction
     if !isnothing(time_window)
+        # Column-symbol windows are not supported here (no per-group resolution);
+        # use numeric (start_ms, end_ms) tuples instead.
+        if time_window isa Tuple && any(t -> t isa Symbol, time_window)
+            error("Column-symbol time_window (e.g. (:col1, :col2)) is not supported in transition_matrix. Use numeric (start, end) tuples.")
+        end
         t_start, t_end = _resolve_time_window(samples, time_window)
         t0 = Float64(samples.time[1])
         t_relative = Float64.(samples.time) .- t0
@@ -202,6 +207,11 @@ function _aoi_sequence(df::EyeData, aois::Vector{<:AOI}, selection, time_window)
 
     # Apply time window prior to sequence extraction
     if !isnothing(time_window)
+        # Column-symbol windows are not supported here (no per-group resolution);
+        # use numeric (start_ms, end_ms) tuples instead.
+        if time_window isa Tuple && any(t -> t isa Symbol, time_window)
+            error("Column-symbol time_window (e.g. (:col1, :col2)) is not supported in scanpath_similarity. Use numeric (start, end) tuples.")
+        end
         t_start, t_end = _resolve_time_window(samples, time_window)
         t0 = Float64(samples.time[1])
         t_relative = Float64.(samples.time) .- t0

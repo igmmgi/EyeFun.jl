@@ -14,11 +14,6 @@ function plot_pupil(
     split_by = nothing,
 )
     samples = _apply_selection(df, selection)
-    """
-        nrow
-
-    Internal documentation.
-    """
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
     if !isnothing(split_by)
@@ -62,11 +57,6 @@ function plot_pupil(
         )
 
         global_t0 = Float64(sub_split.time[1])
-        """
-            _get_trial_tp
-
-        Internal documentation.
-        """
         function _get_trial_tp(sub)
             pa_sub = Float64.(sub[!, pa_col])
             if use_rel && !all(ismissing, sub.time_rel)

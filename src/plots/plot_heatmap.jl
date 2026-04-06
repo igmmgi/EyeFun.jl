@@ -108,11 +108,6 @@ function plot_heatmap(
     aois = nothing,
 )
     samples = _apply_selection(df, selection)
-    """
-        nrow
-
-    Internal documentation.
-    """
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
     # ── Faceted multi-panel heatmap ──

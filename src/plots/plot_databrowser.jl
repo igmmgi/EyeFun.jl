@@ -49,7 +49,7 @@ function _extract_saccades(g::DataFrame)
         g.in_sacc[i] || continue
         # Detect saccade onset: first sample of a new saccade run
         i > 1 && g.in_sacc[i-1] && continue
-        !isnan(g.sacc_gstx[i]) || continue
+        isnan(g.sacc_gstx[i]) && continue
         x1, y1 = Float64(g.sacc_gstx[i]), Float64(g.sacc_gsty[i])
         x2, y2 = Float64(g.sacc_genx[i]), Float64(g.sacc_geny[i])
         if !isnan(x1) && !isnan(y1) && !isnan(x2) && !isnan(y2)

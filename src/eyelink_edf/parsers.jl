@@ -812,7 +812,10 @@ function create_eyefun_data(
         time_rel = Vector{Union{Float64,Missing}}(missing, nrow(result))
         for g in groupby(result, :trial; skipmissing = true)
             # Find the first sample in this trial where message matches
-            zero_idx = findfirst(r -> !ismissing(r) && r == trial_time_zero, g.message)
+            zero_idx = findfirst(
+                r -> !ismissing(r) && any(s -> s == trial_time_zero, split(r, "; ")),
+                g.message,
+            )
             if !isnothing(zero_idx)
                 t0 = Float64(g.time[zero_idx])
                 g_indices = parentindices(g)[1]
