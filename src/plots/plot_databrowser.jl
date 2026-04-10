@@ -248,49 +248,120 @@ function _dbnew_draw_spatial!(
         try
             segment_id = state.segments[state.trial[]]
             stim_vals = state.bg_stimulus(segment_id)
-            
+
             if !isnothing(stim_vals)
                 items = stim_vals isa AbstractVector ? collect(stim_vals) : Any[stim_vals]
                 # Sort items if they support z_index to ensure correct layering
-                sort!(items, by = x -> (x isa AbstractEyeFunMedia && hasproperty(x, :z_index)) ? x.z_index : 0)
-                
+                sort!(
+                    items,
+                    by = x ->
+                        (x isa AbstractEyeFunMedia && hasproperty(x, :z_index)) ?
+                        x.z_index : 0,
+                )
+
                 for stim_val in items
                     # Typed media
                     if stim_val isa AudioMedia
-                        text!(ax, sx/2, sy * 0.95; text="AUDIO ATTACHED (Press [Space] to Play)", align=(:center, :top), fontsize=18, color=:white, glowwidth=3, glowcolor=:black)
-                    
+                        text!(
+                            ax,
+                            sx/2,
+                            sy * 0.95;
+                            text = "AUDIO ATTACHED (Press [Space] to Play)",
+                            align = (:center, :top),
+                            fontsize = 18,
+                            color = :white,
+                            glowwidth = 3,
+                            glowcolor = :black,
+                        )
+
                     elseif stim_val isa TextMedia
                         pos_x = isnothing(stim_val.position) ? sx/2 : stim_val.position[1]
                         pos_y = isnothing(stim_val.position) ? sy/2 : stim_val.position[2]
-                        text!(ax, pos_x, pos_y; text=stim_val.content, align=(:center, :center), fontsize=stim_val.fontsize, word_wrap_width=500, color=stim_val.color)
-                    
+                        text!(
+                            ax,
+                            pos_x,
+                            pos_y;
+                            text = stim_val.content,
+                            align = (:center, :center),
+                            fontsize = stim_val.fontsize,
+                            word_wrap_width = 500,
+                            color = stim_val.color,
+                        )
+
                     elseif stim_val isa ImageMedia
-                        img_mat = stim_val.content isa AbstractString ? Main.eval(:(using FileIO; load($(stim_val.content)))) : stim_val.content
+                        img_mat =
+                            stim_val.content isa AbstractString ?
+                            Main.eval(:(using FileIO; load($(stim_val.content)))) :
+                            stim_val.content
                         img_rotated = permutedims(img_mat, (2, 1))
-                        
+
                         if !isnothing(stim_val.bbox)
-                            Makie.image!(ax, stim_val.bbox[1]..stim_val.bbox[2], stim_val.bbox[3]..stim_val.bbox[4], img_rotated)
+                            Makie.image!(
+                                ax,
+                                stim_val.bbox[1]..stim_val.bbox[2],
+                                stim_val.bbox[3]..stim_val.bbox[4],
+                                img_rotated,
+                            )
                         else
-                            cx, cy = isnothing(stim_val.position) ? (sx/2, sy/2) : stim_val.position
+                            cx, cy =
+                                isnothing(stim_val.position) ? (sx/2, sy/2) :
+                                stim_val.position
                             w, h = size(img_rotated)
-                            Makie.image!(ax, (cx - w/2) .. (cx + w/2), (cy - h/2) .. (cy + h/2), img_rotated)
+                            Makie.image!(
+                                ax,
+                                (cx - w/2) .. (cx + w/2),
+                                (cy - h/2) .. (cy + h/2),
+                                img_rotated,
+                            )
                         end
-                        
-                    # Legacy: loose Tuples and Strings
+
+                        # Legacy: loose Tuples and Strings
                     else
-                        is_audio_tuple = stim_val isa Tuple && length(stim_val) >= 2 && stim_val[2] isa Number && stim_val[1] isa AbstractArray
-                        if is_audio_tuple || (stim_val isa AbstractString && endswith(lowercase(stim_val), ".wav"))
-                            text!(ax, sx/2, sy * 0.95; text="AUDIO ATTACHED (Press [Space] to Play)", align=(:center, :top), fontsize=18, color=:white, glowwidth=3, glowcolor=:black)
-                        elseif stim_val isa AbstractString && (endswith(lowercase(stim_val), ".txt") || endswith(lowercase(stim_val), ".csv"))
-                            disp_txt = length(stim_val) > 400 ? stim_val[1:400] * "..." : stim_val
-                            text!(ax, sx/2, sy/2; text=disp_txt, align=(:center, :center), fontsize=16, word_wrap_width=500, color=:black)
-                        
+                        is_audio_tuple =
+                            stim_val isa Tuple &&
+                            length(stim_val) >= 2 &&
+                            stim_val[2] isa Number &&
+                            stim_val[1] isa AbstractArray
+                        if is_audio_tuple || (
+                            stim_val isa AbstractString &&
+                            endswith(lowercase(stim_val), ".wav")
+                        )
+                            text!(
+                                ax,
+                                sx/2,
+                                sy * 0.95;
+                                text = "AUDIO ATTACHED (Press [Space] to Play)",
+                                align = (:center, :top),
+                                fontsize = 18,
+                                color = :white,
+                                glowwidth = 3,
+                                glowcolor = :black,
+                            )
+                        elseif stim_val isa AbstractString && (
+                            endswith(lowercase(stim_val), ".txt") ||
+                            endswith(lowercase(stim_val), ".csv")
+                        )
+                            disp_txt =
+                                length(stim_val) > 400 ? stim_val[1:400] * "..." : stim_val
+                            text!(
+                                ax,
+                                sx/2,
+                                sy/2;
+                                text = disp_txt,
+                                align = (:center, :center),
+                                fontsize = 16,
+                                word_wrap_width = 500,
+                                color = :black,
+                            )
+
                         else
                             img_mat = nothing
                             bbox = nothing
                             center = nothing
-                            
-                            if stim_val isa Tuple && length(stim_val) == 2 && stim_val[1] isa AbstractMatrix
+
+                            if stim_val isa Tuple &&
+                               length(stim_val) == 2 &&
+                               stim_val[1] isa AbstractMatrix
                                 img_mat = stim_val[1]
                                 coord = stim_val[2]
                                 if coord isa Tuple && length(coord) == 4
@@ -305,11 +376,11 @@ function _dbnew_draw_spatial!(
                                 img_mat = Main.eval(:(using FileIO; load($stim_val)))
                                 center = (sx/2, sy/2) # Fallback to Center 
                             end
-                            
+
                             if !isnothing(img_mat)
                                 # permutedims instead of rotr90: avoids flipping on yreversed axes
                                 img_rotated = permutedims(img_mat, (2, 1))
-                                
+
                                 if !isnothing(bbox)
                                     # (xmin, xmax, ymin, ymax) Box stretch
                                     x_range = bbox[1]..bbox[2]
@@ -789,8 +860,27 @@ function _dbnew_redraw_window!(
         reset_zoom = reset_zoom,
     )
     _dbnew_draw_saccade_polar!(axes[2], state, saccades_draw, cache)
-    _dbnew_draw_xy_trace!(axes[3], g, gx, gy, t, state, saccades_draw, fixations_draw, cache)
-    _dbnew_draw_velocity!(axes[4], g, t, speed_win, state, saccades_draw, fixations_draw, cache)
+    _dbnew_draw_xy_trace!(
+        axes[3],
+        g,
+        gx,
+        gy,
+        t,
+        state,
+        saccades_draw,
+        fixations_draw,
+        cache,
+    )
+    _dbnew_draw_velocity!(
+        axes[4],
+        g,
+        t,
+        speed_win,
+        state,
+        saccades_draw,
+        fixations_draw,
+        cache,
+    )
     _dbnew_draw_pupil!(axes[5], g, pa, t, state)
 end
 
@@ -935,8 +1025,8 @@ function plot_databrowser(
     split_by::Union{Nothing,Symbol,Vector{Symbol}} = nothing,
     aois::Union{Nothing,Vector{<:AOI}} = nothing,
     bg_stimulus::Any = nothing,
-    stimuli::Union{Nothing, Dict} = nothing,
-    match_stimuli::Union{Nothing, Function} = nothing,
+    stimuli::Union{Nothing,Dict} = nothing,
+    match_stimuli::Union{Nothing,Function} = nothing,
 )
 
     # Resolve eye
@@ -946,7 +1036,7 @@ function plot_databrowser(
     pa_col = resolved_eye == :left ? :paL : :paR
 
     if !isnothing(stimuli)
-        bg_stimulus = function(segment_id)
+        bg_stimulus = function (segment_id)
             # User-provided layout parser
             if !isnothing(match_stimuli)
                 # Get trial variables for this segment
@@ -956,24 +1046,28 @@ function plot_databrowser(
                     filter(r -> (!ismissing(r[col]) && r[col] == segment_id), all_vars)
                 else
                     cols = Symbol.(split_by)
-                    filter(r -> Tuple(r[c] for c in cols) == Tuple(segment_id[c] for c in cols), all_vars)
+                    filter(
+                        r ->
+                            Tuple(r[c] for c in cols) == Tuple(segment_id[c] for c in cols),
+                        all_vars,
+                    )
                 end
-                
+
                 # Check for completely missing segments
                 nrow(segment_vars) == 0 && return nothing
-                
+
                 return match_stimuli(segment_vars[1, :], stimuli)
             end
-            
+
             # Standard Fallback: Auto-discovery logic
             trial_df = _dbnew_get_segment_data(df, segment_id, split_by)
             nrow(trial_df) == 0 && return nothing
-            
+
             matched_media = Any[]
             row = trial_df[1, :]
-            
+
             stim_keys = collect(keys(stimuli))
-            
+
             # Auto-discovery: 1. Scan message log for !V IMGLOAD directives
             if hasproperty(trial_df, :message)
                 for msg in skipmissing(trial_df.message)
@@ -982,12 +1076,12 @@ function plot_databrowser(
                         idx = findfirst(x -> x == "IMGLOAD", parts)
                         if !isnothing(idx) && length(parts) >= idx + 2
                             pos_cmd = parts[idx+1]
-                            
+
                             filename = ""
                             cx, cy = sx/2, sy/2  # Default to center
                             topleft = false
                             pos_x, pos_y = nothing, nothing
-                            
+
                             if pos_cmd == "CENTER" || pos_cmd == "FILL"
                                 filename = length(parts) > idx+1 ? parts[end] : ""
                             elseif pos_cmd == "TOP_LEFT" || pos_cmd == "TOPLEFT"
@@ -998,44 +1092,56 @@ function plot_databrowser(
                                 # Check if it's explicit coordinates: IMGLOAD X Y file.png
                                 px = tryparse(Float64, parts[idx+1])
                                 py = tryparse(Float64, get(parts, idx+2, ""))
-                                if !isnothing(px) && !isnothing(py) && length(parts) >= idx + 3
-                                    filename = join(parts[idx+3:end], " ")
+                                if !isnothing(px) &&
+                                   !isnothing(py) &&
+                                   length(parts) >= idx + 3
+                                    filename = join(parts[(idx+3):end], " ")
                                     pos_x, pos_y = px, py
                                     topleft = true
                                 else
                                     filename = parts[end]
                                 end
                             end
-                            
+
                             if !isempty(filename)
                                 clean_val_with_ext = split(filename, r"[/\\]")[end]
                                 clean_val_no_ext = splitext(clean_val_with_ext)[1]
-                                
+
                                 match_k = nothing
                                 if haskey(stimuli, clean_val_with_ext)
                                     match_k = clean_val_with_ext
                                 else
                                     for k in stim_keys
-                                        if lowercase(splitext(k)[1]) == lowercase(clean_val_no_ext)
+                                        if lowercase(splitext(k)[1]) ==
+                                           lowercase(clean_val_no_ext)
                                             match_k = k
                                             break
                                         end
                                     end
                                 end
-                                
+
                                 if !isnothing(match_k)
                                     if topleft && !isnothing(pos_x) && !isnothing(pos_y)
-                                        println("✨ [Auto-Discovery] Parsed IMGLOAD Top-Left Layout at X=$(pos_x), Y=$(pos_y) for ", match_k)
+                                        println(
+                                            "✨ [Auto-Discovery] Parsed IMGLOAD Top-Left Layout at X=$(pos_x), Y=$(pos_y) for ",
+                                            match_k,
+                                        )
                                         # Convert top-left hook to center geometry (w/2, h/2 offset)
                                         mat = stimuli[match_k]
                                         if mat isa AbstractMatrix
                                             w, h = size(rotr90(mat))
-                                            push!(matched_media, (mat, (pos_x + w/2, pos_y + h/2)))
+                                            push!(
+                                                matched_media,
+                                                (mat, (pos_x + w/2, pos_y + h/2)),
+                                            )
                                         else
                                             push!(matched_media, (mat, (pos_x, pos_y)))
                                         end
                                     else
-                                        println("✨ [Auto-Discovery] Parsed IMGLOAD Centered Layout (Screen Center) for ", match_k)
+                                        println(
+                                            "✨ [Auto-Discovery] Parsed IMGLOAD Centered Layout (Screen Center) for ",
+                                            match_k,
+                                        )
                                         push!(matched_media, (stimuli[match_k], (cx, cy)))
                                     end
                                 end
@@ -1044,42 +1150,49 @@ function plot_databrowser(
                     end
                 end
             end
-            
+
             # Auto-discovery: 2. Fallback to generic variable metadata strings
             if isempty(matched_media)
                 for col in names(row)
                     val = row[col]
                     ismissing(val) && continue
-                    
+
                     val_str = strip(string(val))
                     isempty(val_str) && continue
-                    
+
                     clean_val_with_ext = split(val_str, r"[/\\]")[end]
                     clean_val_no_ext = splitext(clean_val_with_ext)[1]
-                    
+
                     if haskey(stimuli, clean_val_with_ext)
                         push!(matched_media, stimuli[clean_val_with_ext])
-                        println("✨ [Auto-Discovery] Found Generic Variable Stimulus: ", clean_val_with_ext)
+                        println(
+                            "✨ [Auto-Discovery] Found Generic Variable Stimulus: ",
+                            clean_val_with_ext,
+                        )
                         continue
                     end
-                    
+
                     for k in stim_keys
                         if lowercase(splitext(k)[1]) == lowercase(clean_val_no_ext)
                             if k != clean_val_with_ext
                                 push!(matched_media, stimuli[k])
-                                println("✨ [Auto-Discovery] Found Generic Variable Stimulus: ", k, " (Fuzzy)")
+                                println(
+                                    "✨ [Auto-Discovery] Found Generic Variable Stimulus: ",
+                                    k,
+                                    " (Fuzzy)",
+                                )
                             end
                         end
                     end
                 end
             end
-            
+
             matched_media = unique(matched_media)
             if isempty(matched_media)
                 println("❌ [Auto-Discovery] No media directives found in IMGLOAD or Variables.")
                 return nothing
             end
-            
+
             return matched_media
         end
     end
@@ -1382,7 +1495,9 @@ function plot_databrowser(
         ws = state.window_samples
         n = max(
             1,
-            nrow(_dbnew_get_segment_data(df, state.segments[state.trial[]], state.split_by)),
+            nrow(
+                _dbnew_get_segment_data(df, state.segments[state.trial[]], state.split_by),
+            ),
         )
 
         frame_range = (ws > 0 && n > ws) ? ws : n
@@ -1863,7 +1978,15 @@ function plot_databrowser(
 
     # ── Initial draw ───────────────────────────────────────────────────────── #
     _cache = Dict{Symbol,Any}()
-    _dbnew_draw_all!(axes, df, state, trial_label, _cache; reset_zoom = true, window_start = 1)
+    _dbnew_draw_all!(
+        axes,
+        df,
+        state,
+        trial_label,
+        _cache;
+        reset_zoom = true,
+        window_start = 1,
+    )
     _dbnew_add_cursor_dots!(axes, cursor_obs)
     _dbnew_update_cursor!(cursor_obs, _cache, state)
     _create_overlay_plots!()
@@ -1885,18 +2008,26 @@ function plot_databrowser(
                             if val isa AudioMedia && val.content isa Tuple
                                 push!(audio_buffers, val.content[1])
                                 audio_fs = val.content[2]
-                            elseif val isa Tuple && length(val) >= 2 && val[2] isa Number && val[1] isa AbstractArray
+                            elseif val isa Tuple &&
+                                   length(val) >= 2 &&
+                                   val[2] isa Number &&
+                                   val[1] isa AbstractArray
                                 push!(audio_buffers, val[1])
                                 audio_fs = val[2]
-                            elseif val isa AbstractString && endswith(lowercase(val), ".wav")
+                            elseif val isa AbstractString &&
+                                   endswith(lowercase(val), ".wav")
                                 play_wav(val)
                             end
                         end
                         if !isempty(audio_buffers) && !isnothing(audio_fs)
                             # Insert 0.3s silence between clips
-                            silence = zeros(Float64, round(Int, 0.3 * audio_fs), size(audio_buffers[1], 2))
+                            silence = zeros(
+                                Float64,
+                                round(Int, 0.3 * audio_fs),
+                                size(audio_buffers[1], 2),
+                            )
                             combined = audio_buffers[1]
-                            for i in 2:length(audio_buffers)
+                            for i = 2:length(audio_buffers)
                                 combined = vcat(combined, silence, audio_buffers[i])
                             end
                             play_wav((combined, audio_fs))

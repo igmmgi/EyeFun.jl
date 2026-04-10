@@ -17,7 +17,7 @@ const _AUDIO_DEVICE_RESOLVED = Ref(false)
     get_best_audio_device()
 
 Scans audio hardware and returns the name of the best available
-analog/speaker device, avoiding HDMI outputs. 
+analog/speaker device, avoiding HDMI outputs. Result is cached after first call.
 """
 function get_best_audio_device()
     if _AUDIO_DEVICE_RESOLVED[]

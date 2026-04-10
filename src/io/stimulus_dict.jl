@@ -10,7 +10,7 @@ to their automatically loaded data using FileIO.
 """
 function read_stimuli(
     directory::String;
-    file_extensions::Vector{String}=["png", "jpg", "jpeg", "bmp", "gif", "wav"]
+    file_extensions::Vector{String} = ["png", "jpg", "jpeg", "bmp", "gif", "wav"],
 )
     stimuli = Dict{String,Any}()
 
