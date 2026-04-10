@@ -23,7 +23,5 @@ Filter = t -> startswith(string(t), "plot_")
 ## Audio Functions
 
 ```@docs
-EyeFun.list_audio_devices
-EyeFun.get_best_audio_device
 EyeFun.play_wav
 ```

@@ -1,8 +1,7 @@
 # Julia GIF reader — first frame, no dependencies
 # GIF spec: https://www.fileformat.info/format/gif/egff.htm
-# With help from Claude Sonnet 4.6
-
-using GLMakie
+# With help from Claude 4.6
+# This avoids adding dependency on ImageMagick, I think
 
 # ── Sub-block helpers ─────────────────────────────────────────────────────── #
 # GIF data comes in sub-blocks: [count byte | count bytes of data | ... | 0x00]
@@ -16,26 +15,23 @@ function read_subblocks(io)
     while (n = read(io, UInt8)) != 0x00
         append!(buf, read(io, n))
     end
-    buf
+    return buf
 end
 
 # ── LZW decompressor ─────────────────────────────────────────────────────── #
-# Chain table: each entry is a (prefix_code, suffix_byte) pair stored in two
-# flat arrays. Decoding walks the chain backward onto a small stack — no
-# per-entry Vector allocations.
-
+# each entry is a (prefix_code, suffix_byte) pair stored in two
 function lzw_decompress(data::Vector{UInt8}, min_code::Int, npixels::Int)
     clear = 1 << min_code
     eoi = clear + 1
 
     t_pre = fill(Int16(-1), 4096)         # prefix codes
     t_suf = Vector{UInt8}(undef, 4096)    # suffix bytes
-    for i in 0:clear-1
+    for i = 0:(clear-1)
         t_suf[i+1] = UInt8(i)
     end
 
-    csize = min_code + 1    # current code bit-width
-    tsize = eoi + 1         # next free table slot
+    csize = min_code + 1   # current code bit-width
+    tsize = eoi + 1        # next free table slot
     bpos = 0               # bit position in data
     prev = -1              # previous code (-1 = none)
     pfst = 0x00            # first byte of previous code's sequence
@@ -45,7 +41,7 @@ function lzw_decompress(data::Vector{UInt8}, min_code::Int, npixels::Int)
 
     function read_code()
         v = 0
-        for b in 0:csize-1
+        for b = 0:(csize-1)
             i = (bpos >> 3) + 1
             i > length(data) && return -1
             v |= Int((data[i] >> (bpos & 7)) & 1) << b
@@ -54,7 +50,7 @@ function lzw_decompress(data::Vector{UInt8}, min_code::Int, npixels::Int)
         v
     end
 
-    function emit(code)::UInt8                  # walk chain → stack → output
+    function emit(code)::UInt8
         sp = 0
         c = code
         while c >= clear
@@ -65,9 +61,10 @@ function lzw_decompress(data::Vector{UInt8}, min_code::Int, npixels::Int)
         sp += 1
         stk[sp] = t_suf[c+1]
         fst = stk[sp]
-        for i in sp:-1:1
+        for i = sp:-1:1
             n >= npixels && break
-            n += 1; out[n] = stk[i]
+            n += 1
+            out[n] = stk[i]
         end
         fst
     end
@@ -108,7 +105,7 @@ end
 # Colour tables are stored as flat UInt8 byte arrays: [R,G,B, R,G,B, ...]
 # Entry i (0-based) lives at bytes ct[3i+1 .. 3i+3].
 
-function read_gif(path::String)::Matrix{RGBAf}
+function read_gif(path::String)::Matrix{Makie.RGBAf}
     io = IOBuffer(read(path))
 
     # Header: "GIF" + version ("87a" or "89a")
@@ -144,23 +141,23 @@ function read_gif(path::String)::Matrix{RGBAf}
             if interlaced && length(indices) == iw * ih
                 tmp = copy(indices)
                 src = 1
-                for rows in (0:8:ih-1, 4:8:ih-1, 2:4:ih-1, 1:2:ih-1), row in rows
+                for rows in (0:8:(ih-1), 4:8:(ih-1), 2:4:(ih-1), 1:2:(ih-1)), row in rows
                     copyto!(indices, row * iw + 1, tmp, src, iw)
                     src += iw
                 end
             end
 
             # Palette index → RGBAf
-            img = Matrix{RGBAf}(undef, ih, iw)
-            for pix in 1:iw*ih
+            img = Matrix{Makie.RGBAf}(undef, ih, iw)
+            for pix = 1:(iw*ih)
                 ci = Int(indices[pix])          # 0-based palette index
                 row, col = divrem(pix - 1, iw) .+ 1
                 base = 3ci + 1
                 if base + 2 <= length(ct)
-                    r, g, b = ct[base] / 255f0, ct[base+1] / 255f0, ct[base+2] / 255f0
-                    img[row, col] = RGBAf(r, g, b, ci == tidx ? 0f0 : 1f0)
+                    r, g, b = ct[base] / 255.0f0, ct[base+1] / 255.0f0, ct[base+2] / 255.0f0
+                    img[row, col] = Makie.RGBAf(r, g, b, ci == tidx ? 0.0f0 : 1.0f0)
                 else
-                    img[row, col] = RGBAf(0, 0, 0, 1)
+                    img[row, col] = Makie.RGBAf(0, 0, 0, 1)
                 end
             end
             return img
@@ -184,28 +181,3 @@ function read_gif(path::String)::Matrix{RGBAf}
     end
     error("No image data found in $path")
 end
-
-# ── Test & display ────────────────────────────────────────────────────────── #
-
-gif_path = let found = ""
-    for (root, _, files) in walkdir("/home/ian/Desktop/EyeTracking/data_2016")
-        for f in files
-            endswith(lowercase(f), ".gif") && (found = joinpath(root, f); break)
-        end
-        !isempty(found) && break
-    end
-    found
-end
-
-println("Loading: $gif_path")
-img = read_gif(gif_path)
-println("✅ $(size(img,2))×$(size(img,1)) — $(eltype(img))")
-
-fig = Figure(size=(size(img, 2), size(img, 1)))
-ax = Axis(fig[1, 1]; aspect=DataAspect())
-image!(ax, rotr90(img))
-hidedecorations!(ax);
-hidespines!(ax);
-display(fig)
-println("Displaying — close window to exit.")
-wait(fig.scene)

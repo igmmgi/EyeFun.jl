@@ -10,15 +10,7 @@ using Makie
 using Printf
 using Statistics
 
-# for external files
-using FileIO
-
-# images
-using ImageMagick
-
-# for audio
-using WAV
-using PortAudio
+# no external dependencies beyond Makie now
 
 # ── Public API ─────────────────────────────────────────────────────────────── #
 
@@ -95,8 +87,6 @@ export plot_sequence
 export plot_transitions
 export plot_databrowser
 export plot_stimuli
-export list_audio_devices
-export get_best_audio_device
 export play_wav
 
 # ── Source files ──────────────────────────────────────────────────────────── #
@@ -125,6 +115,8 @@ include("tobii/tobii_reader.jl")
 # Data I/O
 include("io/read.jl")
 include("io/write.jl")
+include("io/read_gif.jl")
+include("io/image_loader.jl")
 include("io/stimulus_dict.jl")
 
 # Analysis

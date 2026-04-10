@@ -12,8 +12,8 @@ function read_stimuli(
     directory::String;
     file_extensions::Vector{String} = ["png", "jpg", "jpeg", "bmp", "gif", "wav"],
 )
-    stimuli = Dict{String,Any}()
 
+    stimuli = Dict{String,Any}()
     # Normalize extensions so users can pass with or without the leading dot
     file_exts = [lowercase(lstrip(ext, '.')) for ext in file_extensions]
 
@@ -30,9 +30,11 @@ function read_stimuli(
             if ext in ("txt", "csv")
                 # Read sentences as raw strings
                 val = read(path, String)
+            elseif ext == "wav"
+                val = path
             else
                 val = try
-                    FileIO.load(path)
+                    load_image(path)
                 catch
                     path # fallback if load fails
                 end

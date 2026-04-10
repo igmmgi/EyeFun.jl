@@ -163,7 +163,7 @@ function plot_heatmap(
             Makie.ylims!(ax, ylims...)
 
             if !isnothing(background)
-                img = Makie.FileIO.load(background)
+                img = load_image(background)
                 Makie.image!(ax, xlims[1]..xlims[2], ylims[1]..ylims[2], Makie.rotr90(img))
             end
 
@@ -207,7 +207,7 @@ function plot_heatmap(
     Makie.ylims!(ax, ylims...)
 
     if !isnothing(background)
-        img = Makie.FileIO.load(background)
+        img = load_image(background)
         Makie.image!(ax, xlims[1]..xlims[2], ylims[1]..ylims[2], Makie.rotr90(img))
     end
 

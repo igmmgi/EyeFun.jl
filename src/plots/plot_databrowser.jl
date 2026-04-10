@@ -291,8 +291,7 @@ function _dbnew_draw_spatial!(
                     elseif stim_val isa ImageMedia
                         img_mat =
                             stim_val.content isa AbstractString ?
-                            Main.eval(:(using FileIO; load($(stim_val.content)))) :
-                            stim_val.content
+                            load_image(stim_val.content) : stim_val.content
                         img_rotated = permutedims(img_mat, (2, 1))
 
                         if !isnothing(stim_val.bbox)
@@ -373,7 +372,7 @@ function _dbnew_draw_spatial!(
                                 img_mat = stim_val
                                 center = (sx/2, sy/2) # Fallback to Center 
                             elseif stim_val isa AbstractString
-                                img_mat = Main.eval(:(using FileIO; load($stim_val)))
+                                img_mat = load_image(stim_val)
                                 center = (sx/2, sy/2) # Fallback to Center 
                             end
 
