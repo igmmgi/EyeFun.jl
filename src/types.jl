@@ -81,15 +81,6 @@ function EyeData(
     )
 end
 
-"""
-    create_eyefun_data(df::DataFrame; kwargs...) -> EyeData
-
-Internal helper — delegates to the `EyeData(df; ...)` constructor.
-Not exported; use `EyeData(df; ...)` directly or `read_et_data(path)`.
-"""
-function create_eyefun_data(df::DataFrame; kwargs...)
-    return EyeData(df; kwargs...)
-end
 
 # ── Show ───────────────────────────────────────────────────────────────────── #
 
@@ -587,4 +578,53 @@ function variables(ed::EyeData)
 
     keep_cols = [c for c in propertynames(res) if c ∉ sample_cols]
     return select(res, keep_cols)
+end
+
+# ── Media Components ───────────────────────────────────────────────────────── #
+
+"""
+    AbstractEyeFunMedia
+
+Abstract supertype for all media that can be returned by a custom layout extractor 
+and rendered on the interactive dashboard.
+"""
+abstract type AbstractEyeFunMedia end
+
+"""
+    ImageMedia <: AbstractEyeFunMedia
+
+Represents visual objects, supporting matrices or paths, spatial positioning, 
+and bounding boxes.
+"""
+Base.@kwdef struct ImageMedia <: AbstractEyeFunMedia
+    content::Any                                       # Image Matrix, or String path
+    position::Union{Nothing, NTuple{2, Float64}} = nothing # Center (cx, cy)
+    bbox::Union{Nothing, NTuple{4, Float64}} = nothing     # (xmin, xmax, ymin, ymax)
+    time_on::Union{Nothing, Float64} = nothing         # Onset time in ms
+    time_off::Union{Nothing, Float64} = nothing        # Offset time in ms
+    z_index::Int = 0                                   # Order of drawing
+end
+
+"""
+    AudioMedia <: AbstractEyeFunMedia
+
+Represents auditory clips. Has an onset time, but no coordinates.
+"""
+Base.@kwdef struct AudioMedia <: AbstractEyeFunMedia
+    content::Any                                       # Audio waveform or String path to wav
+    time_on::Union{Nothing, Float64} = nothing
+end
+
+"""
+    TextMedia <: AbstractEyeFunMedia
+
+Represents textual prompts or sentences printed on the screen.
+"""
+Base.@kwdef struct TextMedia <: AbstractEyeFunMedia
+    content::String                                    
+    position::Union{Nothing, NTuple{2, Float64}} = nothing
+    time_on::Union{Nothing, Float64} = nothing
+    time_off::Union{Nothing, Float64} = nothing
+    color::Symbol = :black
+    fontsize::Float64 = 16.0
 end

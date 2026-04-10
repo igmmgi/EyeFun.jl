@@ -10,6 +10,16 @@ using Makie
 using Printf
 using Statistics
 
+# for external files
+using FileIO
+
+# images
+using ImageMagick
+
+# for audio
+using WAV
+using PortAudio
+
 # ── Public API ─────────────────────────────────────────────────────────────── #
 
 # Types
@@ -20,6 +30,7 @@ export in_aoi
 # I/O
 export read_et_data
 export write_et_ascii
+export read_stimuli
 
 # Event accessors
 export saccades
@@ -83,6 +94,10 @@ export plot_dwell
 export plot_sequence
 export plot_transitions
 export plot_databrowser
+export plot_stimuli
+export list_audio_devices
+export get_best_audio_device
+export play_wav
 
 # ── Source files ──────────────────────────────────────────────────────────── #
 
@@ -110,6 +125,7 @@ include("tobii/tobii_reader.jl")
 # Data I/O
 include("io/read.jl")
 include("io/write.jl")
+include("io/stimulus_dict.jl")
 
 # Analysis
 include("analysis/analysis.jl")
@@ -127,6 +143,9 @@ include("analysis/scanpath.jl")
 include("analysis/statistics.jl")
 include("analysis/time_course.jl")
 
+# Audio
+include("audio/playback.jl")
+
 # Plotting
 include("plots/common/common.jl")
 include("plots/plot_gaze.jl")
@@ -139,6 +158,6 @@ include("plots/plot_dwell.jl")
 include("plots/plot_sequence.jl")
 include("plots/plot_transitions.jl")
 include("plots/plot_databrowser.jl")
-
+include("plots/plot_stimuli.jl")
 
 end
