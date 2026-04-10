@@ -877,39 +877,56 @@ end
 # ── Main entry point ───────────────────────────────────────────────────────── #
 
 """
-    plot_databrowser(df::EyeData; eye=:auto, split_by=nothing)
+    plot_databrowser(df::EyeData; eye=:auto, split_by=nothing, aois=nothing,
+                     bg_stimulus=nothing, stimuli=nothing, match_stimuli=nothing)
 
 Open an interactive eye-tracking data viewer.
 
-# Parameters
+# Keyword Arguments
+- `eye`: Which eye to use — `:auto` (default), `:left`, or `:right`.
 - `split_by`: How to segment data for browsing.
-  - `split_by=nothing` (default) — show entire DataFrame as one continuous view
-  - `split_by=:trial` — one page per trial
-  - `split_by=[:block, :trial]` — multi-level grouping
+  - `nothing` (default) — show entire DataFrame as one continuous view
+  - `:trial` — one page per trial
+  - `[:block, :trial]` — multi-level grouping
+- `aois`: Optional `Vector{<:AOI}` — AOI overlays drawn on the spatial view.
+- `bg_stimulus`: A function `segment_id -> Vector{AbstractEyeFunMedia}` (or a single
+  media object) that provides per-trial background stimuli. Supports `ImageMedia`,
+  `AudioMedia`, and `TextMedia` objects.
+- `stimuli`: A `Dict{String, Any}` of pre-loaded assets (from `read_stimuli`) used
+  together with `match_stimuli` for automatic per-trial lookup.
+- `match_stimuli`: A function `segment_id -> Vector{AbstractEyeFunMedia}` used to
+  bind entries in the `stimuli` dict to trials.
 
 # Layout
-- **Left**: Spatial gaze view (gaze position on screen with fixations/saccades)
-- **Right top**: XY position trace over time
-- **Right middle**: Gaze velocity over time
-- **Right bottom**: Pupil size over time
+- **Left**: Spatial gaze view (gaze position on screen with optional stimulus overlay)
+- **Top right**: Polar rose chart of saccade directions
+- **Middle top**: XY position trace over time
+- **Middle bottom**: Gaze velocity over time
+- **Bottom**: Pupil size over time
 
 # Controls
 - **◀ / ▶ buttons**: Navigate to previous/next segment
 - **Textbox**: Type a value and press Enter to jump directly (single-column split only)
 - **Sample slider**: Drag to scrub through samples; black dots track position
 - **Play/Pause**: Animate through samples; speed slider controls playback rate
-- **Checkboxes**: Toggle samples, saccades, fixations, blinks, messages
+- **Checkboxes**: Toggle samples, heatmap, saccades, fixations, blinks, messages, AOIs
+- **Space**: Play attached audio (when `bg_stimulus` provides an `AudioMedia`)
 
 # Keyboard
 - `←`/`→`: Previous/next segment
-- `r`: Reset to first segment
+- `r`: Reset zoom to default
 
 # Example
 ```julia
-df = read_eyelink_edf_dataframe("data.edf"; trial_time_zero="TRIALID")
+df = read_et_data("data.edf"; trial_time_zero="TRIALID")
 plot_databrowser(df)
-plot_databrowser(df; split_by=nothing)
+plot_databrowser(df; split_by=:trial)
 plot_databrowser(df; split_by=[:block, :trial])
+
+# With background stimuli
+stim = read_stimuli("/path/to/stimuli")
+plot_databrowser(df; split_by=:trial, stimuli=stim,
+                 match_stimuli=id -> [ImageMedia(content=stim["\$id.png"])])
 ```
 """
 function plot_databrowser(

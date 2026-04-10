@@ -9,8 +9,8 @@ Complete documentation for all public EyeFun.jl functions and types.
 | Section | Contents |
 |---------|----------|
 | [Analysis](analysis.md) | I/O, event accessors, and analysis functions |
-| [Plotting](plotting.md) | All `plot_*` visualisation functions |
-| [Types](types.md) | Data structures and type definitions |
+| [Plotting & Audio](plotting.md) | All `plot_*` functions and audio playback utilities |
+| [Types](types.md) | Data structures, AOI types, and media components |
 
 ## Index
 

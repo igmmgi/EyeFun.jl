@@ -49,6 +49,8 @@ pages = [
             "Pupil" => "demos/plotting/plot-pupil.md",
             "Velocity" => "demos/plotting/plot-velocity.md",
             "Dwell Time" => "demos/plotting/plot-dwell.md",
+            "Stimulus Browser" => "demos/plotting/plot-stimuli.md",
+            "Data Browser" => "demos/plotting/plot-databrowser.md",
         ],
     ],
     "Reference" => [

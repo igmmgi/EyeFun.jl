@@ -2,9 +2,9 @@
 CollapsedDocStrings = true
 ```
 
-# Plotting Functions
+# Plotting & Audio Functions
 
-All public plotting functions in EyeFun.jl.
+All public plotting and audio functions in EyeFun.jl.
 
 ## Index
 
@@ -12,10 +12,18 @@ All public plotting functions in EyeFun.jl.
 Pages = ["plotting.md"]
 ```
 
-## Functions
+## Plotting Functions
 
 ```@autodocs
 Modules = [EyeFun]
 Order = [:function]
 Filter = t -> startswith(string(t), "plot_")
+```
+
+## Audio Functions
+
+```@docs
+EyeFun.list_audio_devices
+EyeFun.get_best_audio_device
+EyeFun.play_wav
 ```
