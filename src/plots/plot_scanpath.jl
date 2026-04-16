@@ -21,26 +21,12 @@ function plot_scanpath(
     samples = _apply_selection(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
-    if !isnothing(split_by)
-        hasproperty(samples, split_by) ||
-            error("Column :$split_by not found for splitting.")
-        groups = filter(r -> !ismissing(r[split_by]), samples)
-        split_vals = sort(unique(groups[!, split_by]))
-    else
-        groups = samples
-        split_vals = [nothing]
-    end
-    n_panels = length(split_vals)
-    n_panels == 0 && error("No non-missing values in :$split_by for splitting.")
-
+    groups, split_vals, n_panels = _prepare_split_panels(samples, split_by; max_panels = 4)
     title = _format_title("Scanpath", selection)
 
     aspect_ratio = (xlims[2] - xlims[1]) / (ylims[2] - ylims[1])
-    panel_w = !isnothing(split_by) ? 400 : round(Int, 600 * aspect_ratio)
-    panel_h = !isnothing(split_by) ? round(Int, panel_w / aspect_ratio) : 600
-    fig_w = !isnothing(split_by) ? (panel_w * n_panels + 50) : panel_w
-    fig_h = !isnothing(split_by) ? panel_h + 80 : panel_h
-    fig = Figure(size = (fig_w, fig_h))
+    fig =
+        _create_split_figure(split_by, n_panels; panel_w = 400, aspect_ratio = aspect_ratio)
 
     for (idx, fval) in enumerate(split_vals)
         sub = isnothing(fval) ? groups : filter(r -> r[split_by] == fval, groups)

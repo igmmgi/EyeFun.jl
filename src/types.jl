@@ -628,3 +628,16 @@ Base.@kwdef struct TextMedia <: AbstractEyeFunMedia
     color::Symbol = :black
     fontsize::Float64 = 16.0
 end
+
+const SaccadeInfo = @NamedTuple{
+    x1::Float64,
+    y1::Float64,
+    x2::Float64,
+    y2::Float64,
+    time_idx::Int,
+    angle::Float64,
+    amplitude::Float64,
+}
+
+const FixationInfo =
+    @NamedTuple{x::Float64, y::Float64, dur::Float64, time_start::Int, time_end::Int}

@@ -3,7 +3,7 @@
 
 Plays a WAV file asynchronously using the native cross-platform audio player capabilities.
 """
-function play_wav(path::String)
+function play_wav(path::String; kwargs...)
     @async begin
         try
             if Sys.islinux()

@@ -221,3 +221,53 @@ function _gaussian_smooth(data::Matrix{Float64}, sigma::Real)
 
     return out
 end
+
+# ── Shared Panel & Layout Boilerplate ─────────────────────────────────────── #
+
+"""
+Safely coordinate group filtering, evaluation, and physical hardware bounds-checking.
+Returns `(groups, split_vals, n_panels)` cleanly to eliminate boilerplate inside plot functions.
+"""
+function _prepare_split_panels(samples, split_by; max_panels = 4)
+    if !isnothing(split_by)
+        hasproperty(samples, split_by) ||
+            error("Column :$split_by not found for splitting.")
+        groups = filter(r -> !ismissing(r[split_by]), samples)
+        split_vals = sort(unique(groups[!, split_by]))
+    else
+        groups = samples
+        split_vals = [nothing]
+    end
+    if length(split_vals) > max_panels
+        @warn "Attempting to plot $(length(split_vals)) side-by-side panels. Truncating to the first $max_panels side-by-side plots to prevent graphics memory exhaustion. To view all items dynamically, please use `plot_databrowser()`."
+        split_vals = split_vals[1:max_panels]
+    end
+    n_panels = length(split_vals)
+    n_panels == 0 && error("No non-missing values in :$split_by for splitting.")
+    return groups, split_vals, n_panels
+end
+
+"""
+Build the Makie Figure object with correct horizontal expansion logic for `split_by` plots.
+Supports aspect_ratio locking for 2D spatial plots (heatmap, fixations, scanpath).
+"""
+function _create_split_figure(
+    split_by,
+    n_panels;
+    panel_w = 450,
+    fig_h = nothing,
+    aspect_ratio = nothing,
+)
+    if !isnothing(aspect_ratio)
+        panel_h = round(Int, panel_w / aspect_ratio)
+        h = !isnothing(split_by) ? panel_h + 80 : 650
+        w = !isnothing(split_by) ? panel_w : round(Int, 650 * aspect_ratio)
+        fig_w = !isnothing(split_by) ? (w * n_panels + 100) : w
+        return Figure(size = (fig_w, h))
+    else
+        w = !isnothing(split_by) ? panel_w : 900
+        h = isnothing(fig_h) ? 500 : fig_h
+        fig_w = !isnothing(split_by) ? (w * n_panels + 50) : w
+        return Figure(size = (fig_w, h))
+    end
+end

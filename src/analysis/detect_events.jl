@@ -191,6 +191,33 @@ end
 
 # ── Column writing ─────────────────────────────────────────────────────────── #
 
+"""
+    _find_contiguous_runs(predicate::Function, vec::AbstractVector, min_len::Int=1)
+
+Find all contiguous runs where `predicate(val)` is `true` in `vec` that are 
+at least `min_len` samples long. Returns a vector of `(start_idx, end_idx)` tuples.
+"""
+function _find_contiguous_runs(predicate::Function, vec::AbstractVector, min_len::Int = 1)
+    runs = Tuple{Int,Int}[]
+    n = length(vec)
+    i = 1
+    while i <= n
+        if predicate(vec[i])
+            j = i
+            while j <= n && predicate(vec[j])
+                j += 1
+            end
+            if (j - i) >= min_len
+                push!(runs, (i, j - 1))
+            end
+            i = j
+        else
+            i += 1
+        end
+    end
+    return runs
+end
+
 """Write detected events into DataFrame columns using the standard schema."""
 function _write_event_columns!(
     df::EyeData,
@@ -226,91 +253,71 @@ function _write_event_columns!(
     sacc_pvel = fill(NaN, n)
 
     # ── Process fixation runs ──
-    i = 1
-    while i <= n
-        if labels[i] == :fixation
-            j = i
-            while j <= n && labels[j] == :fixation
-                j += 1
-            end
-            # Fixation from i to j-1
-            run = i:(j-1)
-            in_fix[run] .= true
+    fix_runs = _find_contiguous_runs(==( :fixation ), labels)
+    for (i, j) in fix_runs
+        run = i:j
+        in_fix[run] .= true
 
-            # Compute centroid (mean gaze, ignoring NaN)
-            sum_x, sum_y, sum_pa, cnt = 0.0, 0.0, 0.0, 0
-            for k in run
-                if !isnan(gx[k]) && !isnan(gy[k])
-                    sum_x += gx[k]
-                    sum_y += gy[k]
-                    if !isnan(pa[k])
-                        sum_pa += pa[k]
-                    end
-                    cnt += 1
+        # Compute centroid (mean gaze, ignoring NaN)
+        sum_x, sum_y, sum_pa, cnt = 0.0, 0.0, 0.0, 0
+        for k in run
+            if !isnan(gx[k]) && !isnan(gy[k])
+                sum_x += gx[k]
+                sum_y += gy[k]
+                if !isnan(pa[k])
+                    sum_pa += pa[k]
                 end
+                cnt += 1
             end
-            if cnt > 0
-                cx = sum_x / cnt
-                cy = sum_y / cnt
-                ca = sum_pa / cnt
-                dur_ms = round(Int32, length(run) / sample_rate * 1000.0)
-                fix_gavx[run] .= cx
-                fix_gavy[run] .= cy
-                fix_ava[run] .= ca
-                fix_dur[run] .= dur_ms
-            end
-            i = j
-        else
-            i += 1
+        end
+        if cnt > 0
+            cx = sum_x / cnt
+            cy = sum_y / cnt
+            ca = sum_pa / cnt
+            dur_ms = round(Int32, length(run) / sample_rate * 1000.0)
+            fix_gavx[run] .= cx
+            fix_gavy[run] .= cy
+            fix_ava[run] .= ca
+            fix_dur[run] .= dur_ms
         end
     end
 
     # ── Process saccade runs ──
-    i = 1
-    while i <= n
-        if labels[i] == :saccade
-            j = i
-            while j <= n && labels[j] == :saccade
-                j += 1
-            end
-            # Saccade from i to j-1
-            run = i:(j-1)
-            in_sacc[run] .= true
-            dur_ms = round(Int32, length(run) / sample_rate * 1000.0)
+    sacc_runs = _find_contiguous_runs(==( :saccade ), labels)
+    for (i, j) in sacc_runs
+        run = i:j
+        in_sacc[run] .= true
+        dur_ms = round(Int32, length(run) / sample_rate * 1000.0)
 
-            # Find first and last valid gaze sample in the saccade
-            first_valid = 0
-            last_valid = 0
-            peak_v = 0.0
-            for k in run
-                if !isnan(gx[k]) && !isnan(gy[k])
-                    first_valid == 0 && (first_valid = k)
-                    last_valid = k
-                end
-                if !isnan(vel[k]) && vel[k] > peak_v
-                    peak_v = vel[k]
-                end
+        # Find first and last valid gaze sample in the saccade
+        first_valid = 0
+        last_valid = 0
+        peak_v = 0.0
+        for k in run
+            if !isnan(gx[k]) && !isnan(gy[k])
+                first_valid == 0 && (first_valid = k)
+                last_valid = k
             end
-
-            if first_valid > 0 && last_valid > 0
-                stx, sty = gx[first_valid], gy[first_valid]
-                enx, eny = gx[last_valid], gy[last_valid]
-                dx = enx - stx
-                dy = eny - sty
-                amp = sqrt(dx^2 + dy^2) / ppd
-
-                sacc_gstx[run] .= stx
-                sacc_gsty[run] .= sty
-                sacc_genx[run] .= enx
-                sacc_geny[run] .= eny
-                sacc_ampl[run] .= amp
-                sacc_pvel[run] .= peak_v
+            if !isnan(vel[k]) && vel[k] > peak_v
+                peak_v = vel[k]
             end
-            sacc_dur[run] .= dur_ms
-            i = j
-        else
-            i += 1
         end
+
+        if first_valid > 0 && last_valid > 0
+            stx, sty = gx[first_valid], gy[first_valid]
+            enx, eny = gx[last_valid], gy[last_valid]
+            dx = enx - stx
+            dy = eny - sty
+            amp = sqrt(dx^2 + dy^2) / ppd
+
+            sacc_gstx[run] .= stx
+            sacc_gsty[run] .= sty
+            sacc_genx[run] .= enx
+            sacc_geny[run] .= eny
+            sacc_ampl[run] .= amp
+            sacc_pvel[run] .= peak_v
+        end
+        sacc_dur[run] .= dur_ms
     end
 
     # ── Write to DataFrame ──
@@ -456,27 +463,67 @@ function _detect_nan_blinks!(ed::EyeData, min_blink_ms::Int, eye::Symbol)
 
     if !isnothing(detect_col)
         track = df[!, detect_col]
-        i = 1
-        while i <= n
-            if isnan(track[i])
-                j = i
-                while j <= n && isnan(track[j])
-                    j += 1
-                end
-                run_len = j - i
-                if run_len >= min_blink_samples
-                    run = i:(j-1)
-                    in_blink[run] .= true
-                    blink_dur[run] .= round(Int32, run_len / sr * 1000.0)
-                end
-                i = j
-            else
-                i += 1
-            end
+
+        # Use our centralized contiguous run extractor
+        blink_runs = _find_contiguous_runs(isnan, track, min_blink_samples)
+
+        for (i, j) in blink_runs
+            run_len = j - i + 1
+            run = i:j
+            in_blink[run] .= true
+            blink_dur[run] .= round(Int32, run_len / sr * 1000.0)
         end
     end
 
     df[!, :in_blink] = in_blink
     df[!, :blink_dur] = blink_dur
     return
+end
+
+# ── Extraction Helpers ─────────────────────────────────────────────────────── #
+
+"""Extract unique fixations rapidly from a DataFrame using contiguous run encoding."""
+function _extract_fixations(g::DataFrame)
+    fixations = FixationInfo[]
+    !hasproperty(g, :fix_gavx) && return fixations
+    !hasproperty(g, :in_fix) && return fixations
+
+    for (i, j) in _find_contiguous_runs(identity, g.in_fix, 1)
+        fx, fy = Float64(g.fix_gavx[i]), Float64(g.fix_gavy[i])
+        if !isnan(fx) && !isnan(fy)
+            push!(
+                fixations,
+                (x = fx, y = fy, dur = Float64(g.fix_dur[i]), time_start = i, time_end = j),
+            )
+        end
+    end
+    return fixations
+end
+
+"""Extract unique saccades rapidly from a DataFrame using contiguous run encoding."""
+function _extract_saccades(g::DataFrame)
+    saccades = SaccadeInfo[]
+    !hasproperty(g, :sacc_gstx) && return saccades
+    !hasproperty(g, :in_sacc) && return saccades
+
+    for (i, j) in _find_contiguous_runs(identity, g.in_sacc, 1)
+        x1, y1 = Float64(g.sacc_gstx[i]), Float64(g.sacc_gsty[i])
+        x2, y2 = Float64(g.sacc_genx[i]), Float64(g.sacc_geny[i])
+        if !isnan(x1) && !isnan(y1) && !isnan(x2) && !isnan(y2)
+            dx, dy = x2 - x1, -(y2 - y1)  # flip Y for screen coords
+            push!(
+                saccades,
+                (
+                    x1 = x1,
+                    y1 = y1,
+                    x2 = x2,
+                    y2 = y2,
+                    time_idx = i,
+                    angle = atan(dx, dy),
+                    amplitude = sqrt(dx^2 + dy^2),
+                ),
+            )
+        end
+    end
+    return saccades
 end

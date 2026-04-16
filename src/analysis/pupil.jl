@@ -83,28 +83,20 @@ Returns a vector of `(start, end)` pairs.
 """
 function _blink_intervals(bm::AbstractVector{Bool}, margin::Int, n::Int)
     intervals = Tuple{Int,Int}[]
-    i = 1
-    while i <= n
-        if bm[i]
-            # Scan to end of this blink run
-            j = i
-            while j <= n && bm[j]
-                j += 1
-            end
-            lo = max(1, i - margin)
-            hi = min(n, j - 1 + margin)
 
-            # Merge with previous interval if overlapping
-            if !isempty(intervals) && lo <= intervals[end][2] + 1
-                intervals[end] = (intervals[end][1], hi)
-            else
-                push!(intervals, (lo, hi))
-            end
-            i = j
+    runs = _find_contiguous_runs(identity, bm, 1)
+    for (i, j) in runs
+        lo = max(1, i - margin)
+        hi = min(n, j + margin)
+
+        # Merge with previous interval if overlapping
+        if !isempty(intervals) && lo <= intervals[end][2] + 1
+            intervals[end] = (intervals[end][1], hi)
         else
-            i += 1
+            push!(intervals, (lo, hi))
         end
     end
+
     return intervals
 end
 

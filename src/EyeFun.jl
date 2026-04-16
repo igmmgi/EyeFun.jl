@@ -88,6 +88,13 @@ export plot_transitions
 export plot_databrowser
 export plot_stimuli
 export play_wav
+export load_image
+
+# Media types
+export AbstractEyeFunMedia
+export ImageMedia
+export AudioMedia
+export TextMedia
 
 # ── Source files ──────────────────────────────────────────────────────────── #
 
@@ -116,6 +123,7 @@ include("tobii/tobii_reader.jl")
 include("io/read.jl")
 include("io/write.jl")
 include("io/read_gif.jl")
+include("io/read_bmp.jl")
 include("io/image_loader.jl")
 include("io/stimulus_dict.jl")
 
@@ -149,6 +157,7 @@ include("plots/plot_velocity.jl")
 include("plots/plot_dwell.jl")
 include("plots/plot_sequence.jl")
 include("plots/plot_transitions.jl")
+include("plots/databrowser_draw.jl")
 include("plots/plot_databrowser.jl")
 include("plots/plot_stimuli.jl")
 

@@ -112,12 +112,8 @@ function plot_heatmap(
 
     # ── Faceted multi-panel heatmap ──
     if !isnothing(split_by)
-        hasproperty(samples, split_by) ||
-            error("Column :$split_by not found for splitting.")
-        groups = filter(r -> !ismissing(r[split_by]), samples)
-        split_vals = sort(unique(groups[!, split_by]))
-        n_panels = length(split_vals)
-        n_panels == 0 && error("No non-missing values in :$split_by for splitting.")
+        groups, split_vals, n_panels =
+            _prepare_split_panels(samples, split_by; max_panels = 4)
 
         # Compute all panels first to get shared color range
         sr = df.sample_rate
@@ -145,9 +141,12 @@ function plot_heatmap(
         vmax == vmin && (vmax = vmin + 1.0)  # avoid degenerate range
 
         aspect_ratio = (xlims[2] - xlims[1]) / (ylims[2] - ylims[1])
-        panel_w = 400
-        panel_h = round(Int, panel_w / aspect_ratio)
-        fig = Figure(size = (panel_w * n_panels + 100, panel_h + 80))
+        fig = _create_split_figure(
+            split_by,
+            n_panels;
+            panel_w = 400,
+            aspect_ratio = aspect_ratio,
+        )
 
         local hm_ref
         for (idx, pd) in enumerate(panel_data)

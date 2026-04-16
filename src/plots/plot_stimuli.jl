@@ -21,8 +21,13 @@ function plot_stimuli(stim::Dict; audio_device = nothing, resolution = (1920, 10
     filtered_keys = Observable{Vector{String}}(keys_list)
 
     # Header Row
-    title_label =
-        Label(f[1, 1], keys_list[1], font = :bold, fontsize = 24, tellwidth = false)
+    title_label = Label(
+        f[1, 1],
+        basename(replace(keys_list[1], "\\" => "/")),
+        font = :bold,
+        fontsize = 24,
+        tellwidth = false,
+    )
 
     exts = unique([lowercase(splitext(k)[2]) for k in keys_list])
     opts = ["All"; sort(collect(exts))]
@@ -89,7 +94,7 @@ function plot_stimuli(stim::Dict; audio_device = nothing, resolution = (1920, 10
         safe_idx = clamp(idx, 1, length(fk))
         k = fk[safe_idx]
 
-        title_label.text = k
+        title_label.text = basename(replace(k, "\\" => "/"))
         counter_label.text = "File $(safe_idx) of $(length(fk))"
 
         val = stim[k]
@@ -110,18 +115,35 @@ function plot_stimuli(stim::Dict; audio_device = nothing, resolution = (1920, 10
                 align = (:center, :center),
                 fontsize = 24,
             )
-        elseif typeof(val) <: AbstractMatrix
-            # Geometrically center the image natively inside the 1920x1080 screen!
-            img_rotated = rotr90(val)
-            w, h = size(img_rotated)
+        elseif typeof(val) <: AbstractMatrix || (
+            typeof(val) <: String && occursin(r"\.(png|jpg|jpeg|bmp|gif)$", lowercase(k))
+        )
+            try
+                img_mat = typeof(val) <: String ? load_image(val) : val
+                # Geometrically center the image natively inside the 1920x1080 screen!
+                img_rotated = rotr90(img_mat)
+                w, h = size(img_rotated)
 
-            cx = resolution[1] / 2
-            cy = resolution[2] / 2
+                cx = resolution[1] / 2
+                cy = resolution[2] / 2
 
-            x_range = (cx - w/2) .. (cx + w/2)
-            y_range = (cy - h/2) .. (cy + h/2)
+                x_range = (cx - w/2) .. (cx + w/2)
+                y_range = (cy - h/2) .. (cy + h/2)
 
-            image!(ax, x_range, y_range, img_rotated)
+                image!(ax, x_range, y_range, img_rotated)
+            catch e
+                msg = e isa ErrorException ? e.msg : string(e)
+                failed_name = basename(replace(k, "\\" => "/"))
+                text!(
+                    ax,
+                    resolution[1]/2,
+                    resolution[2]/2;
+                    text = "Failed to load image:\n$failed_name\n\nReason:\n$msg",
+                    align = (:center, :center),
+                    fontsize = 20,
+                    color = :red,
+                )
+            end
         elseif typeof(val) <: String
             disp_txt = length(val) > 400 ? val[1:400] * "..." : val
             text!(

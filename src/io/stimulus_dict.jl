@@ -30,14 +30,8 @@ function read_stimuli(
             if ext in ("txt", "csv")
                 # Read sentences as raw strings
                 val = read(path, String)
-            elseif ext == "wav"
-                val = path
             else
-                val = try
-                    load_image(path)
-                catch
-                    path # fallback if load fails
-                end
+                val = path
             end
 
             stimuli[file] = val
