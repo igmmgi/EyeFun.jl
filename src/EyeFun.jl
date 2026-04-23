@@ -89,6 +89,7 @@ export plot_databrowser
 export plot_stimuli
 export play_wav
 export load_image
+export image_size
 
 # Media types
 export AbstractEyeFunMedia

@@ -985,10 +985,13 @@ function plot_databrowser(
                         # to avoid ALSA device lock contention from concurrent @async calls.
                         audio_buffers = []
                         audio_fs = nothing
+                        audio_paths = String[]
                         for val in items
                             if val isa AudioMedia && val.content isa Tuple
                                 push!(audio_buffers, val.content[1])
                                 audio_fs = val.content[2]
+                            elseif val isa AudioMedia && val.content isa AbstractString
+                                push!(audio_paths, val.content)
                             elseif val isa Tuple &&
                                    length(val) >= 2 &&
                                    val[2] isa Number &&
@@ -997,7 +1000,17 @@ function plot_databrowser(
                                 audio_fs = val[2]
                             elseif val isa AbstractString &&
                                    endswith(lowercase(val), ".wav")
-                                play_wav(val)
+                                push!(audio_paths, val)
+                            end
+                        end
+                        if !isempty(audio_paths)
+                            @async begin
+                                for i in 1:length(audio_paths)
+                                    wait(play_wav(audio_paths[i]))
+                                    if i < length(audio_paths)
+                                        sleep(0.3)
+                                    end
+                                end
                             end
                         end
                         if !isempty(audio_buffers) && !isnothing(audio_fs)
