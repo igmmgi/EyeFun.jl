@@ -10,6 +10,7 @@ pages = [
     "Home" => "index.md",
     "Getting Started" => [
         "Setup & Installation" => "tutorials/getting-started.md",
+        "Why Julia?" => "tutorials/why-julia.md",
         "IDE Workflows" => "tutorials/ide-workflows.md",
         "Julia Basics" => "tutorials/julia-basics.md",
     ],
@@ -67,7 +68,8 @@ makedocs(;
     sitename = "EyeFun",
     repo = "https://github.com/igmmgi/EyeFun.jl",
     format = DocumenterVitepress.MarkdownVitepress(repo = "https://github.com/igmmgi/EyeFun.jl", devbranch = "main"),
-    warnonly = [:linkcheck, :cross_references, :missing_docs],
+    checkdocs = :exports,
+    warnonly = [:linkcheck, :cross_references],
     draft = false,
     source = "src",
     build = "build",

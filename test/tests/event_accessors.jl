@@ -1,7 +1,3 @@
-# ════════════════════════════════════════════════════════════════════════════ #
-#  Event accessors: variables, saccades, fixations, blinks, messages
-# ════════════════════════════════════════════════════════════════════════════ #
-
 @testset "Event accessors" begin
     ed = Main.TEST1_DF
 
@@ -85,6 +81,43 @@
             # EyeData with all-empty messages
             empty_msg_ed = EyeData(DataFrame(time = [1.0, 2.0], message = ["", ""]))
             @test nrow(messages(empty_msg_ed)) == 0
+        end
+
+        @testset "counts, variables filtering, and sub-1000 Hz fallback duration" begin
+            @test counts(ed.df.in_fix) == nrow(fixations(ed))
+            @test counts(ed.df.in_sacc) == nrow(saccades(ed))
+            @test counts(ed.df.in_blink) == nrow(blinks(ed))
+
+            # variables(ed) must return only trial-level variable columns, never sample/msacc columns
+            ed_vars = EyeData(
+                DataFrame(
+                    time = [0.0, 2.0, 4.0, 6.0],
+                    trial = [1, 1, 2, 2],
+                    gxL = Float32[100, 102, 200, 205],
+                    gyL = Float32[100, 101, 200, 202],
+                    paL = Float32[500, 505, 510, 512],
+                    in_fix = [true, false, true, false],
+                    fix_gavx = [100.0, NaN, 200.0, NaN],
+                    fix_gavy = [100.0, NaN, 200.0, NaN],
+                    fix_ava = [500.0, NaN, 510.0, NaN],
+                    fix_dur = [0, 0, 0, 0],
+                    in_msacc = [false, true, false, false],
+                    msacc_ampl = [NaN, 0.4, NaN, NaN],
+                    condition = ["easy", "easy", "hard", "hard"],
+                );
+                sample_rate = 500.0,
+            )
+            vdf = variables(ed_vars)
+            @test nrow(vdf) == 2
+            @test hasproperty(vdf, :condition)
+            @test !hasproperty(vdf, :gxL)
+            @test !hasproperty(vdf, :in_msacc)
+            @test !hasproperty(vdf, :msacc_ampl)
+
+            # Single-sample fixation with fix_dur == 0 at 500 Hz must have duration 2.0 ms (not 1.0 ms)
+            f_single = fixations(ed_vars)
+            @test nrow(f_single) == 2
+            @test all(d -> d ≈ 2.0, f_single.duration)
         end
     end
 end

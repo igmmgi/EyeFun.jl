@@ -1,6 +1,6 @@
 # Julia Basics
 
-EyeFun.jl is designed so that you do not need to be a Julia programmer to use it. In practice, most eye-tracking analysis with EyeFun involves calling functions and interacting with plots — there is very little traditional "programming" required, and in that sense the choice of language is almost secondary. That said, a basic understanding of Julia always helps, especially when you want to write small scripts, customise a pipeline, or understand an error message. This page covers the essentials.
+Most work in EyeFun.jl consists of calling functions on tabular data and inspecting plots, so only a few core Julia concepts are needed to write scripts, customize a pipeline, or read error messages.
 
 ## The REPL as a Calculator
 
@@ -171,7 +171,7 @@ for eye in eyes
 end
 ```
 
-Loops in Julia are fast — unlike MATLAB or Python, there is no performance penalty for writing explicit loops instead of vectorised code.
+Compiled loops in Julia run at native speed, so explicit `for` loops carry no performance penalty compared to vectorized code.
 
 ### Comprehensions
 
@@ -225,7 +225,7 @@ julia> triggers["MSG_2"]
 
 ## Tuples
 
-Tuples are fixed-size, immutable collections. You have already seen them — `size()` returns a tuple:
+Tuples are fixed-size, immutable collections (for example, the return value of `size()`):
 
 ```julia-repl
 julia> dims = (1024, 768)
@@ -247,7 +247,7 @@ julia> baseline_window = (-200.0, 0.0)
 
 ## Named Tuples
 
-Named tuples add field names to each element, giving you lightweight, self-documenting containers without defining a custom type:
+Named tuples attach field names to each element without defining a custom struct:
 
 ```julia-repl
 julia> participant = (id = "P01", age = 25, group = "control")
@@ -307,11 +307,12 @@ julia> map(x -> x^2, [1, 2, 3])
 By convention, functions that modify their input end with `!`:
 
 ```julia
-smooth_gaze!(data, 5.0)   # modifies data in-place
-smooth_gaze(data, 5.0)    # returns a new copy, data is unchanged
+sort!(values)             # modifies `values` in-place
+sorted = sort(values)     # returns a new sorted vector; `values` is unchanged
+smooth_pupil!(dat)        # EyeFun mutating functions follow the same `!` convention
 ```
 
-This is a naming convention, not enforced by the language, but Julia packages (including EyeFun.jl) follow it consistently.
+This is a naming convention followed across Base Julia and packages including EyeFun.jl.
 
 ### Broadcasting (The Dot Syntax)
 
@@ -385,7 +386,7 @@ julia> double(3.14)
 6.28
 ```
 
-This is how EyeFun.jl works internally — many functions have different methods for different data types (e.g. `EDFFile` structures vs `EyeData` dataframes), so you use the same function name regardless of what you pass in. See [**Data Structures**](../explanations/data-structures.md) for EyeFun.jl's own type hierarchy.
+EyeFun.jl uses multiple dispatch so the same function name accepts raw file structs (e.g. `EDFFile`), `EyeData` containers, or `DataFrame`s. See [**Data Structures**](../explanations/data-structures.md) for EyeFun.jl's type hierarchy.
 
 ## Getting Help
 
@@ -403,7 +404,7 @@ search: sqrt isqrt
 For EyeFun functions:
 
 ```julia-repl
-help?> read_eyelink_edf
+help?> read_et_data
 ```
 
 ## Next Steps

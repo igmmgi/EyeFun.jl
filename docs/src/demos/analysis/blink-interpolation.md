@@ -5,5 +5,5 @@ using EyeFun
 
 dat = read_et_data("experiment.edf")
 
-interpolate_blinks!(dat; padding_ms=50.0)
+interpolate_blinks!(dat; margin_ms=50)
 ```

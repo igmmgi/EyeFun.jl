@@ -5,12 +5,12 @@
 Open an interactive eye-tracking data viewer.
 
 # Keyword Arguments
-- `eye`: Which eye to use — `:auto` (default), `:left`, or `:right`.
+- `eye`: Which eye to use: `:auto` (default), `:left`, or `:right`.
 - `split_by`: How to segment data for browsing.
-  - `nothing` (default) — show entire DataFrame as one continuous view
-  - `:trial` — one page per trial
-  - `[:block, :trial]` — multi-level grouping
-- `aois`: Optional `Vector{<:AOI}` — AOI overlays drawn on the spatial view.
+  - `nothing` (default): show entire DataFrame as one continuous view
+  - `:trial`: one page per trial
+  - `[:block, :trial]`: multi-level grouping
+- `aois`: Optional `Vector{<:AOI}` overlaid on the spatial view.
 - `bg_stimulus`: A function `segment_id -> Vector{AbstractEyeFunMedia}` (or a single
   media object) that provides per-trial background stimuli. Supports `ImageMedia`,
   `AudioMedia`, and `TextMedia` objects.
@@ -59,47 +59,80 @@ function plot_databrowser(
     bg_stimulus::Any = nothing,
     stimuli::Union{Nothing,Dict} = nothing,
     match_stimuli::Union{Nothing,Function} = nothing,
+    prefix::Union{Nothing,Symbol} = nothing,
     display_plot::Bool = true,
 )
 
-    # Resolve eye
+    # Resolve eye and screen dimensions
     resolved_eye = _resolve_eye(df, eye)
-    gx_col = resolved_eye == :left ? :gxL : :gxR
-    gy_col = resolved_eye == :left ? :gyL : :gyR
-    pa_col = resolved_eye == :left ? :paL : :paR
+    _ensure_eye_cols!(df, resolved_eye; cols = :gaze)
+    _ensure_eye_cols!(df, resolved_eye; cols = :pupil)
+    ecols = _eye_columns(resolved_eye)
+    gx_col, gy_col, pa_col = ecols.gx, ecols.gy, ecols.pa
+    sx, sy = df.screen_res
 
-    if !isnothing(stimuli)
+    # Pre-group segments for trial switching and stimulus lookup
+    if isnothing(split_by)
+        segments = Any[1]  # single pseudo-segment
+        segment_views = AbstractDataFrame[df.df]
+    elseif split_by isa Symbol
+        gd = groupby(df.df, split_by; sort = true, skipmissing = true)
+        segments = Any[k[1] for k in keys(gd)]
+        segment_views = AbstractDataFrame[gd[i] for i = 1:length(gd)]
+    else
+        cols = Symbol.(split_by)
+        gd = groupby(df.df, cols; sort = true, skipmissing = true)
+        segments = Any[NamedTuple{Tuple(cols)}(Tuple(k)) for k in keys(gd)]
+        segment_views = AbstractDataFrame[gd[i] for i = 1:length(gd)]
+    end
+    isempty(segments) && error("No segments found in DataFrame for split_by=$(split_by).")
+    seg_lookup = Dict{Any,AbstractDataFrame}(
+        segments[i] => segment_views[i] for i in eachindex(segments)
+    )
+
+    if !isnothing(stimuli) || !isnothing(match_stimuli)
+        stim_dict = isnothing(stimuli) ? Dict{String,Any}() : stimuli
+        cached_vars = !isnothing(match_stimuli) ? EyeFun.variables(df) : nothing
+        stim_keys = collect(keys(stim_dict))
         bg_stimulus = function (segment_id)
-            # User-provided layout parser
+            # User-provided layout parser (supports 1-arg `(row)` or 2-arg `(row, stimuli)`)
             if !isnothing(match_stimuli)
-                # Get trial variables for this segment
-                all_vars = EyeFun.variables(df)
+                all_vars = cached_vars::DataFrame
                 segment_vars = if split_by isa Symbol || isnothing(split_by)
                     col = isnothing(split_by) ? :trial : split_by
-                    filter(r -> (!ismissing(r[col]) && r[col] == segment_id), all_vars)
+                    hasproperty(all_vars, col) ?
+                    filter(r -> (!ismissing(r[col]) && r[col] == segment_id), all_vars) :
+                    DataFrame()
                 else
                     cols = Symbol.(split_by)
+                    all(c -> hasproperty(all_vars, c), cols) ?
                     filter(
                         r ->
                             Tuple(r[c] for c in cols) == Tuple(segment_id[c] for c in cols),
                         all_vars,
-                    )
+                    ) : DataFrame()
                 end
 
-                # Check for completely missing segments
-                nrow(segment_vars) == 0 && return nothing
+                # Fall back to first row of trial_df if variables() lacks split_by columns
+                row_arg = if nrow(segment_vars) > 0
+                    segment_vars[1, :]
+                else
+                    tdf = get(seg_lookup, segment_id, nothing)
+                    (isnothing(tdf) || nrow(tdf) == 0) && return nothing
+                    tdf[1, :]
+                end
 
-                return match_stimuli(segment_vars[1, :], stimuli)
+                return applicable(match_stimuli, row_arg, stim_dict) ?
+                       match_stimuli(row_arg, stim_dict) :
+                       match_stimuli(row_arg)
             end
 
             # Standard Fallback: Auto-discovery logic
-            trial_df = _dbnew_get_segment_data(df, segment_id, split_by)
-            nrow(trial_df) == 0 && return nothing
+            trial_df = get(seg_lookup, segment_id, nothing)
+            (isnothing(trial_df) || nrow(trial_df) == 0) && return nothing
 
             matched_media = Any[]
             row = trial_df[1, :]
-
-            stim_keys = collect(keys(stimuli))
 
             # Auto-discovery: 1. Scan message log for !V IMGLOAD directives
             if hasproperty(trial_df, :message)
@@ -141,7 +174,7 @@ function plot_databrowser(
                                 clean_val_no_ext = splitext(clean_val_with_ext)[1]
 
                                 match_k = nothing
-                                if haskey(stimuli, clean_val_with_ext)
+                                if haskey(stim_dict, clean_val_with_ext)
                                     match_k = clean_val_with_ext
                                 else
                                     for k in stim_keys
@@ -155,14 +188,17 @@ function plot_databrowser(
 
                                 if !isnothing(match_k)
                                     if topleft && !isnothing(pos_x) && !isnothing(pos_y)
-                                        println(
-                                            "✨ [Auto-Discovery] Parsed IMGLOAD Top-Left Layout at X=$(pos_x), Y=$(pos_y) for ",
-                                            match_k,
-                                        )
+                                        @debug "[Auto-Discovery] Parsed IMGLOAD Top-Left Layout" pos_x pos_y match_k
                                         # Convert top-left hook to center geometry (w/2, h/2 offset)
-                                        mat = stimuli[match_k]
+                                        mat = stim_dict[match_k]
                                         if mat isa AbstractMatrix
-                                            w, h = size(rotr90(mat))
+                                            h, w = size(mat)
+                                            push!(
+                                                matched_media,
+                                                (mat, (pos_x + w / 2, pos_y + h / 2)),
+                                            )
+                                        elseif mat isa AbstractString && isfile(mat)
+                                            h, w = image_size(mat)
                                             push!(
                                                 matched_media,
                                                 (mat, (pos_x + w / 2, pos_y + h / 2)),
@@ -171,11 +207,8 @@ function plot_databrowser(
                                             push!(matched_media, (mat, (pos_x, pos_y)))
                                         end
                                     else
-                                        println(
-                                            "✨ [Auto-Discovery] Parsed IMGLOAD Centered Layout (Screen Center) for ",
-                                            match_k,
-                                        )
-                                        push!(matched_media, (stimuli[match_k], (cx, cy)))
+                                        @debug "[Auto-Discovery] Parsed IMGLOAD Centered Layout" match_k
+                                        push!(matched_media, (stim_dict[match_k], (cx, cy)))
                                     end
                                 end
                             end
@@ -196,24 +229,17 @@ function plot_databrowser(
                     clean_val_with_ext = split(val_str, r"[/\\]")[end]
                     clean_val_no_ext = splitext(clean_val_with_ext)[1]
 
-                    if haskey(stimuli, clean_val_with_ext)
-                        push!(matched_media, stimuli[clean_val_with_ext])
-                        println(
-                            "✨ [Auto-Discovery] Found Generic Variable Stimulus: ",
-                            clean_val_with_ext,
-                        )
+                    if haskey(stim_dict, clean_val_with_ext)
+                        push!(matched_media, stim_dict[clean_val_with_ext])
+                        @debug "[Auto-Discovery] Found Generic Variable Stimulus" clean_val_with_ext
                         continue
                     end
 
                     for k in stim_keys
                         if lowercase(splitext(k)[1]) == lowercase(clean_val_no_ext)
                             if k != clean_val_with_ext
-                                push!(matched_media, stimuli[k])
-                                println(
-                                    "✨ [Auto-Discovery] Found Generic Variable Stimulus: ",
-                                    k,
-                                    " (Fuzzy)",
-                                )
+                                push!(matched_media, stim_dict[k])
+                                @debug "[Auto-Discovery] Found Generic Variable Stimulus (Fuzzy)" k
                             end
                         end
                     end
@@ -222,7 +248,7 @@ function plot_databrowser(
 
             matched_media = unique(matched_media)
             if isempty(matched_media)
-                println("❌ [Auto-Discovery] No media directives found in IMGLOAD or Variables.")
+                @debug "[Auto-Discovery] No media directives found in IMGLOAD or Variables."
                 return nothing
             end
 
@@ -230,29 +256,9 @@ function plot_databrowser(
         end
     end
 
-    # Compute segments from split_by
-    if isnothing(split_by)
-        segments = Any[1]  # single pseudo-segment
-    elseif split_by isa Symbol
-        segments = Any[v for v in sort(unique(skipmissing(df.df[!, split_by])))]
-    else
-        # Multi-column: get unique combos as NamedTuples
-        cols = Symbol.(split_by)
-        combos = unique(df.df[!, cols])
-        # Remove rows with missing values
-        combos = filter(r -> all(c -> !ismissing(r[c]), cols), combos)
-        # Sort by columns in order
-        sort!(combos, cols)
-        segments =
-            Any[NamedTuple{Tuple(cols)}(Tuple(r[c] for c in cols)) for r in eachrow(combos)]
-    end
-    isempty(segments) && error("No segments found in DataFrame for split_by=$(split_by).")
-
-    # Initialize auto_window
-    g_first = _dbnew_get_segment_data(df, segments[1], split_by)
+    g_first = segment_views[1]
     auto_window = isnothing(split_by) && nrow(g_first) > 5000 ? 5000 : 0
 
-    # Create state
     state = EyeViewerMediaState(
         Observable(1),          # segment index
         Observable(1),          # frame
@@ -274,19 +280,20 @@ function plot_databrowser(
         pa_col,
         nothing,                # spatial_zoom
         auto_window,            # window_samples
-        aois,                   # aois
-        bg_stimulus,               # bg_stimulus
+        aois,
+        bg_stimulus,
+        segment_views,
+        prefix,
     )
 
-    # ── Figure layout ──────────────────────────────────────────────────────── #
     fig = Figure(size = (1920, 1080), padding = (0, 0, 0, 0))
 
     g_left = fig[1, 1] = GridLayout()
     g_right = fig[1, 2] = GridLayout()
 
-    # Left column: spatial (top) + polar (bottom)
+    # Left column: spatial (row 1) + polar (row 2)
     ax_spatial = Axis(
-        g_left[1:2, 1];
+        g_left[1, 1];
         xlabel = "X (px)",
         ylabel = "Y (px)",
         aspect = DataAspect(),
@@ -298,7 +305,7 @@ function plot_databrowser(
     )
 
     ax_polar = PolarAxis(
-        g_left[3, 1];
+        g_left[2, 1];
         title = "Saccade Directions",
         theta_0 = -π / 2,
         direction = -1,
@@ -309,7 +316,7 @@ function plot_databrowser(
 
     # Right column: time-series (rows 1:3)
     ax_xy = Axis(
-        g_right[1:4, 1];
+        g_right[1, 1];
         ylabel = "Position (px)",
         xgridvisible = false,
         ygridvisible = false,
@@ -317,15 +324,15 @@ function plot_databrowser(
     hidexdecorations!(ax_xy; label = true)
 
     ax_vel = Axis(
-        g_right[5, 1];
-        ylabel = "Velocity (px/s)",
+        g_right[2, 1];
+        ylabel = "Velocity (°/s)",
         xgridvisible = false,
         ygridvisible = false,
     )
     hidexdecorations!(ax_vel; label = true)
 
     ax_pup = Axis(
-        g_right[6, 1];
+        g_right[3, 1];
         xlabel = "Time (ms)",
         ylabel = "Pupil",
         xgridvisible = false,
@@ -336,22 +343,17 @@ function plot_databrowser(
 
     axes = [ax_spatial, ax_polar, ax_xy, ax_vel, ax_pup]
 
-    # ── Controls ───────────────────────────────────────────────────────────── #
-
     # Left column (under spatial): navigation + toggles
     left_controls = fig[2, 1] = GridLayout(valign = :top)
 
-    # Trial navigation + toggles — single horizontal row
     trial_label = Observable(_dbnew_segment_label(state))
     n_segs = length(state.segments)
 
-
     window_view_obs = Observable(state.window_samples > 0)
 
-    # ◀ label ▶ [textbox] | toggles...
     col = 1
     if isnothing(state.split_by)
-        # Single segment — just show "All Data" label, no navigation
+        # Single segment: show "All Data" label without navigation buttons
         Label(
             left_controls[1, col],
             "All Data";
@@ -395,8 +397,7 @@ function plot_databrowser(
         col += 1
         tb_trial = Textbox(
             left_controls[1, col];
-            placeholder = "Trial #",
-            validator = Int,
+            placeholder = "Jump...",
             width = 70,
             stored_string = nothing,
             tellwidth = true,
@@ -433,11 +434,9 @@ function plot_databrowser(
         )
         on(tog.active) do val
             obs[] = val
-            _dbnew_draw_all!(
+            _dbnew_redraw_window!(
                 axes,
-                df,
                 state,
-                trial_label,
                 _cache;
                 window_start = isnothing(sl_scroll) ? 1 : round(Int, sl_scroll.value[]),
             )
@@ -452,7 +451,7 @@ function plot_databrowser(
     # Scrubber area: sliders in column 2 aligned exactly with plots
     slider_controls = fig[2, 2] = GridLayout(valign = :top)
 
-    g1 = _dbnew_get_segment_data(df, state.segments[1], state.split_by)
+    g1 = state.segment_views[1]
     n_samples_init = max(1, nrow(g1))
     ws = state.window_samples
     _is_windowed = ws > 0 && n_samples_init > ws
@@ -482,17 +481,7 @@ function plot_databrowser(
         halign = :right,
         tellwidth = false,
     )
-    sample_rate = round(
-        Int,
-        1.0 / max(
-            1e-6,
-            (
-                nrow(g1) > 1 ?
-                (Float64(g1[end, :time]) - Float64(g1[1, :time])) / (nrow(g1) - 1) /
-                1000.0 : 0.001
-            ),
-        ),
-    )
+    sample_rate = max(1, round(Int, df.sample_rate > 0.0 ? df.sample_rate : 1000.0))
     realtime_step = max(1, round(Int, sample_rate / 30))
     max_speed = realtime_step * 2
     sl_speed = Slider(
@@ -526,12 +515,7 @@ function plot_databrowser(
 
         state.window_samples = is_win ? 5000 : 0
         ws = state.window_samples
-        n = max(
-            1,
-            nrow(
-                _dbnew_get_segment_data(df, state.segments[state.trial[]], state.split_by),
-            ),
-        )
+        n = max(1, nrow(state.segment_views[state.trial[]]))
 
         frame_range = (ws > 0 && n > ws) ? ws : n
         sl_frame.range[] = 1:frame_range
@@ -556,6 +540,13 @@ function plot_databrowser(
     _playing = Observable(false)
     _scroll_playing = Observable(false)
 
+    on(events(fig).window_open) do is_open
+        if !is_open
+            _playing[] = false
+            _scroll_playing[] = false
+        end
+    end
+
     on(btn_play.clicks) do _
         _playing[] = !_playing[]
         btn_play.label[] = _playing[] ? "||" : "▶"
@@ -576,7 +567,7 @@ function plot_databrowser(
         end
     end
 
-    # Scroll play button — advances window through data
+    # Scroll play button: advances window through data
     on(btn_scroll_play.clicks) do _
         _scroll_playing[] = !_scroll_playing[]
         btn_scroll_play.label[] = _scroll_playing[] ? "||" : "▶"
@@ -597,7 +588,6 @@ function plot_databrowser(
         end
     end
 
-    # ── Cursor dot observables ─────────────────────────────────────────────── #
     cursor_obs = Dict(
         :spatial_pts => Observable(Point2f[(0, 0)]),
         :xy_x_pt => Observable(Point2f[(0, 0)]),
@@ -605,8 +595,6 @@ function plot_databrowser(
         :vel_pts => Observable(Point2f[(0, 0)]),
         :pup_pts => Observable(Point2f[(0, 0)]),
     )
-
-    # ── Trial navigation helper ─────────────────────────────────────────────── #
 
     function _goto_trial!(idx::Int)
         idx = clamp(idx, 1, length(state.segments))
@@ -617,7 +605,7 @@ function plot_databrowser(
         state.trial[] = idx
         state.selected_saccade[] = 0
         state.selected_fixation[] = 0
-        g = _dbnew_get_segment_data(df, state.segments[idx], state.split_by)
+        g = state.segment_views[idx]
         n = max(1, nrow(g))
 
         # Update windowed state
@@ -648,9 +636,6 @@ function plot_databrowser(
         _create_overlay_plots!()
     end
 
-    # ── Observers ──────────────────────────────────────────────────────────── #
-
-    # ◀ / ▶ buttons
     if !isnothing(btn_prev)
         on(btn_prev.clicks) do _
             state.trial[] > 1 && _goto_trial!(state.trial[] - 1)
@@ -662,41 +647,57 @@ function plot_databrowser(
         end
     end
 
-    # Textbox — jump to trial number
+    # Jump to trial/segment by value, string label, or 1-based index
     if !isnothing(tb_trial)
         on(tb_trial.stored_string) do s
             isnothing(s) && return
-            trial_num = tryparse(Int, s)
-            isnothing(trial_num) && return
-            idx = findfirst(==(trial_num), state.segments)
+            st = strip(s)
+            isempty(st) && return
+            trial_num = tryparse(Int, st)
+            idx = nothing
+            if !isnothing(trial_num)
+                idx = findfirst(seg -> isequal(seg, trial_num), state.segments)
+                if isnothing(idx) && 1 <= trial_num <= length(state.segments)
+                    idx = trial_num
+                end
+            end
+            if isnothing(idx)
+                st_low = lowercase(st)
+                idx = findfirst(state.segments) do seg
+                    if seg isa NamedTuple
+                        lbl1 = lowercase(join([string(v) for v in values(seg)], "/"))
+                        lbl2 = lowercase(join([string(v) for v in values(seg)], " "))
+                        return st_low == lbl1 || st_low == lbl2
+                    else
+                        return lowercase(string(seg)) == st_low
+                    end
+                end
+            end
             if !isnothing(idx)
                 _goto_trial!(idx)
             end
         end
     end
 
-    # Frame slider — cursor within visible window
+    # Frame slider: cursor within visible window
     on(sl_frame.value) do f
-        # Convert window-relative frame to full-data frame
         w_start = get(_cache, :window_start, 1)
         state.frame[] = w_start + f - 1
         _dbnew_update_cursor!(cursor_obs, _cache, state)
     end
 
-    # Scroll slider — changes visible window
+    # Scroll slider: visible window start
     if !isnothing(sl_scroll)
         on(sl_scroll.value) do w
             w_start = round(Int, w)
             _dbnew_redraw_window!(axes, state, _cache; window_start = w_start)
             _dbnew_add_cursor_dots!(axes, cursor_obs)
             _create_overlay_plots!()
-            # Re-map cursor to new window
             state.frame[] = w_start + sl_frame.value[] - 1
             _dbnew_update_cursor!(cursor_obs, _cache, state)
         end
     end
 
-    # ── Keyboard events ────────────────────────────────────────────────────── #
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press || event.action == Keyboard.repeat
             if event.key == Keyboard.right
@@ -710,7 +711,16 @@ function plot_databrowser(
                 end
                 return Consume(true)
             elseif event.key == Keyboard.r
-                _goto_trial!(1)
+                _dbnew_redraw_window!(
+                    axes,
+                    state,
+                    _cache;
+                    reset_zoom = true,
+                    window_start = get(_cache, :window_start, 1),
+                )
+                _dbnew_add_cursor_dots!(axes, cursor_obs)
+                _dbnew_update_cursor!(cursor_obs, _cache, state)
+                _create_overlay_plots!()
                 return Consume(true)
             elseif event.key == Keyboard.escape
                 state.selected_saccade[] = 0
@@ -722,9 +732,7 @@ function plot_databrowser(
         return Consume(false)
     end
 
-    # ── Selection highlight overlay (Observable-based, no plot creation on click) ── #
-
-    # Persistent overlay Observables
+    # Persistent selection highlight observables
     _hl_sacc_spatial_pts = Observable(Point2f[])
     _hl_sacc_xy_t = Observable(Float64[])
     _hl_sacc_vel_t = Observable(Float64[])
@@ -823,10 +831,9 @@ function plot_databrowser(
 
 
 
-    # Helper: select or clear fixation
     function _toggle_fixation!(idx::Int, within_threshold::Bool)
         if within_threshold && state.selected_fixation[] == idx
-            state.selected_fixation[] = 0   # toggle off
+            state.selected_fixation[] = 0
         elseif within_threshold
             state.selected_fixation[] = idx
             state.selected_saccade[] = 0
@@ -836,10 +843,9 @@ function plot_databrowser(
         _update_highlight_overlay!()
     end
 
-    # Helper: select or clear saccade
     function _toggle_saccade!(idx::Int, within_threshold::Bool)
         if within_threshold && state.selected_saccade[] == idx
-            state.selected_saccade[] = 0   # toggle off
+            state.selected_saccade[] = 0
         elseif within_threshold
             state.selected_saccade[] = idx
             state.selected_fixation[] = 0
@@ -916,7 +922,7 @@ function plot_databrowser(
                 t_range = length(t) > 1 ? t[end] - t[1] : 1.0
                 threshold = t_range * 0.02
 
-                # Check saccades FIRST (nearest vline) — prioritize over fixations
+                # Check saccades first (nearest vline), prioritizing over fixations
                 best_sacc_dist = Inf
                 best_sacc_idx = 0
                 for (si, s) in enumerate(saccades)
@@ -955,9 +961,6 @@ function plot_databrowser(
     register_interaction!(ax_xy, :event_select, _make_time_select_handler())
     register_interaction!(ax_vel, :event_select, _make_time_select_handler())
 
-
-
-    # ── Initial draw ───────────────────────────────────────────────────────── #
     _cache = Dict{Symbol,Any}()
     _dbnew_draw_all!(
         axes,
@@ -972,7 +975,6 @@ function plot_databrowser(
     _dbnew_update_cursor!(cursor_obs, _cache, state)
     _create_overlay_plots!()
 
-    # ── Multimedia Keyboard Listeners ──────────────────────────────────────── #
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.space
             if !isnothing(state.bg_stimulus)
@@ -1015,12 +1017,12 @@ function plot_databrowser(
                         end
                         if !isempty(audio_buffers) && !isnothing(audio_fs)
                             # Insert 0.3s silence between clips
-                            silence = zeros(
-                                Float64,
-                                round(Int, 0.3 * audio_fs),
-                                size(audio_buffers[1], 2),
-                            )
-                            combined = audio_buffers[1]
+                            n_sil = round(Int, 0.3 * audio_fs)
+                            first_buf = audio_buffers[1]
+                            silence =
+                                ndims(first_buf) == 1 ? zeros(Float64, n_sil) :
+                                zeros(Float64, n_sil, size(first_buf, 2))
+                            combined = first_buf
                             for i = 2:length(audio_buffers)
                                 combined = vcat(combined, silence, audio_buffers[i])
                             end

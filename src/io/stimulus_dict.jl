@@ -1,34 +1,39 @@
 """
-    read_stimuli(directory::String; load_extensions=...) -> Dict{String, Any}
+    read_stimuli(directory::AbstractString; file_extensions=["png", "jpg", "jpeg", "bmp", "gif", "wav"]) -> Dict{String, Any}
 
-Recursively index a directory for multimedia files (ignoring hidden files)
-and return a standard Julia `Dict` that maps basenames (e.g. `image.png`) 
-to their automatically loaded data using FileIO.
+Recursively index a directory for multimedia and text stimulus files (ignoring hidden files)
+and return a `Dict{String, Any}` mapping each file's basename (e.g. `"image.png"`) to its path
+(or loaded text string for `.txt`/`.csv` files).
 
 # Keyword Arguments
-- `file_extensions`: Extensions to load (e.g. `["png", "jpg", "wav"]`). Images/audio use `FileIO`, text uses raw strings. Non-matching files are skipped.
+- `file_extensions`: Extensions to index (with or without leading `.`). Text files (`"txt"`, `"csv"`)
+  are read as `String`; image and audio files store their full path for lazy loading via [`load_image`](@ref)
+  or [`play_wav`](@ref). (`load_extensions` is accepted as a backwards-compatible alias.)
 """
 function read_stimuli(
-    directory::String;
-    file_extensions::Vector{String} = ["png", "jpg", "jpeg", "bmp", "gif", "wav"],
+    directory::AbstractString;
+    file_extensions::AbstractVector{<:AbstractString} = ["png", "jpg", "jpeg", "bmp", "gif", "wav"],
+    load_extensions::Union{Nothing,AbstractVector{<:AbstractString}} = nothing,
 )
+    isdir(directory) || error("Stimulus directory not found: $directory")
+    exts_in = isnothing(load_extensions) ? file_extensions : load_extensions
 
     stimuli = Dict{String,Any}()
-    # Normalize extensions so users can pass with or without the leading dot
-    file_exts = [lowercase(lstrip(ext, '.')) for ext in file_extensions]
+    file_exts = [lowercase(lstrip(ext, '.')) for ext in exts_in]
 
-    for (root, dirs, files) in walkdir(directory)
+    for (root, _, files) in walkdir(directory)
         for file in files
             startswith(file, ".") && continue
 
             ext = lowercase(lstrip(splitext(file)[2], '.'))
-
             ext in file_exts || continue
 
             path = joinpath(root, file)
+            if haskey(stimuli, file)
+                @warn "Duplicate stimulus basename '$file' in '$root' overwrites previous entry."
+            end
 
             if ext in ("txt", "csv")
-                # Read sentences as raw strings
                 val = read(path, String)
             else
                 val = path

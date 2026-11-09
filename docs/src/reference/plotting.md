@@ -16,6 +16,7 @@ Pages = ["plotting.md"]
 
 ```@autodocs
 Modules = [EyeFun]
+Private = false
 Order = [:function]
 Filter = t -> startswith(string(t), "plot_")
 ```

@@ -1,38 +1,35 @@
 """
-    exclude_trials!(df::EyeData; max_tracking_loss=50.0, max_blink_count=nothing,
-                     min_duration_ms=nothing, group_by=:trial)
+    exclude_trials!(ed::EyeData; max_tracking_loss=50.0, max_blink_count=nothing,
+                    min_duration_ms=nothing, group_by=:auto, eye=:auto,
+                    prefix=nothing, verbose=false)
 
-Remove trials that fail quality criteria. Modifies the DataFrame in-place.
+Remove trials (or groups) that fail data quality criteria. Modifies the EyeData in-place.
 
-Returns a `NamedTuple` with:
-- `n_before` — number of trials before exclusion
-- `n_excluded` — number of trials removed
-- `n_after` — number of trials remaining
-- `excluded` — list of excluded trial identifiers
+Returns a `NamedTuple` summary: `(n_before, n_excluded, n_after, excluded)`.
 
-# Parameters
+# Keyword Arguments (combined with OR: failing any criterion excludes the group)
 - `max_tracking_loss`: maximum tracking loss percentage (default: 50%)
-- `max_blink_count`: maximum number of blinks per trial (default: no limit)
-- `min_duration_ms`: minimum trial duration in ms (default: no limit)
-- `group_by`: grouping column(s) (default: `:trial`)
-
-# Example
-```julia
-result = exclude_trials!(df; max_tracking_loss=40, max_blink_count=5)
-result = exclude_trials!(df; max_tracking_loss=30, group_by=[:block, :trial])
-```
+- `max_blink_count`: maximum number of blinks per trial (`nothing` = no limit)
+- `min_duration_ms`: minimum trial duration in ms (`nothing` = no limit)
+- `group_by`: grouping column(s) defining trials (default: `:auto`, resolving to
+  `[:participant, :trial]` for multi-participant data or `[:trial]` otherwise)
+- `eye`: eye to inspect (`:auto`, `:left`, `:right`, `:both`)
+- `prefix`: optional event column prefix (e.g. `:ivt`) for blink counts
+- `verbose`: log exclusion summary via `@info` (default: `false`)
 """
 function exclude_trials!(
     ed::EyeData;
     max_tracking_loss::Real = 50.0,
     max_blink_count::Union{Nothing,Int} = nothing,
     min_duration_ms::Union{Nothing,Real} = nothing,
-    group_by = :trial,
+    group_by = :auto,
+    eye::Symbol = :auto,
+    prefix::Union{Nothing,Symbol} = nothing,
+    verbose::Bool = false,
 )
-    dq = data_quality(ed; group_by = group_by)
+    dq = data_quality(ed; eye = eye, group_by = group_by, prefix = prefix)
     group_cols = _resolve_group_cols(ed, group_by)
 
-    # Identify bad trials
     bad = dq.tracking_loss_pct .> max_tracking_loss
 
     if !isnothing(max_blink_count)
@@ -46,9 +43,14 @@ function exclude_trials!(
     n_before = nrow(dq)
     n_excluded = nrow(excluded_rows)
 
-    # Build exclusion filter: keep only rows whose group keys are NOT in excluded_rows
+    # Keep rows whose group keys are NOT in excluded_rows (preserving inter-trial `missing` rows)
     if n_excluded > 0
-        keep = antijoin(ed.df, excluded_rows[!, group_cols]; on = group_cols)
+        keep = antijoin(
+            ed.df,
+            excluded_rows[!, group_cols];
+            on = group_cols,
+            matchmissing = :notequal,
+        )
         empty!(ed.df)
         append!(ed.df, keep)
     end
@@ -60,7 +62,8 @@ function exclude_trials!(
         excluded = [NamedTuple(row) for row in eachrow(excluded_rows[!, group_cols])],
     )
 
-    @info "Trial exclusion: $(n_excluded)/$(n_before) trials removed ($(result.n_after) remaining)"
+    verbose &&
+        @info "Trial exclusion: $(n_excluded)/$(n_before) trials removed ($(result.n_after) remaining)"
 
     return result
 end

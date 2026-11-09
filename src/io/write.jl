@@ -7,49 +7,80 @@ If `out_path` is not provided, it saves the file with an `_exported.asc` or `.tx
 function write_et_ascii(
     path::AbstractString,
     out_path::Union{String,Nothing} = nothing;
+    include_samples::Bool = true,
+    include_events::Bool = true,
+    include_messages::Bool = true,
+    verbose::Bool = false,
     kwargs...,
 )
     isfile(path) || isdir(path) || error("Path not found: $path")
 
-    # If it's a directory, delegate to the directory dispatcher
     if isdir(path)
-        return _write_et_ascii_dir(path; kwargs...)
+        return _write_et_ascii_dir(
+            path;
+            include_samples = include_samples,
+            include_events = include_events,
+            include_messages = include_messages,
+            verbose = verbose,
+            kwargs...,
+        )
     end
 
-    # Otherwise, read as raw EyeFile
     fmt = detect_format(path)
 
-    # Read the file to get its internal struct bypassing create_eyefun_data
     raw = if fmt == EDFFile
-        EyeFun.read_eyelink(path; kwargs...)
+        EyeFun.read_eyelink(String(path); verbose = verbose, kwargs...)
     elseif fmt == SMIFile
-        EyeFun.read_smi(path; kwargs...)
+        EyeFun.read_smi(String(path); verbose = verbose, kwargs...)
     elseif fmt == TobiiFile
         error(
-            "Formatting to ASCII for Tobii files (.tsv) is strictly redundant and thus not supported.",
+            "ASCII export is not supported for Tobii (.tsv) files (already tab-delimited text).",
         )
     else
         error("Formatting to ASCII for $fmt is not supported")
     end
 
-    if isnothing(out_path)
-        write_et_ascii(raw)
+    if fmt == EDFFile
+        if isnothing(out_path)
+            write_et_ascii(
+                raw;
+                include_samples = include_samples,
+                include_events = include_events,
+                include_messages = include_messages,
+            )
+        else
+            write_et_ascii(
+                raw,
+                out_path;
+                include_samples = include_samples,
+                include_events = include_events,
+                include_messages = include_messages,
+            )
+        end
     else
-        write_et_ascii(raw, out_path)
+        if isnothing(out_path)
+            write_et_ascii(raw; verbose = verbose)
+        else
+            write_et_ascii(raw, out_path; verbose = verbose)
+        end
     end
 
     return nothing
 end
 
 """
-    write_et_ascii(files::AbstractVector{<:AbstractString}; kwargs...)
+    write_et_ascii(files::AbstractVector{<:AbstractString}; verbose=false, kwargs...)
 
 Batch write a list of files to ASCII format.
 """
-function write_et_ascii(files::AbstractVector{<:AbstractString}; kwargs...)
+function write_et_ascii(
+    files::AbstractVector{<:AbstractString};
+    verbose::Bool = false,
+    kwargs...,
+)
     for (i, file) in enumerate(files)
-        @info "Exporting file $i/$(length(files)): $file"
-        write_et_ascii(file; kwargs...)
+        verbose && @info "Exporting file $i/$(length(files)): $file"
+        write_et_ascii(file; verbose = verbose, kwargs...)
     end
     return nothing
 end

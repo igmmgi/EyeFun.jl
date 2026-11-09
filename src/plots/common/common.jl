@@ -1,58 +1,15 @@
-# ── Shared plotting helpers ────────────────────────────────────────────────── #
-
 """Select gaze columns based on eye keyword and data availability.
-Thin wrapper around `_resolve_eye` + `_eye_columns` for convenience in plot code."""
+Thin wrapper around `_resolve_eye` + `_get_gaze_vecs` for convenience in plot code."""
 function _select_eye(samples::AbstractDataFrame, eye::Symbol)
     resolved = _resolve_eye(samples, eye)
-    ecols = _eye_columns(resolved)
-    label = resolved == :left ? "Left eye" : "Right eye"
-    return samples[!, ecols.gx], samples[!, ecols.gy], label
+    gx, gy = _get_gaze_vecs(samples, resolved)
+    label =
+        resolved == :left ? "Left eye" :
+        resolved == :right ? "Right eye" : "Both eyes"
+    return gx, gy, label
 end
 
-# ── Selection filter ───────────────────────────────────────────────────────── #
-
-"""
-Filter a DataFrame by a NamedTuple of column=value pairs.
-All conditions must match (AND logic). Also supports plain `Int` for trial number.
-
-# Examples
-    _apply_selection(df, nothing)                        # no filter
-    _apply_selection(df, 5)                              # trial == 5
-    _apply_selection(df, (trial=1,))                     # trial == 1
-    _apply_selection(df, (trial=1, stimulus="Face"))     # trial 1 AND stimulus == "Face"
-    _apply_selection(df, (stimulus="Face",))             # all trials with stimulus == "Face"
-"""
-function _apply_selection(df::EyeData, selection)
-    isnothing(selection) && return df.df
-
-    # Backward compat: plain Int → filter by trial
-    if selection isa Int
-        hasproperty(df.df, :trial) || error("No :trial column in data")
-        return filter(r -> !ismissing(r.trial) && r.trial == selection, df.df)
-    end
-
-    # NamedTuple: match all key=value pairs (AND logic)
-    # Supports scalar values (==) and collections like ranges/vectors (in)
-    if selection isa NamedTuple
-        result = df.df
-        for (col, val) in pairs(selection)
-            hasproperty(result, col) ||
-                error("Column :$col not found in data. Available: $(names(result))")
-            if val isa Union{AbstractVector,AbstractRange}
-                result = filter(r -> !ismissing(r[col]) && r[col] in val, result)
-            else
-                result = filter(r -> !ismissing(r[col]) && r[col] == val, result)
-            end
-        end
-        return result
-    end
-
-    error(
-        "Unsupported selection type: $(typeof(selection)). Use a NamedTuple, e.g. (trial=1, stimulus=\"Face\").",
-    )
-end
-
-"""Format a clean plot title, e.g. "Gaze: Trial=1" or "Gaze: Trial=1:10, Stimulus=Face"."""
+"""Format a plot title, e.g. "Gaze: Trial=1" or "Gaze: Trial=1:10, Stimulus=Face"."""
 function _format_title(prefix::String, selection)
     isnothing(selection) && return prefix
     if selection isa Int
@@ -72,7 +29,7 @@ end
 function _draw_aois!(ax, aois::Vector{<:AOI})
     isempty(aois) && return
     colors = Makie.wong_colors()
-    for (i, aoi) in enumerate(sort(aois; by = a -> a.name))
+    for (i, aoi) in enumerate(aois)
         c = isnothing(aoi.color) ? colors[mod1(i, length(colors))] : aoi.color
         _draw_single_aoi!(ax, aoi, c)
     end
@@ -109,10 +66,55 @@ end
 function _draw_single_aoi!(ax, aoi::PolygonAOI, c)
     pts = Point2f.(aoi.vertices)
     poly!(ax, pts; color = (c, 0.15), strokewidth = 2, strokecolor = c)
-    # Label at centroid
     cx = mean(first.(aoi.vertices))
     cy = minimum(last.(aoi.vertices))
     _aoi_label!(ax, cx, cy, aoi.name, c)
+end
+
+function _draw_aoi_shape_only!(ax, aoi::RectAOI, c)
+    poly!(
+        ax,
+        Makie.Rect(aoi.cx - aoi.width / 2, aoi.cy - aoi.height / 2, aoi.width, aoi.height);
+        color = (c, 0.10),
+        strokewidth = 2,
+        strokecolor = c,
+        linestyle = :dash,
+    )
+    return aoi.cx, aoi.cy - aoi.height / 2
+end
+
+function _draw_aoi_shape_only!(ax, aoi::CircleAOI, c)
+    θ = range(0, 2π; length = 64)
+    pts = Point2f.(aoi.cx .+ aoi.radius .* cos.(θ), aoi.cy .+ aoi.radius .* sin.(θ))
+    poly!(ax, pts; color = (c, 0.10), strokewidth = 2, strokecolor = c, linestyle = :dash)
+    return aoi.cx, aoi.cy - aoi.radius
+end
+
+function _draw_aoi_shape_only!(ax, aoi::EllipseAOI, c)
+    θ = range(0, 2π; length = 64)
+    pts = Point2f.(aoi.cx .+ aoi.rx .* cos.(θ), aoi.cy .+ aoi.ry .* sin.(θ))
+    poly!(ax, pts; color = (c, 0.10), strokewidth = 2, strokecolor = c, linestyle = :dash)
+    return aoi.cx, aoi.cy - aoi.ry
+end
+
+function _draw_aoi_shape_only!(ax, aoi::PolygonAOI, c)
+    pts = Point2f.(aoi.vertices)
+    poly!(ax, pts; color = (c, 0.10), strokewidth = 2, strokecolor = c, linestyle = :dash)
+    return mean(first.(aoi.vertices)), minimum(last.(aoi.vertices))
+end
+
+function _draw_aoi_shape_only!(ax, aoi::DynamicAOI, c)
+    lx, ly = 0.0, 0.0
+    for (idx, w) in enumerate(aoi.windows)
+        wx, wy = _draw_aoi_shape_only!(ax, w[3], c)
+        idx == 1 && ((lx, ly) = (wx, wy))
+    end
+    return lx, ly
+end
+
+function _draw_single_aoi!(ax, aoi::DynamicAOI, c)
+    lx, ly = _draw_aoi_shape_only!(ax, aoi, c)
+    _aoi_label!(ax, lx, ly, aoi.name, c)
 end
 
 function _aoi_label!(ax, x, y, name, c)
@@ -128,24 +130,31 @@ function _aoi_label!(ax, x, y, name, c)
     )
 end
 
-# ── Binning & smoothing ───────────────────────────────────────────────────── #
-
 """
     _bin_samples(px, py, xlims, ylims, bins)
 
 Bin 2D gaze positions into a grid. Returns (x_centers, y_centers, counts).
 """
 function _bin_samples(px, py, xlims, ylims, bins)
-    nx, ny = bins
-    x_edges = range(xlims[1], xlims[2]; length = nx + 1)
-    y_edges = range(ylims[1], ylims[2]; length = ny + 1)
+    nx, ny = bins isa Integer ? (Int(bins), Int(bins)) : (Int(bins[1]), Int(bins[2]))
+    (nx <= 0 || ny <= 0) && error("bins must have positive dimensions (got $bins).")
+    x0, x1 = Float64(xlims[1]), Float64(xlims[2])
+    y0, y1 = Float64(ylims[1]), Float64(ylims[2])
+    x_edges = range(x0, x1; length = nx + 1)
+    y_edges = range(y0, y1; length = ny + 1)
+    inv_dx = x1 > x0 ? nx / (x1 - x0) : 0.0
+    inv_dy = y1 > y0 ? ny / (y1 - y0) : 0.0
 
     counts = zeros(Float64, nx, ny)
-    for i in eachindex(px)
-        xi = searchsortedlast(x_edges, px[i])
-        yi = searchsortedlast(y_edges, py[i])
-        if 1 <= xi <= nx && 1 <= yi <= ny
-            counts[xi, yi] += 1.0
+    @inbounds for i in eachindex(px, py)
+        xv = Float64(px[i])
+        yv = Float64(py[i])
+        if x0 <= xv <= x1 && y0 <= yv <= y1
+            xi = xv == x1 ? nx : (floor(Int, (xv - x0) * inv_dx) + 1)
+            yi = yv == y1 ? ny : (floor(Int, (yv - y0) * inv_dy) + 1)
+            if 1 <= xi <= nx && 1 <= yi <= ny
+                counts[xi, yi] += 1.0
+            end
         end
     end
 
@@ -172,7 +181,7 @@ function _gaussian_smooth(data::Matrix{Float64}, sigma::Real)
     out = zeros(Float64, nx, ny)
 
     # Smooth along dim 1 (rows)
-    for j = 1:ny
+    @inbounds for j = 1:ny
         # Interior pixels: kernel is fully in bounds, w == 1.0
         for i = (k+1):(nx-k)
             s = 0.0
@@ -188,15 +197,16 @@ function _gaussian_smooth(data::Matrix{Float64}, sigma::Real)
             w = 0.0
             for di = (-k):k
                 ii = clamp(i + di, 1, nx)
-                s += kernel_1d[di+k+1] * data[ii, j]
-                w += kernel_1d[di+k+1]
+                kv = kernel_1d[di+k+1]
+                s += kv * data[ii, j]
+                w += kv
             end
             tmp[i, j] = s / w
         end
     end
 
     # Smooth along dim 2 (cols)
-    for i = 1:nx
+    @inbounds for i = 1:nx
         # Interior pixels
         for j = (k+1):(ny-k)
             s = 0.0
@@ -212,8 +222,9 @@ function _gaussian_smooth(data::Matrix{Float64}, sigma::Real)
             w = 0.0
             for dj = (-k):k
                 jj = clamp(j + dj, 1, ny)
-                s += kernel_1d[dj+k+1] * tmp[i, jj]
-                w += kernel_1d[dj+k+1]
+                kv = kernel_1d[dj+k+1]
+                s += kv * tmp[i, jj]
+                w += kv
             end
             out[i, j] = s / w
         end
@@ -222,29 +233,76 @@ function _gaussian_smooth(data::Matrix{Float64}, sigma::Real)
     return out
 end
 
-# ── Shared Panel & Layout Boilerplate ─────────────────────────────────────── #
+function _plot_trial_group_cols(samples::AbstractDataFrame)::Vector{Symbol}
+    has_tr = hasproperty(samples, :trial)
+    multi_p = _has_multiple_participants(samples)
+    if has_tr && multi_p
+        return [:participant, :trial]
+    elseif has_tr
+        return [:trial]
+    elseif multi_p
+        return [:participant]
+    else
+        return Symbol[]
+    end
+end
+
+@inline function _is_new_plot_trial(
+    tr_col::Union{Nothing,AbstractVector},
+    p_col::Union{Nothing,AbstractVector},
+    times::Union{Nothing,AbstractVector},
+    i::Int,
+)::Bool
+    i <= 1 && return true
+    if !isnothing(tr_col) && !isequal(@inbounds(tr_col[i]), @inbounds(tr_col[i-1]))
+        return true
+    end
+    if !isnothing(p_col) && !isequal(@inbounds(p_col[i]), @inbounds(p_col[i-1]))
+        return true
+    end
+    if !isnothing(times) && Float64(@inbounds(times[i])) < Float64(@inbounds(times[i-1]))
+        return true
+    end
+    return false
+end
+
+function _nonmissing_col_mask(col::AbstractVector)
+    mask = BitVector(undef, length(col))
+    @inbounds for i in eachindex(col)
+        mask[i] = !ismissing(col[i])
+    end
+    return mask
+end
 
 """
-Safely coordinate group filtering, evaluation, and physical hardware bounds-checking.
-Returns `(groups, split_vals, n_panels)` cleanly to eliminate boilerplate inside plot functions.
+Filter `samples` by `split_by` and return `(groups, split_vals, n_panels)`, capping panel count at `max_panels`.
 """
 function _prepare_split_panels(samples, split_by; max_panels = 4)
     if !isnothing(split_by)
         hasproperty(samples, split_by) ||
             error("Column :$split_by not found for splitting.")
-        groups = filter(r -> !ismissing(r[split_by]), samples)
+        col = samples[!, split_by]
+        mask = _nonmissing_col_mask(col)
+        groups = @view samples[mask, :]
         split_vals = sort(unique(groups[!, split_by]))
     else
         groups = samples
         split_vals = [nothing]
     end
     if length(split_vals) > max_panels
-        @warn "Attempting to plot $(length(split_vals)) side-by-side panels. Truncating to the first $max_panels side-by-side plots to prevent graphics memory exhaustion. To view all items dynamically, please use `plot_databrowser()`."
+        @warn "Plotting $(length(split_vals)) panels exceeds max_panels=$max_panels; truncating to first $max_panels. Use plot_databrowser() to browse all segments."
         split_vals = split_vals[1:max_panels]
     end
     n_panels = length(split_vals)
     n_panels == 0 && error("No non-missing values in :$split_by for splitting.")
     return groups, split_vals, n_panels
+end
+
+function _panel_view(groups::AbstractDataFrame, split_by, fval)
+    isnothing(fval) && return groups
+    mask = trues(nrow(groups))
+    _mark_equal!(mask, groups[!, split_by], fval)
+    return @view groups[mask, :]
 end
 
 """

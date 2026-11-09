@@ -12,11 +12,14 @@ Data structures and type definitions in EyeFun.jl.
 EyeFun.EyeData
 ```
 
-## EDF File Types
+## Raw File Types
 
 ```@docs
+EyeFun.EyeFile
 EyeFun.EDFFile
 EyeFun.EDFRecording
+EyeFun.SMIFile
+EyeFun.TobiiFile
 ```
 
 ## AOI Types
@@ -27,6 +30,7 @@ EyeFun.RectAOI
 EyeFun.CircleAOI
 EyeFun.EllipseAOI
 EyeFun.PolygonAOI
+EyeFun.DynamicAOI
 ```
 
 ## Media Components

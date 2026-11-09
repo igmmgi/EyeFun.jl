@@ -1,5 +1,3 @@
-# ── Interactive Eye Data Viewer ─────────────────────────────────────────────── #
-
 """
     EyeViewerMediaState
 
@@ -28,6 +26,8 @@ mutable struct EyeViewerMediaState
     window_samples::Int         # 0 = show all, >0 = visible window size
     aois::Union{Nothing,Vector{<:AOI}}
     bg_stimulus::Any               # optional function: segment_id -> Vector{AbstractEyeFunMedia}
+    segment_views::Vector{AbstractDataFrame}
+    prefix::Union{Nothing,Symbol}
 end
 
 
@@ -45,19 +45,16 @@ function _point_to_segment_dist(px, py, x1, y1, x2, y2)
 end
 
 
-# ── Helper: get trial data ─────────────────────────────────────────────────── #
-
 """Extract data for a given segment based on split_by."""
 function _dbnew_get_segment_data(df::EyeData, segment, split_by)
     if isnothing(split_by)
-        return df.df  # whole DataFrame
+        return df.df
     elseif split_by isa Symbol
-        return filter(r -> !ismissing(r[split_by]) && r[split_by] == segment, df.df)
-    else  # Vector{Symbol}
-        return filter(
-            r -> all(s -> !ismissing(r[s]) && r[s] == segment[s], split_by),
-            df.df,
-        )
+        mask = trues(nrow(df.df))
+        _mark_equal!(mask, df.df[!, split_by], segment)
+        return @view df.df[mask, :]
+    else
+        return _apply_selection_view(df, segment)
     end
 end
 
@@ -80,9 +77,11 @@ end
 """Draw blink shading bands on a time-series axis."""
 function _dbnew_draw_blink_bands!(ax, g::AbstractDataFrame, t::Vector{Float64}, state)
     !state.show_blinks[] && return
-    !hasproperty(g, :in_blink) && return
+    c_blink = _prefixed_sym(state.prefix, :in_blink)
+    !hasproperty(g, c_blink) && return
 
-    bm = g.in_blink
+    bm = g[!, c_blink]
+    dt_ms = length(t) > 1 ? max(1e-3, (t[end] - t[1]) / max(1, length(t) - 1)) : 1.0
     xlo = Float64[]
     xhi = Float64[]
     blink_start = 0
@@ -91,15 +90,18 @@ function _dbnew_draw_blink_bands!(ax, g::AbstractDataFrame, t::Vector{Float64}, 
             blink_start = i
         end
         if !bm[i] && i > 1 && bm[i-1] && blink_start > 0
-            push!(xlo, t[blink_start])
-            push!(xhi, t[i-1])
+            lo = t[blink_start]
+            hi_raw = i <= length(t) ? t[i] : (t[i-1] + dt_ms)
+            push!(xlo, lo)
+            push!(xhi, max(lo + dt_ms, hi_raw))
             blink_start = 0
         end
     end
     # Handle blink at end of trial
     if blink_start > 0
-        push!(xlo, t[blink_start])
-        push!(xhi, t[end])
+        lo = t[blink_start]
+        push!(xlo, lo)
+        push!(xhi, max(lo + dt_ms, t[end]))
     end
 
     if !isempty(xlo)
@@ -107,11 +109,8 @@ function _dbnew_draw_blink_bands!(ax, g::AbstractDataFrame, t::Vector{Float64}, 
     end
 end
 
-# ── Media Rendering ───────────────────────────────────────────────────────────── #
-
 function _render_media_items!(ax, items, sx, sy)
     for stim_val in items
-        # Typed media
         if stim_val isa AudioMedia
             text!(
                 ax,
@@ -163,7 +162,6 @@ function _render_media_items!(ax, items, sx, sy)
                 )
             end
 
-            # Legacy: loose Tuples and Strings
         else
             is_audio_tuple =
                 stim_val isa Tuple &&
@@ -187,7 +185,7 @@ function _render_media_items!(ax, items, sx, sy)
                 endswith(lowercase(stim_val), ".txt") ||
                 endswith(lowercase(stim_val), ".csv")
             )
-                disp_txt = length(stim_val) > 400 ? stim_val[1:400] * "..." : stim_val
+                disp_txt = length(stim_val) > 400 ? first(stim_val, 400) * "..." : stim_val
                 text!(
                     ax,
                     sx / 2,
@@ -206,8 +204,10 @@ function _render_media_items!(ax, items, sx, sy)
 
                 if stim_val isa Tuple &&
                    length(stim_val) == 2 &&
-                   stim_val[1] isa AbstractMatrix
-                    img_mat = stim_val[1]
+                   (stim_val[1] isa AbstractMatrix || stim_val[1] isa AbstractString)
+                    img_mat =
+                        stim_val[1] isa AbstractMatrix ? stim_val[1] :
+                        load_image(stim_val[1])
                     coord = stim_val[2]
                     if coord isa Tuple && length(coord) == 4
                         bbox = coord
@@ -244,8 +244,6 @@ function _render_media_items!(ax, items, sx, sy)
     end
 end
 
-# ── Draw functions ─────────────────────────────────────────────────────────── #
-
 """Draw the spatial view (gaze on screen) for the current trial."""
 function _dbnew_draw_spatial!(
     ax,
@@ -256,20 +254,18 @@ function _dbnew_draw_spatial!(
     fixations::Vector{FixationInfo};
     reset_zoom::Bool = false,
 )
-    # Save current zoom before clearing (if user has zoomed)
-    if !reset_zoom && !isnothing(state.spatial_zoom)
-        # Keep existing zoom
-    else
+    # Save current interactive zoom before clearing (always read live finallimits when non-reset)
+    if reset_zoom
+        state.spatial_zoom = nothing
+    elseif !isempty(ax.scene.plots)
         cur_lims = ax.finallimits[]
-        if cur_lims.widths[1] > 0 && !reset_zoom
+        if cur_lims.widths[1] > 0 && cur_lims.widths[2] > 0
             state.spatial_zoom = (
-                cur_lims.origin[1],
-                cur_lims.origin[1] + cur_lims.widths[1],
-                cur_lims.origin[2],
-                cur_lims.origin[2] + cur_lims.widths[2],
+                Float64(cur_lims.origin[1]),
+                Float64(cur_lims.origin[1] + cur_lims.widths[1]),
+                Float64(cur_lims.origin[2]),
+                Float64(cur_lims.origin[2] + cur_lims.widths[2]),
             )
-        else
-            state.spatial_zoom = nothing
         end
     end
 
@@ -303,8 +299,7 @@ function _dbnew_draw_spatial!(
                 _render_media_items!(ax, items, sx, sy)
             end
         catch e
-            @warn "❌ [Spatial Renderer] Failed to draw bg_stimulus for segment" exception =
-                e
+            @warn "Failed to draw bg_stimulus for segment" exception = e
         end
     end
 
@@ -525,7 +520,8 @@ function _dbnew_draw_velocity!(
     cache[:vel_bar_h] = bar_h
 
     # Fixation bars first
-    if state.show_fixations[] && hasproperty(g, :fix_gavx)
+    c_fgx = _prefixed_sym(state.prefix, :fix_gavx)
+    if state.show_fixations[] && (hasproperty(g, c_fgx) || !isempty(fixations))
         rects = Rect2f[]
         for f in fixations
             ts = max(1, f.time_start)
@@ -565,7 +561,7 @@ function _dbnew_draw_pupil!(
 
     lines!(ax, t, pa; color = :black, linewidth = 1)
 
-    # Blink shading — use vspan! for full-height vertical bands
+    # Blink shading: use vspan! for full-height vertical bands
     _dbnew_draw_blink_bands!(ax, g, t, state)
 
     !isnan(t[1]) && !isnan(t[end]) && t[1] < t[end] && xlims!(ax, t[1], t[end])
@@ -591,8 +587,6 @@ function _trial_time(g::AbstractDataFrame)
 end
 
 """Draw a polar rose plot of saccade directions for the current trial."""
-
-
 function _dbnew_draw_saccade_polar!(
     ax,
     state,
@@ -639,8 +633,6 @@ function _dbnew_draw_saccade_polar!(
     push!(polar_plots, p)
 end
 
-# ── Main draw function ─────────────────────────────────────────────────────── #
-
 """Redraw all panels for the current trial/segment. Populates cache for click handlers."""
 function _dbnew_draw_all!(
     axes,
@@ -651,20 +643,20 @@ function _dbnew_draw_all!(
     reset_zoom::Bool = false,
     window_start::Int = 1,
 )
-    g_full = _dbnew_get_segment_data(df, state.segments[state.trial[]], state.split_by)
+    g_full = state.segment_views[state.trial[]]
     n_full = nrow(g_full)
     n_full == 0 && return
 
     trial_label[] = _dbnew_segment_label(state)
 
-    # Extract events from FULL data (heavy — cached for _dbnew_redraw_window!)
-    saccades_full = _extract_saccades(g_full)
-    fixations_full = _extract_fixations(g_full)
+    # Extract events from full data (cached for _dbnew_redraw_window!)
+    saccades_full = _extract_saccades(g_full; prefix = state.prefix)
+    fixations_full = _extract_fixations(g_full; prefix = state.prefix)
     t_full = _trial_time(g_full)
 
     # Compute velocity for cursor tracking
-    gx = Float64.(g_full[!, state.gx_col])
-    gy = Float64.(g_full[!, state.gy_col])
+    gx = hasproperty(g_full, state.gx_col) ? Float64.(g_full[!, state.gx_col]) : fill(NaN, n_full)
+    gy = hasproperty(g_full, state.gy_col) ? Float64.(g_full[!, state.gy_col]) : fill(NaN, n_full)
     ppd = Float64(pixels_per_degree(df))
     spd = _compute_velocity_deg(gx, gy, ppd, df.sample_rate)
 
@@ -686,7 +678,7 @@ function _dbnew_draw_all!(
     )
 end
 
-"""Fast redraw using cached full-segment data — used by scroll slider."""
+"""Redraw the visible sample window using cached full-segment data."""
 function _dbnew_redraw_window!(
     axes,
     state,
@@ -694,7 +686,7 @@ function _dbnew_redraw_window!(
     reset_zoom::Bool = false,
     window_start::Int = 1,
 )
-    g_full = cache[:g]::DataFrame
+    g_full = cache[:g]::AbstractDataFrame
     n_full = cache[:n_full]::Int
     saccades_full = cache[:saccades]
     fixations_full = cache[:fixations]
@@ -713,9 +705,10 @@ function _dbnew_redraw_window!(
     cache[:window_end] = w_end
 
     # Pre-extract column data once (avoids repeated Float64.() copies in draw functions)
-    gx = Float64.(g[!, state.gx_col])
-    gy = Float64.(g[!, state.gy_col])
-    pa = Float64.(g[!, state.pa_col])
+    n_win = nrow(g)
+    gx = hasproperty(g, state.gx_col) ? Float64.(g[!, state.gx_col]) : fill(NaN, n_win)
+    gy = hasproperty(g, state.gy_col) ? Float64.(g[!, state.gy_col]) : fill(NaN, n_win)
+    pa = hasproperty(g, state.pa_col) ? Float64.(g[!, state.pa_col]) : fill(NaN, n_win)
 
     t_full = cache[:t_full]::Vector{Float64}
     t = t_full[w_start:w_end]
@@ -723,10 +716,10 @@ function _dbnew_redraw_window!(
     speed_full = cache[:speed]::Vector{Float64}
     speed_win = speed_full[w_start:w_end]
 
-    # Filter events to visible window and remap indices
+    # Filter events to visible window (including spanning fixations) and remap indices
     saccades_win = filter(s -> w_start <= s.time_idx <= w_end, saccades_full)
     fixations_win = filter(
-        f -> w_start <= f.time_start <= w_end || w_start <= f.time_end <= w_end,
+        f -> f.time_end >= w_start && f.time_start <= w_end,
         fixations_full,
     )
 
@@ -790,8 +783,6 @@ function _dbnew_redraw_window!(
     _dbnew_draw_pupil!(axes[5], g, pa, t, state)
 end
 
-# ── Cursor dots ────────────────────────────────────────────────────────────── #
-
 """Add cursor scatter dots to all axes (call after _dbnew_draw_all! which clears axes)."""
 function _dbnew_add_cursor_dots!(axes, cursor_obs)
     scatter!(
@@ -801,7 +792,7 @@ function _dbnew_add_cursor_dots!(axes, cursor_obs)
         markersize = 12,
         marker = :circle,
     )
-    # axes[2] is PolarAxis — no cursor dot
+    # axes[2] is PolarAxis: no cursor dot
     text!(
         axes[3],
         cursor_obs[:xy_x_pt];
@@ -839,13 +830,13 @@ end
 """Update the black dot cursor positions across all panels for the current frame."""
 function _dbnew_update_cursor!(cursor_obs, cache::Dict{Symbol,Any}, state)
     haskey(cache, :g) || return
-    g = cache[:g]::DataFrame
+    g = cache[:g]::AbstractDataFrame
     nrow(g) == 0 && return
     f = clamp(state.frame[], 1, nrow(g))
 
-    gx = Float64(g[f, state.gx_col])
-    gy = Float64(g[f, state.gy_col])
-    pa = Float64(g[f, state.pa_col])
+    gx = hasproperty(g, state.gx_col) ? Float64(g[f, state.gx_col]) : NaN
+    gy = hasproperty(g, state.gy_col) ? Float64(g[f, state.gy_col]) : NaN
+    pa = hasproperty(g, state.pa_col) ? Float64(g[f, state.pa_col]) : NaN
 
     # Use cached windowed time for cursor position (matches axes)
     t_win = get(cache, :t_win, Float64[])::Vector{Float64}
@@ -854,20 +845,12 @@ function _dbnew_update_cursor!(cursor_obs, cache::Dict{Symbol,Any}, state)
     isempty(t_win) && return
     t_val = t_win[f_local]
 
-    # Spatial dot
     cursor_obs[:spatial_pts][] = Point2f[(gx, gy)]
-
-    # XY trace text cursors — show both X and Y position
     cursor_obs[:xy_x_pt][] = Point2f[(t_val, gx)]
     cursor_obs[:xy_y_pt][] = Point2f[(t_val, gy)]
 
-    # Velocity dot (use cached speed array)
     speed = cache[:speed]::Vector{Float64}
     speed_val = speed[f]
     cursor_obs[:vel_pts][] = Point2f[(t_val, isnan(speed_val) ? 0.0 : speed_val)]
-
-    # Pupil dot
     cursor_obs[:pup_pts][] = Point2f[(t_val, pa)]
 end
-
-# ── Main entry point ───────────────────────────────────────────────────────── #

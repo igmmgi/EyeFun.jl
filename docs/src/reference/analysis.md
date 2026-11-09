@@ -16,6 +16,7 @@ Pages = ["analysis.md"]
 
 ```@autodocs
 Modules = [EyeFun]
+Private = false
 Order = [:function, :macro]
-Filter = t -> !startswith(string(t), "_") && !startswith(string(t), "plot_")
+Filter = t -> !startswith(string(t), "_") && !startswith(string(t), "plot_") && t !== EyeFun.play_wav
 ```

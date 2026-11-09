@@ -23,8 +23,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ['1.11']
-        os: [ubuntu-latest]
+        version: ['1.10', '1']
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,12 +36,9 @@ jobs:
 
       - uses: julia-actions/cache@v2
 
-      - name: Install binary dependencies
-        run: sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
-
       - name: Build package
         run: |
-          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24' julia --project=. -e '
+          julia --project=. -e '
             using Pkg
             Pkg.instantiate()
             Pkg.build()
@@ -49,6 +46,6 @@ jobs:
 
       - name: Run tests
         run: |
-          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24' julia --project=. -e '
+          julia --project=. -e '
             using Pkg
-            Pkg.test()'
+            Pkg.test(coverage=true)'

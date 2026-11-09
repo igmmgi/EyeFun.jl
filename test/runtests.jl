@@ -21,7 +21,6 @@ const TEST1_EDF = EyeFun.read_eyelink(TEST1_EDF_PATH)
 const TEST1_DF = EyeFun.create_eyefun_data(TEST1_EDF; trial_time_zero = nothing)
 const TEST1_ASC = EyeFun.read_eyelink(TEST1_ASC_PATH)
 
-# TODO: I am not familiar with SMI/TOBII so this will probably need to be updated
 # SMI
 const TEST_SMI_TXT_PATH = joinpath(DATA_DIR_SMI, "pp23671_rest1_samples.txt")
 const TEST_SMI_IDF_PATH = joinpath(DATA_DIR_SMI, "pp23671_rest1.idf")
@@ -29,11 +28,10 @@ println("Loading global test data from SMI...")
 const TEST_SMI_TXT = EyeFun.read_smi(TEST_SMI_TXT_PATH)
 const TEST_SMI_IDF = EyeFun.read_smi(TEST_SMI_IDF_PATH)
 
-# TOBII
+# Tobii
 const TEST_TOBII_TSV_PATH = joinpath(DATA_DIR_TOBII, "sample_data.tsv")
 println("Loading global test data from Tobii TSV...")
 const TEST_TOBII_TSV = EyeFun.read_tobii(TEST_TOBII_TSV_PATH)
-# ─────────────────────────────────────────────────────────────────────── #
 
 @testset "EyeFun" begin
 
@@ -47,7 +45,9 @@ const TEST_TOBII_TSV = EyeFun.read_tobii(TEST_TOBII_TSV_PATH)
     include("tests/eyelink_export.jl")
     include("tests/smi.jl")
     include("tests/tobii.jl")
+    include("tests/formats_and_statistics.jl")
+    include("tests/performance.jl")
 
 end
 
-println("\nAll tests completed!")
+println("\nAll tests completed.")

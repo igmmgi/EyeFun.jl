@@ -5,6 +5,6 @@ using EyeFun
 
 dat = read_et_data("data.edf")
 
-face_aoi = RectAOI(100, 100, 200, 200)
-metrics = aoi_metrics(dat, (Face=face_aoi,))
+face_aoi = RectAOI("Face", 200, 200, 200, 200)
+metrics = aoi_metrics(dat, [face_aoi])
 ```

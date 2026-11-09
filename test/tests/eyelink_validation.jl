@@ -1,7 +1,7 @@
 """
-    compare_asc_lines(ref_path, jul_path)
+    compare_asc_files(ref_path, jul_path)
 
-Compare reference (edf2asc) and Julia-generated ASC files line-by-line.
+Compare reference (`edf2asc`) and Julia-generated ASC files line-by-line.
 Returns a NamedTuple of comparison results.
 """
 function compare_asc_files(ref_path::String, jul_path::String)
@@ -173,11 +173,7 @@ function compare_asc_files(ref_path::String, jul_path::String)
     )
 end
 
-# ════════════════════════════════════════════════════════════════════════════ #
-#  ASC output comparison — Julia vs edf2asc reference
-# ════════════════════════════════════════════════════════════════════════════ #
-
-# Helper to safely get count from Dict (for binocular blink tolerance)
+# Safely get count from Dict (for binocular blink tolerance)
 nrow_or(d::Dict, k::Symbol, default::Int) = get(d, k, default)
 
 @testset "ASC output: Julia vs edf2asc" begin

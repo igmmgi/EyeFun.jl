@@ -1,5 +1,11 @@
 Manifest.toml
+.DS_Store
 
 # Coverage
 *.cov
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
 coverage/
+test/coverage.lcov
+test/coverage_html/

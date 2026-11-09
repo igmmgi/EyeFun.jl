@@ -1,20 +1,20 @@
 # EyeTracking Data Structures
 
-Understanding `EyeFun.jl`'s core data structures and how they leverage Julia's type system.
+Overview of `EyeFun.jl`'s core types and how multiple dispatch connects raw file readers, continuous sample tables, and analysis functions.
 
 ## Julia Types & Multiple Dispatch
 
-If you're coming from Python or MATLAB, Julia's type system works a little differently. The full details are in the [Julia documentation](https://docs.julialang.org/en/v1/manual/types/), but the key idea for everyday `EyeFun.jl` use is **multiple dispatch**.
-
-This means a function can have the same name but do different things depending on the *type* of data passed to it:
+For details on Julia's type system, see the [Julia documentation](https://docs.julialang.org/en/v1/manual/types/). In `EyeFun.jl`, functions use **multiple dispatch** so a single function name dispatches to specialized methods based on argument types:
 
 ```julia
-# Same function, different file formats → different internal parsing behaviour
-read_et_data(EDFFile, "data.edf")
-read_et_data(SMIFile, "data.idf")
+# Same function name, specialized methods for each file type
+edf = read_eyelink("data.edf")
+smi = read_smi("data.idf")
+ed1 = create_eyefun_data(edf)
+ed2 = create_eyefun_data(smi)
 ```
 
-If you are ever unsure what type a variable is, use `typeof()`:
+Use `typeof()` to inspect the concrete type of any value:
 
 ```julia
 typeof(dat)   # e.g. EyeFun.EyeData
@@ -24,8 +24,8 @@ typeof(dat)   # e.g. EyeFun.EyeData
 
 Julia distinguishes between **concrete** and **abstract** types:
 
-- **Concrete types** are the actual data structures you create and work with — for example `EyeData`, `EDFFile`, or `RectAOI`. These hold real data.
-- **Abstract types** are categories or groupings — you can never create one directly, but they let functions accept a *family* of related types. For example, `EyeFile` is abstract; it simply stands for "any supported eye-tracking file format".
+- **Concrete types** hold data in memory (for example `EyeData`, `EDFFile`, or `RectAOI`).
+- **Abstract types** group related concrete types for method dispatch without storing fields directly (for example `EyeFile`, the supertype of all format-specific file structs, and `AOI`, the supertype of spatial regions).
 
 ---
 
@@ -33,51 +33,53 @@ Julia distinguishes between **concrete** and **abstract** types:
 
 ```
 Any
-├── EyeFile (abstract) - Representation of raw files
+├── EyeFile (abstract) - Raw file representations
 │   ├── EDFFile
 │   ├── SMIFile
 │   └── TobiiFile
-├── EyeData - Processed and unified continuous data
-└── AOI (abstract) - Spatial Areas of Interest
+├── EyeData - Continuous sample table and recording metadata
+└── AOI (abstract) - Spatial and spatiotemporal Areas of Interest
     ├── RectAOI
     ├── CircleAOI
     ├── EllipseAOI
-    └── PolygonAOI
+    ├── PolygonAOI
+    └── DynamicAOI
 ```
 
 See the [Types Reference](../reference/types.md) for full field-by-field documentation of each type.
 
-## `EyeFile` (Format Specs)
+## `EyeFile` (Format Containers)
 
-The `EyeFile` types (`EDFFile`, `SMIFile`, `TobiiFile`) are structural types used during parsing. `read_et_data` automatically dispatches on the file extension to read the raw proprietary components utilizing these types before automatically packaging everything into the singular `EyeData` object.
+The `EyeFile` subtypes (`EDFFile`, `SMIFile`, `TobiiFile`) store format-specific tables and metadata parsed from raw files. `read_et_data` selects the appropriate reader from the file extension and converts the result into an `EyeData` container via `create_eyefun_data`.
 
 ## `EyeData`
 
-The central data structure you will work with. `EyeData` wraps a wide `DataFrame` with one row per sample, interpolating parsed discrete events across the continuous time series.
+`EyeData` wraps a wide `DataFrame` with one row per sample, aligning parsed discrete events and trial metadata with the continuous gaze and pupil time series.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `df` | `DataFrame` | The continuous data (time × variables) |
-| `source` | `String` | Source filename |
+| `df` | `DataFrame` | Continuous sample table (time × variables) |
+| `source` | `Symbol` | Tracker source (`:eyelink`, `:smi`, `:tobii`, `:generic`) |
 | `sample_rate` | `Float64` | Sampling frequency in Hz |
-| `screen_res` | `Tuple{Float64, Float64}` | Display resolution (width, height) |
-| `screen_width_cm` | `Float64` | Physical monitor width |
-| `viewing_distance_cm` | `Float64` | Distance from participant to screen |
+| `screen_res` | `Tuple{Int, Int}` | Display resolution `(width, height)` in pixels |
+| `screen_width_cm` | `Float64` | Physical monitor width in cm |
+| `viewing_distance_cm` | `Float64` | Distance from participant to screen in cm |
 
 ### Continuous DataFrame (`df`) columns
 
-The underlying `df` contains continuous gaze coordinates (`gx`, `gy`), pupil sizes (`pa`), and binary state masks annotating whether the sample occurred during a specific event category (`in_fix`, `in_sacc`, `in_blink`). It also contains dynamic string annotations like `message` when system triggers appear on the timeline.
+`df` stores gaze coordinates (`gxL`/`gyL`, `gxR`/`gyR`, and cyclopean `gx`/`gy` via `average_eyes!`), pupil sizes (`paL`/`paR`/`pa`), boolean event masks (`in_fix`, `in_sacc`, `in_blink`), and per-sample `message` strings at trigger timestamps.
 
 ## `AOI`
 
-Areas of Interest define spatial boundaries on the stimulus screen to extract semantic gaze metrics.
+Areas of Interest define static or time-varying spatial regions on the display for gaze classification and dwell-time metrics.
 
-| Concrete Type | Primitive Fields | 
-|---------------|------------------|
-| `RectAOI` | `x`, `y`, `width`, `height` |
-| `CircleAOI` | `x`, `y`, `radius` |
-| `EllipseAOI` | `x`, `y`, `radius_x`, `radius_y` |
-| `PolygonAOI` | `points::Vector{Tuple{Float64, Float64}}` |
+| Concrete Type | Fields |
+|---------------|--------|
+| `RectAOI` | `name`, `cx`, `cy`, `width`, `height`, `color` |
+| `CircleAOI` | `name`, `cx`, `cy`, `radius`, `color` |
+| `EllipseAOI` | `name`, `cx`, `cy`, `rx`, `ry`, `color` |
+| `PolygonAOI` | `name`, `vertices::Vector{Tuple{Float64, Float64}}`, `color` |
+| `DynamicAOI` | `name`, `windows::Vector{Tuple{Float64, Float64, AOI}}`, `color` |
 
 ## Data Flow
 

@@ -1,396 +1,403 @@
-"""
-    read_eyelink_edf(filename::String;
-                    start_marker::String = DEFAULT_START_MARKER,
-                    end_marker::String = DEFAULT_END_MARKER) -> EDFFile
+const _KNOWN_ET_MASK =
+    (UInt64(1) << EVENT_STARTPARSE) |
+    (UInt64(1) << EVENT_ENDPARSE) |
+    (UInt64(1) << EVENT_BREAKPARSE) |
+    (UInt64(1) << EVENT_STARTBLINK) |
+    (UInt64(1) << EVENT_ENDBLINK) |
+    (UInt64(1) << EVENT_STARTSACC) |
+    (UInt64(1) << EVENT_ENDSACC) |
+    (UInt64(1) << EVENT_STARTFIX) |
+    (UInt64(1) << EVENT_ENDFIX) |
+    (UInt64(1) << EVENT_FIXUPDATE) |
+    (UInt64(1) << EVENT_STARTSAMPLES) |
+    (UInt64(1) << EVENT_ENDSAMPLES) |
+    (UInt64(1) << EVENT_STARTEVENTS) |
+    (UInt64(1) << EVENT_ENDEVENTS) |
+    (UInt64(1) << EVENT_MESSAGEEVENT) |
+    (UInt64(1) << EVENT_BUTTONEVENT) |
+    (UInt64(1) << EVENT_INPUTEVENT) |
+    (UInt64(1) << EVENT_LOST_DATA)
 
-Read an EDF file
+const _RECORDING_ET_MASK =
+    (UInt64(1) << EVENT_STARTSAMPLES) |
+    (UInt64(1) << EVENT_ENDSAMPLES) |
+    (UInt64(1) << EVENT_STARTEVENTS) |
+    (UInt64(1) << EVENT_ENDEVENTS)
 
-# Arguments
-- `filename`: Path to the .edf file
-- `start_marker`: Message text that marks trial start (default: "TRIALID")
-- `end_marker`: Message text that marks trial end (default: "TRIAL_RESULT")
+const _START_ET_MASK =
+    (UInt64(1) << EVENT_STARTSACC) |
+    (UInt64(1) << EVENT_STARTFIX) |
+    (UInt64(1) << EVENT_STARTBLINK) |
+    (UInt64(1) << EVENT_STARTPARSE) |
+    (UInt64(1) << EVENT_ENDPARSE) |
+    (UInt64(1) << EVENT_BREAKPARSE)
 
-# Returns
-An `EDFFile` containing:
-- `preamble`: The file's text header
-- `events`: DataFrame of all events (messages, IO, eye events)
-- `recordings`: DataFrame of recording blocks
-- `saccades`, `fixations`, `blinks`, `messages`: Parsed sub-DataFrames
-- `samples`: DataFrame of eye tracking samples
-"""
-function read_eyelink_edf(
-    filename::String;
-    start_marker::String = DEFAULT_START_MARKER,
-    end_marker::String = DEFAULT_END_MARKER,
+const _FEVENT_ET_MASK =
+    (UInt64(1) << EVENT_ENDSACC) |
+    (UInt64(1) << EVENT_ENDFIX) |
+    (UInt64(1) << EVENT_ENDBLINK) |
+    (UInt64(1) << EVENT_FIXUPDATE)
+
+function _parse_edf_binary!(
+    edf::EDFFile,
+    binary_data::Vector{UInt8},
+    pos::Int,
+    start_marker::String,
+    end_marker::String,
+    verbose::Bool,
 )
+    n_data = length(binary_data)
+    rem_bytes = max(n_data - pos + 1, 0)
 
-    isfile(filename) || error("File not found: $filename")
+    ev_cols = _EDFEventCols(clamp(div(rem_bytes, 192), 256, 250_000))
+    sample_cols = _EDFSampleCols(0)
+    recordings_data = EDFRecording[]
 
-    edf = EDFFile(filename)
-    open(filename, "r") do io
-        # Read preamble ────────────────────────────────────────
-        edf.preamble = read_edf_preamble(io)
-        @info "Read preamble ($(length(edf.preamble)) bytes)"
+    trial = 0
+    in_trial = false
+    current_sample_ts = UInt32(0)
+    current_sflags = UInt16(0)
+    sflags_base = UInt16(0)
+    current_sample_body_bytes = 0
 
-        # Load remaining bytes, then walk records in memory ────
-        # Reading the whole binary body at once and parsing with integer indices
-        # eliminates IO dispatch, eof() syscalls, and seek() calls — the primary
-        # source of allocations in the IO-stream approach.
-        binary_data = read(io)
-        @info "Loaded $(length(binary_data)) binary bytes"
-
-        events_data = EDFEvent[]
-        recordings_data = EDFRecording[]
-
-        trial = 0
-        in_trial = false
-        current_sample_ts = UInt32(0)
-        current_eye_code = EYE_RIGHT
-        current_sflags = UInt16(0)
-        sample_count = 0
-
-        KNOWN_ETS = (
-            EVENT_STARTPARSE,
-            EVENT_ENDPARSE,
-            EVENT_BREAKPARSE,
-            EVENT_STARTBLINK,
-            EVENT_ENDBLINK,
-            EVENT_STARTSACC,
-            EVENT_ENDSACC,
-            EVENT_STARTFIX,
-            EVENT_ENDFIX,
-            EVENT_FIXUPDATE,
-            EVENT_STARTSAMPLES,
-            EVENT_ENDSAMPLES,
-            EVENT_STARTEVENTS,
-            EVENT_ENDEVENTS,
-            EVENT_MESSAGEEVENT,
-            EVENT_BUTTONEVENT,
-            EVENT_INPUTEVENT,
-            EVENT_LOST_DATA,
-        )
-
-        # ── Allocate sample columns with concrete types (no Union{T,Nothing}) ──
-        col_time = UInt32[]
-        col_gxR = Float32[]
-        col_gyR = Float32[]
-        col_paR = Float32[]
-        col_gxL = Float32[]
-        col_gyL = Float32[]
-        col_paL = Float32[]
-        col_hxR = Float32[]
-        col_hyR = Float32[]
-        col_hxL = Float32[]
-        col_hyL = Float32[]
-        col_rx = Float32[]
-        col_ry = Float32[]
-        col_flags = UInt16[]
-        col_input = UInt16[]
-        col_status = UInt16[]
-        col_trial = Int[]
-        let HINT = 3_000_000
-            foreach(
-                v -> sizehint!(v, HINT),
-                (
-                    col_time,
-                    col_gxR,
-                    col_gyR,
-                    col_paR,
-                    col_gxL,
-                    col_gyL,
-                    col_paL,
-                    col_hxR,
-                    col_hyR,
-                    col_hxL,
-                    col_hyL,
-                    col_rx,
-                    col_ry,
-                    col_flags,
-                    col_input,
-                    col_status,
-                    col_trial,
-                ),
-            )
+    while pos + 6 <= n_data
+        @inbounds marker_byte = binary_data[pos+2]
+        is_header = false
+        et = 0
+        if marker_byte == HEADER_MARKER
+            et = Int(@inbounds(binary_data[pos]) & TYPE_MASK)
+            is_header = ((_KNOWN_ET_MASK >> et) & UInt64(1)) != 0
+        elseif marker_byte == UInt8(0x41)
+            et = Int(@inbounds(binary_data[pos]) & TYPE_MASK)
+            is_header = ((_RECORDING_ET_MASK >> et) & UInt64(1)) != 0
         end
 
-        n_data = length(binary_data)
-        pos = 1
-
-        while pos + 6 <= n_data
-            # ── Speculatively read a 7-byte record header ─────────────────
-            type_byte = binary_data[pos]
-            marker_byte = binary_data[pos+2]
-            ts = read_be_uint32(binary_data, pos + 3)
-
-            et = Int(type_byte & TYPE_MASK)
-            eye_bits = (type_byte >> 6) & 0x03
-            eye_val = Int16(
-                eye_bits == 0 ? -1 :
-                eye_bits == 1 ? EYE_RIGHT : eye_bits == 2 ? EYE_LEFT : EYE_BINOCULAR,
-            )
-
-            # Recording control records (STARTSAMPLES=15,ENDSAMPLES=16,STARTEVENTS=17,ENDEVENTS=18)
-            # may use marker byte 0x41 instead of 0x21 near the end of some EDF files.
-            is_recording_et = et in
-            (EVENT_STARTSAMPLES, EVENT_ENDSAMPLES, EVENT_STARTEVENTS, EVENT_ENDEVENTS)
-            valid_marker =
-                marker_byte == HEADER_MARKER ||
-                (is_recording_et && marker_byte == UInt8(0x41))
-
-            if !valid_marker || !(et in KNOWN_ETS)
-                # Not an event header — check for sample data
-                if current_sflags != 0
-                    flags_peek = read_be_uint16(binary_data, pos)
-                    sflags_base = current_sflags & ~UInt16(SAMPLE_FULL_TS_FLAG)
-                    flags_base = flags_peek & ~UInt16(SAMPLE_FULL_TS_FLAG)
-                    if flags_base == sflags_base || flags_base == (sflags_base | UInt16(1))
-                        pos += 2  # consume the flags word
+        if !is_header
+            if current_sflags != 0
+                flags_peek = read_be_uint16(binary_data, pos)
+                flags_base = flags_peek & ~UInt16(SAMPLE_FULL_TS_FLAG)
+                if flags_base == sflags_base || flags_base == (sflags_base | UInt16(1))
+                    req =
+                        ((flags_peek & SAMPLE_FULL_TS_FLAG) != 0 ? 4 : 1) +
+                        current_sample_body_bytes
+                    if pos + 1 + req <= n_data
+                        pos += 2
                         pos, current_sample_ts = _push_sample_bytes!(
                             binary_data,
                             pos,
                             flags_peek,
                             current_sflags,
                             current_sample_ts,
-                            current_eye_code,
                             in_trial,
                             trial,
-                            col_time,
-                            col_gxR,
-                            col_gyR,
-                            col_paR,
-                            col_gxL,
-                            col_gyL,
-                            col_paL,
-                            col_hxR,
-                            col_hyR,
-                            col_hxL,
-                            col_hyL,
-                            col_rx,
-                            col_ry,
-                            col_flags,
-                            col_input,
-                            col_status,
-                            col_trial,
+                            sample_cols,
                         )
-                        sample_count += 1
                         continue
                     end
                 end
-                pos += 1
-                continue
             end
+            pos += 1
+            continue
+        end
 
-            # ── Valid 7-byte header — advance past it ─────────────────────
-            pos += 7
+        type_byte = @inbounds binary_data[pos]
+        ts = read_be_uint32(binary_data, pos + 3)
+        eye_bits = (type_byte >> 6) & 0x03
+        eye_val = Int16(
+            eye_bits == 0 ? -1 :
+            eye_bits == 1 ? EYE_RIGHT : eye_bits == 2 ? EYE_LEFT : EYE_BINOCULAR,
+        )
 
-            # ── Dispatch ──────────────────────────────────────────────────
-            if et == EVENT_MESSAGEEVENT
-                msg_text, pos = _msg_bytes(binary_data, pos)
-                if startswith(msg_text, start_marker)
+        pos += 7
+        et_bit = UInt64(1) << et
+
+        if (et_bit & _FEVENT_ET_MASK) != 0
+            pos = _push_fevent_bytes!(ev_cols, binary_data, pos, ts, et, eye_val)
+
+        elseif (et_bit & _START_ET_MASK) != 0
+            _push_basic_event!(ev_cols, ts, et, eye_val)
+
+        elseif et == EVENT_MESSAGEEVENT
+            t_lo, t_hi, pos = _msg_span_bytes(binary_data, pos)
+            if t_lo <= t_hi
+                if _matches_marker_bytes(binary_data, t_lo, t_hi, start_marker)
                     trial += 1
                     in_trial = true
-
-                elseif startswith(msg_text, end_marker)
+                elseif _matches_marker_bytes(binary_data, t_lo, t_hi, end_marker)
                     in_trial = false
                 end
-                basic = EDFEventBasic(
-                    ts,
-                    Int16(et),
-                    UInt16(0),
-                    ts,
-                    ts,
-                    eye_val,
-                    UInt16(0),
-                    UInt16(0),
-                    UInt16(0),
-                    UInt16(0),
-                    UInt16(0),
-                    msg_text,
-                )
-                push!(events_data, EDFEvent(basic, ZERO_POSITIONS, ZERO_VELOCITIES))
+            end
+            _push_msg_event_bytes!(ev_cols, ts, eye_val, binary_data, t_lo, t_hi)
 
-            elseif et == EVENT_INPUTEVENT
-                input_val, pos = _input_bytes(binary_data, pos)
-                basic = EDFEventBasic(
-                    ts,
-                    Int16(et),
-                    UInt16(0),
-                    ts,
-                    ts,
-                    eye_val,
-                    UInt16(0),
-                    UInt16(0),
-                    UInt16(input_val),
-                    UInt16(0),
-                    UInt16(0),
-                    "",
-                )
-                push!(events_data, EDFEvent(basic, ZERO_POSITIONS, ZERO_VELOCITIES))
-
-            elseif et == EVENT_BUTTONEVENT
-                btn_val, pos = _input_bytes(binary_data, pos)
-                basic = EDFEventBasic(
-                    ts,
-                    Int16(et),
-                    UInt16(0),
-                    ts,
-                    ts,
-                    eye_val,
-                    UInt16(0),
-                    UInt16(0),
-                    UInt16(0),
-                    UInt16(btn_val),
-                    UInt16(0),
-                    "",
-                )
-                push!(events_data, EDFEvent(basic, ZERO_POSITIONS, ZERO_VELOCITIES))
-
-            elseif et in (EVENT_ENDSACC, EVENT_ENDFIX, EVENT_ENDBLINK, EVENT_FIXUPDATE)
-                fevent, pos = _fevent_bytes(binary_data, pos, et)
-                entime_val = (et == EVENT_ENDBLINK) ? ts : fevent.entime
-                basic = EDFEventBasic(
-                    ts,
-                    Int16(et),
-                    UInt16(0),
-                    ts,
-                    entime_val,
-                    eye_val,
-                    UInt16(0),
-                    UInt16(0),
-                    UInt16(0),
-                    UInt16(0),
-                    UInt16(0),
-                    "",
-                )
-                positions = EDFEventPositions(
-                    fevent.hstx,
-                    fevent.hsty,
-                    fevent.gstx,
-                    fevent.gsty,
-                    fevent.sta,
-                    fevent.henx,
-                    fevent.heny,
-                    fevent.genx,
-                    fevent.geny,
-                    fevent.ena,
-                    fevent.havx,
-                    fevent.havy,
-                    fevent.gavx,
-                    fevent.gavy,
-                    fevent.ava,
-                )
-                velocities = EDFEventVelocities(
-                    fevent.ampl,
-                    fevent.pvel,
-                    fevent.svel,
-                    fevent.evel,
-                    fevent.supd_x,
-                    fevent.eupd_x,
-                    fevent.supd_y,
-                    fevent.eupd_y,
-                )
-                push!(events_data, EDFEvent(basic, positions, velocities))
-
-            elseif et in (
-                EVENT_STARTSACC,
-                EVENT_STARTFIX,
-                EVENT_STARTBLINK,
-                EVENT_STARTPARSE,
-                EVENT_ENDPARSE,
-                EVENT_BREAKPARSE,
-            )
-                basic = EDFEventBasic(
-                    ts,
-                    Int16(et),
-                    UInt16(0),
-                    ts,
-                    ts,
-                    eye_val,
-                    UInt16(0),
-                    UInt16(0),
-                    UInt16(0),
-                    UInt16(0),
-                    UInt16(0),
-                    "",
-                )
-                push!(events_data, EDFEvent(basic, ZERO_POSITIONS, ZERO_VELOCITIES))
-
-            elseif et in (
-                EVENT_STARTSAMPLES,
-                EVENT_ENDSAMPLES,
-                EVENT_STARTEVENTS,
-                EVENT_ENDEVENTS,
-            )
-                rec, pos =
-                    _recording_bytes(binary_data, pos, ts, in_trial ? trial : nothing)
-                if !isnothing(rec)
-                    push!(recordings_data, rec)
-                    # Only update parsing state from recording blocks with plausible
-                    # sample rates (100–2000 Hz). Garbage STARTSAMPLES blocks embedded
-                    # in the binary stream can have rates like 24320 Hz and would
-                    # corrupt current_sflags mid-recording, causing sample fingerprint
-                    # failures and thousands of missed samples.
-                    is_plausible = rec.sample_rate >= 100.0f0 && rec.sample_rate <= 2000.0f0
-                    if et == EVENT_STARTSAMPLES && is_plausible
-                        current_eye_code = Int(rec.eye)
-                    end
-                    if is_plausible &&
-                       rec.sflags != 0 &&
-                       et in (EVENT_STARTSAMPLES, EVENT_ENDSAMPLES)
-                        current_sflags = rec.sflags
+        elseif (et_bit & _RECORDING_ET_MASK) != 0
+            rec, pos = _recording_bytes(binary_data, pos, ts, in_trial ? trial : nothing)
+            if !isnothing(rec)
+                push!(recordings_data, rec)
+                # Only update parsing state from recording blocks with plausible
+                # sample rates (100–2000 Hz). Garbage STARTSAMPLES blocks embedded
+                # in the binary stream can have rates like 24320 Hz and would
+                # corrupt current_sflags mid-recording.
+                is_plausible = rec.sample_rate >= 100.0f0 && rec.sample_rate <= 2000.0f0
+                if is_plausible &&
+                   rec.sflags != 0 &&
+                   (et == EVENT_STARTSAMPLES || et == EVENT_ENDSAMPLES)
+                    current_sflags = rec.sflags
+                    sflags_base = current_sflags & ~UInt16(SAMPLE_FULL_TS_FLAG)
+                    current_sample_body_bytes = _edf_sample_body_bytes(current_sflags)
+                    if sample_cols.cap == 0
+                        est = clamp(
+                            div(n_data - pos + 1, max(3 + current_sample_body_bytes, 8)) +
+                            512,
+                            512,
+                            3_000_000,
+                        )
+                        _grow_sample_cols!(sample_cols, est)
                     end
                 end
-
-            elseif et == EVENT_LOST_DATA
-                nothing  # no payload
-
-            else
-                @warn "Unknown event type $et at byte offset $(pos-7)"
-                pos -= 6  # rewind to byte after the type_byte
             end
-        end
 
-        @info "Parsing complete: $(length(events_data)) events, $sample_count samples"
+        elseif et == EVENT_INPUTEVENT
+            input_val, pos = _input_bytes(binary_data, pos)
+            _push_basic_event!(ev_cols, ts, et, eye_val; input_val = UInt16(input_val))
 
-        # ── Phase 3: Convert to DataFrames ────────────────────────────────
-        edf.events = events_to_dataframe(events_data)
-        edf.recordings = recordings_to_dataframe(recordings_data)
+        elseif et == EVENT_BUTTONEVENT
+            btn_val, pos = _input_bytes(binary_data, pos)
+            _push_basic_event!(ev_cols, ts, et, eye_val; btn_val = UInt16(btn_val))
 
-        if !isempty(col_time)
-            n = length(col_time)
-            # trial column: typemin(Int) sentinel → missing
-            trial_col =
-                Union{Int,Missing}[v == typemin(Int) ? missing : v for v in col_trial]
-            edf.samples = DataFrame(
-                time = col_time,
-                gxR = col_gxR,
-                gyR = col_gyR,
-                paR = col_paR,
-                gxL = col_gxL,
-                gyL = col_gyL,
-                paL = col_paL,
-                hxR = col_hxR,
-                hyR = col_hyR,
-                hxL = col_hxL,
-                hyL = col_hyL,
-                rx = col_rx,
-                ry = col_ry,
-                flags = col_flags,
-                input = col_input,
-                errors = col_status,
-                trial = trial_col;
-                copycols = false,
-            )
-            @info "Loaded $n samples into DataFrame"
+        elseif et == EVENT_LOST_DATA
+            nothing
+
         else
-            edf.samples = DataFrame()
+            @warn "Unknown event type $et at byte offset $(pos-7)"
+            pos -= 6
         end
-
     end
 
+    verbose &&
+        @info "Parsing complete: $(ev_cols.len) events, $(sample_cols.len) samples"
+
+    edf.events = _finalize_events_df!(ev_cols)
+    edf.recordings = recordings_to_dataframe(recordings_data)
+    edf.samples = _finalize_samples_df!(sample_cols)
+    verbose && sample_cols.len > 0 && @info "Loaded $(sample_cols.len) samples into DataFrame"
     return edf
 end
 
+"""
+    read_eyelink_edf(filename::String;
+                    start_marker::String = DEFAULT_START_MARKER,
+                    end_marker::String = DEFAULT_END_MARKER,
+                    verbose::Bool = false) -> EDFFile
+
+Read a binary EyeLink `.edf` file.
+
+# Arguments
+- `filename`: Path to the `.edf` file
+- `start_marker`: Message text that marks trial start (default: `"TRIALID"`)
+- `end_marker`: Message text that marks trial end (default: `"TRIAL_RESULT"`)
+- `verbose`: Emit informational log messages during parsing
+
+# Returns
+An `EDFFile` containing:
+- `preamble`: The file's text header
+- `events`: DataFrame of all events (messages, IO, eye events)
+- `recordings`: DataFrame of recording blocks
+- `samples`: DataFrame of eye tracking samples
+"""
+function read_eyelink_edf(
+    filename::String;
+    start_marker::String = DEFAULT_START_MARKER,
+    end_marker::String = DEFAULT_END_MARKER,
+    verbose::Bool = false,
+)
+    isfile(filename) || error("File not found: $filename")
+
+    edf = EDFFile(filename)
+    raw_bytes = Base.read(filename)
+    preamble_str, bin_start = _extract_edf_preamble(raw_bytes)
+    edf.preamble = preamble_str
+    verbose && @info "Read preamble ($(ncodeunits(edf.preamble)) bytes)"
+    verbose && @info "Loaded $(length(raw_bytes) - bin_start + 1) binary bytes"
+
+    _parse_edf_binary!(edf, raw_bytes, bin_start, start_marker, end_marker, verbose)
+    _populate_edf_metadata!(edf)
+    return edf
+end
+
+
+function _parse_asc_bytes!(
+    edf::EDFFile,
+    raw::Vector{UInt8},
+    loadsamples::Bool,
+    start_marker::String,
+    end_marker::String,
+    verbose::Bool,
+)
+    n_bytes = length(raw)
+    ev_cols = _EDFEventCols(clamp(div(n_bytes, 256), 256, 250_000))
+    sam_cols = _ASCSampleCols(loadsamples ? clamp(div(n_bytes, 24), 1024, 3_000_000) : 0)
+    recording_rows = EDFRecording[]
+    preamble_buf = IOBuffer()
+    has_preamble = false
+
+    trial = 0
+    in_trial = false
+    asc_eye_mode = 0xff
+    in_preamble = true
+    n_lines = 0
+
+    pos = 1
+    while pos <= n_bytes
+        nl = pos
+        @inbounds while nl <= n_bytes && raw[nl] != 0x0a
+            nl += 1
+        end
+        ls = pos
+        le = nl - 1
+        pos = nl + 1
+        if le >= ls && @inbounds(raw[le]) == 0x0d
+            le -= 1
+        end
+        n_lines += 1
+
+        le < ls && continue
+
+        b1 = @inbounds raw[ls]
+        if b1 == UInt8('*') && le > ls && @inbounds(raw[ls+1]) == UInt8('*')
+            if in_preamble
+                has_preamble && write(preamble_buf, 0x0a)
+                GC.@preserve raw unsafe_write(
+                    preamble_buf,
+                    pointer(raw, ls),
+                    UInt(le - ls + 1),
+                )
+                has_preamble = true
+            end
+            continue
+        end
+
+        in_preamble = false
+
+        if b1 >= UInt8('0') && b1 <= UInt8('9')
+            if loadsamples
+                _push_asc_sample_bytes!(
+                    sam_cols,
+                    raw,
+                    ls,
+                    le,
+                    trial,
+                    in_trial,
+                    asc_eye_mode,
+                )
+            end
+            continue
+        end
+
+        if b1 == UInt8('M') && _line_starts_with_kw(raw, ls, le, "MSG")
+            trial, in_trial = _push_asc_msg_bytes!(
+                ev_cols,
+                raw,
+                ls,
+                le,
+                start_marker,
+                end_marker,
+                trial,
+                in_trial,
+            )
+
+        elseif b1 == UInt8('E')
+            if _line_starts_with_kw(raw, ls, le, "EFIX")
+                _push_asc_efix_bytes!(ev_cols, raw, ls, le)
+            elseif _line_starts_with_kw(raw, ls, le, "ESACC")
+                _push_asc_esacc_bytes!(ev_cols, raw, ls, le)
+            elseif _line_starts_with_kw(raw, ls, le, "EBLINK")
+                _push_asc_eblink_bytes!(ev_cols, raw, ls, le)
+            elseif _line_starts_with_kw(raw, ls, le, "EVENTS")
+                cfg_eye, cfg_sr = _parse_asc_samples_cfg_bytes(raw, ls, le)
+                cfg_eye != 0xff && (asc_eye_mode = cfg_eye)
+                if cfg_sr > 0.0f0 && !isempty(recording_rows)
+                    r_last = recording_rows[end]
+                    if r_last.state == RECORDING_START && r_last.sample_rate == 0.0f0
+                        recording_rows[end] = EDFRecording(
+                            r_last.time,
+                            cfg_sr,
+                            r_last.eflags,
+                            r_last.sflags,
+                            r_last.state,
+                            r_last.record_type,
+                            r_last.pupil_type,
+                            r_last.recording_mode,
+                            r_last.filter_type,
+                            r_last.pos_type,
+                            cfg_eye != 0xff ? cfg_eye : r_last.eye,
+                            r_last.trial,
+                        )
+                    end
+                end
+            elseif _line_starts_with_kw(raw, ls, le, "END")
+                row = _parse_asc_end_bytes(raw, ls, le)
+                !isnothing(row) && push!(recording_rows, row)
+            end
+
+        elseif b1 == UInt8('S')
+            if _line_starts_with_kw(raw, ls, le, "START")
+                row = _parse_asc_start_bytes(raw, ls, le, in_trial, trial)
+                if !isnothing(row)
+                    asc_eye_mode = row.eye
+                    push!(recording_rows, row)
+                end
+            elseif _line_starts_with_kw(raw, ls, le, "SAMPLES")
+                cfg_eye, cfg_sr = _parse_asc_samples_cfg_bytes(raw, ls, le)
+                cfg_eye != 0xff && (asc_eye_mode = cfg_eye)
+                if cfg_sr > 0.0f0 && !isempty(recording_rows)
+                    r_last = recording_rows[end]
+                    if r_last.state == RECORDING_START
+                        recording_rows[end] = EDFRecording(
+                            r_last.time,
+                            cfg_sr,
+                            r_last.eflags,
+                            r_last.sflags,
+                            r_last.state,
+                            r_last.record_type,
+                            r_last.pupil_type,
+                            r_last.recording_mode,
+                            r_last.filter_type,
+                            r_last.pos_type,
+                            cfg_eye != 0xff ? cfg_eye : r_last.eye,
+                            r_last.trial,
+                        )
+                    end
+                end
+            end
+
+        elseif b1 == UInt8('I') && _line_starts_with_kw(raw, ls, le, "INPUT")
+            _push_asc_input_bytes!(ev_cols, raw, ls, le)
+
+        elseif b1 == UInt8('B') && _line_starts_with_kw(raw, ls, le, "BUTTON")
+            _push_asc_button_bytes!(ev_cols, raw, ls, le)
+        end
+    end
+
+    verbose && @info "Parsed $n_lines lines from $(edf.filename)"
+
+    edf.preamble = has_preamble ? String(take!(preamble_buf)) : ""
+    if ev_cols.len > 0
+        edf.events = _finalize_events_df!(ev_cols)
+    end
+    if loadsamples && sam_cols.len > 0
+        edf.samples = _finalize_asc_samples!(sam_cols)
+    end
+    if !isempty(recording_rows)
+        edf.recordings = recordings_to_dataframe(recording_rows)
+    end
+    _populate_edf_metadata!(edf)
+
+    verbose &&
+        @info "ASC read complete: $(nrow(edf.events)) events, " *
+              (loadsamples ? "$(nrow(edf.samples)) samples" : "samples not loaded")
+
+    return edf
+end
 
 """
     read_eyelink_asc(filename::String;
@@ -416,173 +423,33 @@ function read_eyelink_asc(
     loadsamples::Bool = true,
     start_marker::String = "TRIALID",
     end_marker::String = "TRIAL_RESULT",
+    verbose::Bool = false,
 )
-
     isfile(filename) || error("File not found: $filename")
-
     edf = EDFFile(filename)
-
-    # ── Event / recording accumulators ────────────────────────────────────────── #
-    preamble_lines = String[]
-    event_rows = EDFEvent[]
-    recording_rows = EDFRecording[]
-
-    # ── Sample accumulators (millions of rows — use typed column vectors) ─────── #
-    # Pre-allocate with a generous capacity hint to avoid repeated resizing.
-    HINT = 3_000_000
-    sam_time = sizehint!(UInt32[], HINT)
-    sam_gxR = sizehint!(Float32[], HINT)
-    sam_gyR = sizehint!(Float32[], HINT)
-    sam_paR = sizehint!(Float32[], HINT)
-    sam_gxL = sizehint!(Float32[], HINT)
-    sam_gyL = sizehint!(Float32[], HINT)
-    sam_paL = sizehint!(Float32[], HINT)
-    sam_trial = sizehint!(Int[], HINT)
-
-    trial = 0
-    in_trial = false
-
-    in_preamble = true
-
-    n_lines = 0
-
-    open(filename, "r") do io
-        for line in eachline(io)
-            n_lines += 1
-
-            # ── Preamble (** comment lines) ─────────────────────────────── #
-            if startswith(line, "**")
-                in_preamble && push!(preamble_lines, line)
-                continue
-            end
-
-            in_preamble = false
-            isempty(line) && continue
-
-            # ── Dispatch on first character / keyword ───────────────────── #
-            c = line[1]
-
-            # Fast path: sample lines start with a digit
-            if c >= '0' && c <= '9'
-                if loadsamples
-                    _push_sample!(
-                        line,
-                        trial,
-                        in_trial,
-                        sam_time,
-                        sam_gxR,
-                        sam_gyR,
-                        sam_paR,
-                        sam_gxL,
-                        sam_gyL,
-                        sam_paL,
-                        sam_trial,
-                    )
-                end
-                continue
-            end
-
-            # Keyword dispatch
-            if c == 'M' && startswith(line, "MSG")
-                parts = split(line; limit = 3)
-                row = _parse_msg(parts)
-                if !isnothing(row)
-                    push!(event_rows, row)
-                end
-                # Update trial state
-                if length(parts) >= 3
-                    msg_text = parts[3]
-                    if startswith(msg_text, start_marker)
-                        trial += 1
-                        in_trial = true
-
-                    elseif startswith(msg_text, end_marker)
-                        in_trial = false
-                    end
-                end
-
-            elseif c == 'E'
-                if startswith(line, "EFIX")
-                    row = _parse_efix(line)
-                    !isnothing(row) && push!(event_rows, row)
-                elseif startswith(line, "ESACC")
-                    row = _parse_esacc(line)
-                    !isnothing(row) && push!(event_rows, row)
-                elseif startswith(line, "EBLINK")
-                    row = _parse_eblink(line)
-                    !isnothing(row) && push!(event_rows, row)
-                elseif startswith(line, "END")
-                    row = _parse_end(line)
-                    !isnothing(row) && push!(recording_rows, row)
-                end
-
-            elseif c == 'S' && startswith(line, "START")
-                row = _parse_start(line, in_trial, trial)
-                !isnothing(row) && push!(recording_rows, row)
-
-            elseif c == 'I' && startswith(line, "INPUT")
-                row = _parse_input(line)
-                !isnothing(row) && push!(event_rows, row)
-            end
-        end
-    end
-
-    @info "Parsed $n_lines lines from $filename"
-
-    edf.preamble = join(preamble_lines, "\n")
-
-    # ── Build events DataFrame ─────────────────────────────────────────────── #
-    if !isempty(event_rows)
-        edf.events = events_to_dataframe(event_rows)
-    end
-
-    # ── Build samples DataFrame (column-major — no per-row schema scan) ──── #
-    if loadsamples && !isempty(sam_time)
-        MISS = typemin(Int)
-        trial_col = Union{Int,Missing}[v == MISS ? missing : v for v in sam_trial]
-        edf.samples = DataFrame(
-            time = sam_time,
-            gxR = sam_gxR,
-            gyR = sam_gyR,
-            paR = sam_paR,
-            gxL = sam_gxL,
-            gyL = sam_gyL,
-            paL = sam_paL,
-            trial = trial_col;
-            copycols = false,
-        )
-    end
-
-    # ── Build recordings DataFrame ─────────────────────────────────────────── #
-    if !isempty(recording_rows)
-        edf.recordings = recordings_to_dataframe(recording_rows)
-    end
-
-    @info "ASC read complete: $(nrow(edf.events)) events, " *
-          (loadsamples ? "$(nrow(edf.samples)) samples" : "samples not loaded")
-
-    return edf
+    raw = Base.read(filename)
+    return _parse_asc_bytes!(edf, raw, loadsamples, start_marker, end_marker, verbose)
 end
 
 """
     read_eyelink(filename::String; kwargs...) -> EDFFile
 
-Unified EyeLink data reader. Dispatches on file extension:
-- `.edf` → `read_eyelink_edf` (pure Julia binary reader, no external tools)
-- `.asc` → `read_eyelink_asc` (reads `.asc` produced by `edf2asc`)
+Read an EyeLink recording file, dispatching on file extension:
+- `.edf`: binary reader (`read_eyelink_edf`)
+- `.asc`: ASCII text reader (`read_eyelink_asc`)
 
 ```julia
 et = read_eyelink("recording.edf")
 et = read_eyelink("recording.asc")
 ```
 """
-function read_eyelink(filename::String; kwargs...)
-    @info "Reading $(filename)"
+function read_eyelink(filename::String; verbose::Bool = false, kwargs...)
+    verbose && @info "Reading $(filename)"
     ext = lowercase(splitext(filename)[2])
     if ext == ".edf"
-        return read_eyelink_edf(filename; kwargs...)
+        return read_eyelink_edf(filename; verbose = verbose, kwargs...)
     elseif ext == ".asc"
-        return read_eyelink_asc(filename; kwargs...)
+        return read_eyelink_asc(filename; verbose = verbose, kwargs...)
     else
         error("Unknown file extension '$ext'. Expected .edf or .asc")
     end

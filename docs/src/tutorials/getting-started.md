@@ -44,47 +44,43 @@ Pkg.add(url="https://github.com/igmmgi/EyeFun.jl")
 ```julia
 using EyeFun
 
-# Read an EDF file 
-edf = read_eyelink_edf("path/to/recording.edf")
+# One-step reader into a unified EyeData object (auto-detects .edf, .asc, .idf, .txt, .tsv, .csv)
+df = read_et_data("path/to/recording.edf"; trial_time_zero="Stimulus On")
+
+# Or inspect the low-level EyeLink file container first:
+edf = read_eyelink("path/to/recording.edf")
+df = create_eyefun_data(edf; trial_time_zero="Stimulus On")
 ```
 
-The function auto-detects the file format (`.edf` binary or `.asc` text) and returns an `EDFFile` object containing:
+`read_eyelink` auto-detects `.edf` binary or `.asc` text files and returns an `EDFFile` containing:
 
-- **`edf.samples`** — continuous gaze/pupil data at full recording resolution
-- **`edf.events`** — all parsed events (fixations, saccades, blinks, messages)
-- **`edf.recordings`** — recording block metadata (sample rate, eye, etc.)
+- **`edf.samples`**: continuous gaze and pupil samples at full recording resolution
+- **`edf.events`**: parsed events (fixations, saccades, blinks, messages)
+- **`edf.recordings`**: recording block metadata (sample rate, tracked eye, filter mode)
+
+> [!TIP]
+> **`trial_time_zero`:** Aligns the `time_rel` column so that $t=0$ ms occurs when the given pattern (e.g., `"Stimulus On"`) appears in a trial's messages, such as stimulus onset in pupillometry or visual-world paradigms.
+
+`read_et_data` / `create_eyefun_data` returns an `EyeData` object with columns like `time`, `trial`, `time_rel`, `gxL`, `gyL`, `paL`, `in_fix`, `fix_gavx`, `in_sacc`, `sacc_ampl`, `in_blink`, `message`, etc.
 
 ## Accessing Events
 
 ```julia
-# Parsed event DataFrames
-fix = fixations(edf)   # sttime, entime, gavx, gavy, ava, …
-sac = saccades(edf)    # sttime, entime, gstx, gsty, genx, geny, ampl, pvel, …
-blk = blinks(edf)      # sttime, entime, duration
-msg = messages(edf)    # sttime, message
+# Extract discrete event DataFrames from EyeData
+fix = fixations(df)   # sttime, entime, duration, gavx, gavy, ava
+sac = saccades(df)    # sttime, entime, duration, gstx, gsty, genx, geny, ampl, pvel
+blk = blinks(df)      # sttime, entime, duration
+msg = messages(df)    # time, message
 ```
-
-## Creating an Analysis DataFrame
-
-```julia
-# Wide DataFrame with one row per sample, annotated with events
-df = create_eyelink_edf_dataframe(edf)
-# df = create_eyelink_edf_dataframe(edf; trial_time_zero="Stimulus On")
-```
-
-> [!TIP]
-> **`trial_time_zero`:** Aligns the `time_rel` column so that $t=0$ ms occurs exactly when the given text (e.g., `"Stimulus On"`) appears in the trial's messages. This is crucial for stimulus-aligned analysis (like pupil responses or VWP).
-
-This creates an `EyeData` object with columns like `time`, `trial`, `time_rel`, `gxL`, `gyL`, `paL`, `in_fix`, `fix_gavx`, `in_sacc`, `sacc_ampl`, `in_blink`, `message`, etc.
 
 ## Plotting
 
-Plotting functions in EyeFun.jl operate on the whole dataset by default, allowing you to easily view aggregate behavior. To inspect specific subsets (like a single trial), pass a `NamedTuple` to the `selection` keyword:
+Plotting functions in EyeFun.jl operate on the whole dataset by default, allowing you to view aggregate behavior. To inspect specific subsets (such as a single trial or range of trials), pass a `NamedTuple` to the `selection` keyword:
 
 ```julia
-# Launch the interactive data viewer for scrubbing through trials
-plot_databrowser(df)                   # splits by trial as default
-plot_databrowser(df; split_by=nothing) # Or view as one continuous stream
+# Launch the interactive data viewer
+plot_databrowser(df)                  # view as one continuous stream
+plot_databrowser(df; split_by=:trial) # scrub trial-by-trial
 
 # Gaze trace (all trials aggregate)
 plot_gaze(df)
@@ -95,22 +91,16 @@ plot_scanpath(df; selection=(trial=1,))
 # Fixation heatmap (all trials aggregate)
 plot_heatmap(df)
 
-# Pupil trace (complex subset using an anonymous function)
-plot_pupil(df; selection = r -> r.trial > 10 && r.message == "Stimulus On")
+# Pupil trace for trials 1 through 10
+plot_pupil(df; selection=(trial=1:10,))
 ```
 
 ## Exporting to ASC
 
 ```julia
 # Convert EDF to ASC format (equivalent to edf2asc)
-write_eyelink_edf_to_ascii("recording.edf")  # → recording.asc
+write_et_ascii("recording.edf")  # → recording_exported.asc
 ```
-
-## EyeFun Philosophy
-
-EyeFun.jl is designed with ease-of-use as a core principle, bringing high-performance EyeLink parsing directly to Julia without any external dependencies or painful C-library wrappers. It emphasizes a code-based workflow that is intended to be simple, fast, and intuitive.
-
-While EyeFun provides interactive plotting components for data visualization and exploration, it remains fundamentally scriptable. The objective is to give you a single unified package capable of taking you from raw native binary `.edf` all the way to faceted statistical evaluation — all from the Julia REPL.
 
 ## Next Steps and Resources
 

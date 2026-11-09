@@ -1,17 +1,9 @@
-# ── Transition Analysis & Plotting ─────────────────────────────────────────── #
-
-
 """
     plot_transitions(df::EyeData, aois::Vector{<:AOI};
                      selection=nothing, eye=:auto, normalize=true)
 
-Plot an AOI transition probability heatmap.
-
-# Example
-```julia
-aois = [RectAOI("Face", 600, 400, 400, 400), RectAOI("Text", 640, 830, 1280, 260)]
-plot_transitions(df, aois; selection=(trial=1:10,))
-```
+Plot an AOI transition probability (or count) heatmap.
+Rows (`From AOI`) are plotted along the Y-axis and columns (`To AOI`) along the X-axis.
 """
 function plot_transitions(
     df::EyeData,
@@ -19,8 +11,16 @@ function plot_transitions(
     selection = nothing,
     eye::Symbol = :auto,
     normalize::Bool = true,
+    prefix::Union{Nothing,Symbol} = nothing,
 )
-    tm = transition_matrix(df, aois; selection = selection, normalize = normalize)
+    _resolve_eye(df, eye)
+    tm = transition_matrix(
+        df,
+        aois;
+        selection = selection,
+        normalize = normalize,
+        prefix = prefix,
+    )
     mat = tm.matrix
     labels = tm.labels
     n = length(labels)
@@ -37,21 +37,57 @@ function plot_transitions(
         yreversed = true,
     )
 
-    hm = Makie.heatmap!(ax, 1:n, 1:n, mat; colormap = :viridis, interpolate = false)
+    # Makie.heatmap! maps dim 1 -> X ("To AOI", j) and dim 2 -> Y ("From AOI", i),
+    # whereas mat is indexed [from=i, to=j]; permute dims so colors align with labels.
+    hm = Makie.heatmap!(
+        ax,
+        1:n,
+        1:n,
+        permutedims(mat);
+        colormap = :viridis,
+        interpolate = false,
+    )
 
-    # Annotate cells with values
+    max_val = isempty(mat) ? 0.0 : maximum(mat)
+    wx = Float64[]
+    wy = Float64[]
+    wtxt = String[]
+    bx = Float64[]
+    by = Float64[]
+    btxt = String[]
     for i = 1:n, j = 1:n
         val = mat[i, j]
-        txt = normalize ? string(round(val; digits = 2)) : string(Int(val))
-        text_color = val > 0.5 * maximum(mat) ? :white : :black
+        txt = normalize ? string(round(val; digits = 2)) : string(round(Int, val))
+        if max_val > 0.0 && val > 0.5 * max_val
+            push!(wx, Float64(j))
+            push!(wy, Float64(i))
+            push!(wtxt, txt)
+        else
+            push!(bx, Float64(j))
+            push!(by, Float64(i))
+            push!(btxt, txt)
+        end
+    end
+    if !isempty(wx)
         Makie.text!(
             ax,
-            j,
-            i;
-            text = txt,
+            wx,
+            wy;
+            text = wtxt,
             align = (:center, :center),
             fontsize = 14,
-            color = text_color,
+            color = :white,
+        )
+    end
+    if !isempty(bx)
+        Makie.text!(
+            ax,
+            bx,
+            by;
+            text = btxt,
+            align = (:center, :center),
+            fontsize = 14,
+            color = :black,
         )
     end
 

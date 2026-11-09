@@ -1,8 +1,4 @@
 """
-Type definitions for EDFReader.jl.
-"""
-
-"""
     EDFRecording
 
 Recording block metadata (START / END blocks in the EDF stream).
@@ -27,10 +23,10 @@ end
 
 Raw container returned by `read_eyelink_edf` and `read_eyelink_asc`.
 
-Holds the parsed binary/text data before conversion to `EyeData`.
-Use `create_eyefun_data(edf)` (or `read_et_data`) to get an analysis-ready
-`EyeData` with event annotations, then use `fixations`, `saccades`, `blinks`,
-`messages`, and `variables` on the resulting `EyeData`.
+Holds the parsed binary or ASCII data before conversion to `EyeData`.
+Use `create_eyefun_data(edf)` (or `read_et_data`) to construct an `EyeData`
+with event annotations, then access events via `fixations`, `saccades`, `blinks`,
+`messages`, and `variables`.
 """
 mutable struct EDFFile <: EyeFile
     filename::String
@@ -38,25 +34,26 @@ mutable struct EDFFile <: EyeFile
     events::DataFrame
     samples::Union{DataFrame,Nothing}
     recordings::DataFrame
+    sample_rate::Float64
+    screen_res::Tuple{Int,Int}
+    screen_width_cm::Float64
+    viewing_distance_cm::Float64
     function EDFFile(filename::String)
-        new(filename, "", DataFrame(), nothing, DataFrame())
+        new(filename, "", DataFrame(), nothing, DataFrame(), 0.0, (1920, 1080), 53.0, 60.0)
     end
 end
 
 function Base.show(io::IO, ::MIME"text/plain", edf::EDFFile)
     println(io, "EDFFile(\"$(basename(edf.filename))\")")
 
-    # Samples info
     if !isnothing(edf.samples) && nrow(edf.samples) > 0
         ns = nrow(edf.samples)
         print(io, "  $(ns) samples")
 
-        # Sample rate from recordings
         if nrow(edf.recordings) > 0 && hasproperty(edf.recordings, :sample_rate)
             sr = first(edf.recordings.sample_rate)
             sr_str = string(round(sr; digits = 2))
             sr > 0 && print(io, " ($(sr_str) Hz")
-            # Eye mode
             if hasproperty(edf.recordings, :eye)
                 eye_code = first(edf.recordings.eye)
                 eye_str =
@@ -69,14 +66,12 @@ function Base.show(io::IO, ::MIME"text/plain", edf::EDFFile)
         end
         println(io)
 
-        # Trials
         if hasproperty(edf.samples, :trial)
             nt = length(unique(skipmissing(edf.samples.trial)))
             nt > 0 && println(io, "  $nt trials")
         end
     end
 
-    # Event counts
     if nrow(edf.events) > 0 && hasproperty(edf.events, :type)
         nfix = count(==(EVENT_ENDFIX), edf.events.type)
         nsac = count(==(EVENT_ENDSACC), edf.events.type)

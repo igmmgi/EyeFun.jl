@@ -18,10 +18,10 @@ features:
   - icon: 
       src: /icon_eye.png
     title: Data Readers
-    details: Read EyeLink (EDF, ASC), SMI, and Tobii eye-tracking data formats
+    details: Read EyeLink (EDF, ASC), SMI, Tobii, CSV/TSV, and BIDS eye-tracking data formats
   - icon: 
       src: /icon_df.png
-    title: Tidy DataFrames
+    title: DataFrames
     details: Fixations, saccades, blinks, messages, and continuous samples as DataFrames
   - icon: 
       src: /icon_analysis.png
@@ -62,20 +62,28 @@ plot_heatmap(dat; selection=(trial=1,))
 plot_fixations(dat; selection=(trial=1,))
 plot_pupil(dat; split_by=:trial)
 plot_velocity(dat; selection=(trial=1,))
-
-plot_dwell(dat)
 plot_sequence(dat)
-plot_transitions(dat)
 
-# Access event tables directly from the processed dataset
-fix = fixation_metrics(dat)
-sac = saccade_metrics(dat)
+# Areas of Interest (AOIs)
+aois = [
+    RectAOI("Left", 320, 480, 300, 300),
+    RectAOI("Right", 960, 480, 300, 300),
+]
+plot_dwell(dat, aois)
+plot_transitions(dat, aois)
 
-# Data quality analysis
+# Access event tables & behavioral metrics
+fix = fixations(dat)
+sac = saccades(dat)
+fix_stats = fixation_metrics(dat, aois)
+sac_stats = saccade_metrics(dat)
+
+# Data quality & spatial precision
 dq = data_quality(dat)
+sp = spatial_precision(dat)
 
 # Export to ASC format
-write_et_ascii("recording.edf")  # → recording.asc
+write_et_ascii("recording.edf")  # → recording_exported.asc
 ```
 
 ## Documentation

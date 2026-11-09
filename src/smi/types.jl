@@ -1,22 +1,20 @@
-# ── SMIFile type ───────────────────────────────────────────────────────────── #
-
 """
     SMIFile
 
 Raw data container returned by `read_smi`. Analogous to `EDFFile` for EyeLink.
 
-Contains the parsed sample data and recording metadata, *before* event detection.
-Pass to `create_eyefun_data` to obtain an analysis-ready `EyeData`.
+Contains the parsed sample data and recording metadata prior to event detection.
+Pass to `create_eyefun_data` to build an `EyeData` container.
 
 # Fields
-- `filename::String` — path to the source file
-- `samples::DataFrame` — raw sample rows (`time`, `trial`, `participant`,
+- `filename::String`: path to the source file
+- `samples::DataFrame`: raw sample rows (`time`, `trial`, `participant`,
   `gxL`, `gyL`, `paL`, `gxR`, `gyR`, `paR`, `message`)
-- `sample_rate::Float64` — recording frequency in Hz
-- `screen_res::Tuple{Int,Int}` — screen resolution `(width, height)` in pixels
-- `screen_width_cm::Float64` — physical screen width in cm
-- `viewing_distance_cm::Float64` — eye-to-screen distance in cm
-- `subject::String` — participant ID extracted from the file header
+- `sample_rate::Float64`: recording frequency in Hz
+- `screen_res::Tuple{Int,Int}`: screen resolution `(width, height)` in pixels
+- `screen_width_cm::Float64`: physical screen width in cm
+- `viewing_distance_cm::Float64`: eye-to-screen distance in cm
+- `subject::String`: participant ID extracted from the file header
 
 # Example
 ```julia
@@ -26,7 +24,8 @@ raw.sample_rate      # 50.0
 raw.samples          # DataFrame with raw gaze columns
 
 ed = create_eyefun_data(raw)
-fixations(ed)        # now works
+detect_events!(ed)
+fixations(ed)
 ```
 """
 mutable struct SMIFile <: EyeFile
@@ -44,8 +43,6 @@ mutable struct SMIFile <: EyeFile
     end
 end
 
-# ── Show ───────────────────────────────────────────────────────────────────── #
-
 function Base.show(io::IO, smi::SMIFile)
     print(io, "SMIFile(\"$(basename(smi.filename))\")")
 end
@@ -56,7 +53,6 @@ function Base.show(io::IO, ::MIME"text/plain", smi::SMIFile)
     if nrow(smi.samples) > 0
         ns = nrow(smi.samples)
         sr = smi.sample_rate
-        dur_min = ns / sr / 60.0
         sr_str = string(round(sr; digits = 2))
         print(io, "  $ns samples")
         sr > 0 && print(io, " ($(sr_str) Hz")
@@ -70,24 +66,28 @@ function Base.show(io::IO, ::MIME"text/plain", smi::SMIFile)
         eye_str =
             has_left && has_right ? "binocular" :
             has_left ? "left eye" : has_right ? "right eye" : ""
-        !isempty(eye_str) && print(io, ", $eye_str")
-        sr > 0 && print(io, ")")
+        if sr > 0
+            !isempty(eye_str) && print(io, ", $eye_str")
+            print(io, ")")
+        elseif !isempty(eye_str)
+            print(io, " ($eye_str)")
+        end
         println(io)
 
-        # Duration
-        if dur_min >= 1.0
-            println(io, "  $(round(dur_min; digits=1)) min")
-        else
-            println(io, "  $(round(ns / sr; digits=1)) s")
+        if sr > 0
+            dur_min = ns / sr / 60.0
+            if dur_min >= 1.0
+                println(io, "  $(round(dur_min; digits=1)) min")
+            else
+                println(io, "  $(round(ns / sr; digits=1)) s")
+            end
         end
 
-        # Trials
         if hasproperty(smi.samples, :trial)
             nt = length(unique(skipmissing(smi.samples.trial)))
             nt > 0 && println(io, "  $nt trial(s)")
         end
 
-        # Subject
         !isempty(smi.subject) && print(io, "  subject: $(smi.subject)")
     else
         print(io, "  (no samples loaded)")
@@ -95,33 +95,42 @@ function Base.show(io::IO, ::MIME"text/plain", smi::SMIFile)
 end
 
 """
-    create_eyefun_data(smi::SMIFile) -> EyeData
+    create_eyefun_data(smi::SMIFile; trial_time_zero=nothing, screen_res=nothing,
+                       screen_width_cm=nothing, viewing_distance_cm=nothing,
+                       include_events=false) -> EyeData
 
-Build an analysis-ready `EyeData` from a raw `SMIFile` (returned by `read_smi`).
+Build an `EyeData` container from a raw `SMIFile` (returned by `read_smi`).
 
-Performs **format conversion only** — the raw sample columns (`gxL`, `gyL`, `paL`,
-etc.) are transferred into the standard `EyeData` schema. Event columns (`in_fix`,
-`in_sacc`, `in_blink`) are **not** populated; call `detect_events!(ed)` afterwards
-to run I-VT/I-DT fixation/saccade detection and NaN-run blink detection.
+By default (`include_events=false`), performs format conversion only: raw
+sample columns (`gxL`, `gyL`, `paL`, etc.) are transferred into the standard
+`EyeData` schema so you can run `detect_events!(ed)`. When `include_events=true`
+and BeGaze eye events (`fixation`, `saccade`, `blink`) were loaded via
+`read_smi(path; events_path=...)`, stamps those events onto the sample timeline.
 
 # Example
 ```julia
 raw = read_smi("pp23671_rest1_samples.txt")
-ed  = EyeData(raw)           # format conversion only
+ed  = EyeData(raw)            # format conversion only
 detect_events!(ed)            # adds in_fix, in_sacc, in_blink
 fixations(ed)
 blinks(ed)
 plot_gaze(ed)
 ```
 """
-function create_eyefun_data(smi::SMIFile)
+function create_eyefun_data(
+    smi::SMIFile;
+    trial_time_zero::Union{AbstractString,Nothing} = nothing,
+    screen_res::Union{Tuple{Int,Int},Nothing} = nothing,
+    screen_width_cm::Union{Real,Nothing} = nothing,
+    viewing_distance_cm::Union{Real,Nothing} = nothing,
+    include_events::Bool = false,
+)
     samples = smi.samples
     nrow(samples) > 0 || error("No sample data in SMIFile.")
 
-    # Work on a copy so the raw SMIFile is left intact
     df = copy(samples)
 
-    # Core standardized analysis framework does not include raw SMI hardware diagnostics (Dia/CR)
+    # Drop SMI-specific pupil diameter axis and corneal reflection columns
     cols_to_drop = intersect(
         names(df),
         ["diaxL", "diayL", "diaxR", "diayR", "crxL", "cryL", "crxR", "cryR"],
@@ -130,12 +139,21 @@ function create_eyefun_data(smi::SMIFile)
         select!(df, Not(cols_to_drop))
     end
 
+    if include_events && nrow(smi.events) > 0 && hasproperty(smi.events, :entime)
+        _stamp_smi_events!(df, smi.events)
+    end
+
+    if !isnothing(trial_time_zero)
+        _populate_trial_time_zero!(df, trial_time_zero; allow_substring = true)
+    end
+
+    sr = smi.sample_rate > 0.0 ? smi.sample_rate : 1000.0
     return EyeData(
         df;
         source = :smi,
-        sample_rate = smi.sample_rate,
-        screen_res = smi.screen_res,
-        screen_width_cm = smi.screen_width_cm,
-        viewing_distance_cm = smi.viewing_distance_cm,
+        sample_rate = sr,
+        screen_res = something(screen_res, smi.screen_res),
+        screen_width_cm = something(screen_width_cm, smi.screen_width_cm),
+        viewing_distance_cm = something(viewing_distance_cm, smi.viewing_distance_cm),
     )
 end

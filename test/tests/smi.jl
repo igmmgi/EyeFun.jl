@@ -1,5 +1,5 @@
 @testset "SMI reader" begin
-    @testset "read_smi (txt) — returns SMIFile" begin
+    @testset "read_smi (txt): SMIFile" begin
         raw = Main.TEST_SMI_TXT
         @test raw isa EyeFun.SMIFile
         @test raw.sample_rate == 50.0
@@ -17,12 +17,12 @@
         @test hasproperty(raw.samples, :message)
         @test !hasproperty(raw.samples, :in_fix)    # not yet detected
 
-        # The test files are uncalibrated mock recordings: 0.0 is successfully cast to NaN
+        # Uncalibrated mock recording: 0.0 is mapped to NaN
         @test all(isnan, raw.samples.gxL)
         @test all(==("pp23671"), raw.samples.participant)
     end
 
-    @testset "create_eyefun_data (txt) — returns EyeData with events" begin
+    @testset "create_eyefun_data (txt): EyeData with events" begin
         raw = Main.TEST_SMI_TXT
         # Create fresh DataFrame
         ed = EyeFun.create_eyefun_data(deepcopy(raw))
@@ -62,7 +62,7 @@
         @test blk isa DataFrame
     end
 
-    @testset "read_smi (idf) — returns SMIFile" begin
+    @testset "read_smi (idf): SMIFile" begin
         raw = Main.TEST_SMI_IDF
         @test raw isa EyeFun.SMIFile
         @test nrow(raw.samples) > 0
@@ -71,7 +71,7 @@
         @test all(isnan, raw.samples.gxL)
     end
 
-    @testset "write_et_ascii — IDF round-trip" begin
+    @testset "write_et_ascii: IDF round-trip" begin
         raw = Main.TEST_SMI_IDF
         out = tempname() * ".txt"
         try
@@ -97,10 +97,7 @@
         end
     end
 
-    # ── IDF ↔ BeGaze parity tests ──────────────────────────────────────── #
-    # Verify that IDF binary reader output matches the native BeGaze TXT
-    # export for gaze, pupil, corneal reflex, and trigger columns.
-
+    # Verify IDF binary reader output matches BeGaze TXT export
     function _compare_idf_parity(idf_path, ref_txt_path)
         raw = EyeFun.read_smi(idf_path)
         out = tempname() * ".txt"
@@ -152,7 +149,7 @@
     ]
 
     for (label, idf_fn, txt_fn) in parity_cases
-        @testset "IDF↔BeGaze parity — $label" begin
+        @testset "IDF/BeGaze parity: $label" begin
             idf_path = joinpath(Main.DATA_DIR_SMI, idf_fn)
             txt_path = joinpath(Main.DATA_DIR_SMI, txt_fn)
             if isfile(idf_path) && isfile(txt_path)
@@ -168,6 +165,84 @@
             else
                 @warn "SMI test data not found for $label, skipping"
             end
+        end
+    end
+
+    @testset "Binocular IDF paired sub-record merging" begin
+        tmp_idf = tempname() * ".idf"
+        try
+            buf = UInt8[]
+            append!(buf, zeros(UInt8, 32))
+            append!(buf, codeunits("TimeStamp L POR X [px] R POR X [px] Trig"))
+            append!(buf, zeros(UInt8, 8))  # null padding aligned cleanly
+
+            sub_sz = 106
+            # 3 binocular timepoints (6 sub-records: L, R pairs sharing identical timestamps)
+            ts_ticks = UInt32[2_000_000, 7_120_000, 12_240_000]  # 20 ms steps (50 Hz)
+            for (idx, ts) in enumerate(ts_ticks)
+                for is_right in (false, true)
+                    rec = zeros(UInt8, sub_sz)
+                    rec[1] = 0x01  # non-null record start byte after header null padding
+                    # raw_ts at rec[5:8] (1-based sub_off + 4)
+                    ts_bytes = reinterpret(UInt8, [htol(ts)])
+                    rec[5:8] .= ts_bytes
+                    # pupdx/pupdy at +40/+48, gx/gy at +72/+80
+                    pup = is_right ? 3.8 : 3.5
+                    gx = is_right ? (600.0 + idx) : (590.0 + idx)
+                    gy = is_right ? (410.0 + idx) : (400.0 + idx)
+                    rec[41:48] .= reinterpret(UInt8, [htol(pup)])
+                    rec[49:56] .= reinterpret(UInt8, [htol(pup)])
+                    rec[73:80] .= reinterpret(UInt8, [htol(gx)])
+                    rec[81:88] .= reinterpret(UInt8, [htol(gy)])
+                    append!(buf, rec)
+                end
+            end
+            write(tmp_idf, buf)
+
+            bino = read_smi(tmp_idf)
+            @test nrow(bino.samples) == 3
+            @test bino.sample_rate ≈ 50.0 atol = 0.5
+            @test all(!isnan, bino.samples.gxL)
+            @test all(!isnan, bino.samples.gxR)
+            @test bino.samples.gxL[1] ≈ 591.0f0
+            @test bino.samples.gxR[1] ≈ 601.0f0
+        finally
+            isfile(tmp_idf) && rm(tmp_idf)
+        end
+    end
+
+    @testset "SMI TXT MSG rows, missing header fallback, and paL round-trip" begin
+        tmp_txt = tempname() * ".txt"
+        tmp_out = tempname() * ".txt"
+        try
+            write(
+                tmp_txt,
+                join(
+                    [
+                        "## Subject:\tS_TXT",
+                        "Time\tType\tL Dia X [px]\tL POR X [px]\tL POR Y [px]",
+                        "1000\tSMP\t14.50\t500.00\t400.00",
+                        "1500\tMSG\t# Message: TRIAL_ONSET",
+                        "3000\tSMP\t14.75\t502.00\t401.00",
+                        "5000\tSMP\t15.00\t504.00\t402.00",
+                    ],
+                    "\n",
+                ),
+            )
+            smi = read_smi(tmp_txt)
+            @test nrow(smi.samples) == 3
+            @test smi.sample_rate ≈ 500.0
+            @test nrow(smi.events) == 1
+            @test occursin("TRIAL_ONSET", smi.events.message[1])
+            @test occursin("TRIAL_ONSET", smi.samples.message[2])
+
+            @test_throws ErrorException write_et_ascii(smi, tmp_txt)
+            write_et_ascii(smi, tmp_out)
+            smi_rt = read_smi(tmp_out)
+            @test smi_rt.samples.paL[1] ≈ 14.5f0 atol = 0.02
+        finally
+            isfile(tmp_txt) && rm(tmp_txt)
+            isfile(tmp_out) && rm(tmp_out)
         end
     end
 end

@@ -1,7 +1,4 @@
-"""
-Constants and enumerations for EDF file format.
-Based on SR Research EDF Access API definitions.
-"""
+# Constants and enumerations for SR Research EDF format.
 
 # Eye codes
 const EYE_LEFT = 0

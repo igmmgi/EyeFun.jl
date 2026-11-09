@@ -1,96 +1,100 @@
-# ── plot_heatmap ───────────────────────────────────────────────────────────── #
+function _extract_unique_fix_xy(
+    samples::AbstractDataFrame,
+    in_fix::AbstractVector{Bool},
+    fix_gx::AbstractVector{<:Real},
+    fix_gy::AbstractVector{<:Real},
+)
+    ux = Float64[]
+    uy = Float64[]
+    tr_col = hasproperty(samples, :trial) ? samples[!, :trial] : nothing
+    p_col = _has_multiple_participants(samples) ? samples[!, :participant] : nothing
+    times = hasproperty(samples, :time) ? samples[!, :time] : nothing
+    prev = false
+    @inbounds for i in eachindex(in_fix)
+        if _is_new_plot_trial(tr_col, p_col, times, i)
+            prev = false
+        end
+        cur = in_fix[i]
+        if cur & !prev
+            x = Float64(fix_gx[i])
+            y = Float64(fix_gy[i])
+            if !isnan(x) && !isnan(y)
+                push!(ux, x)
+                push!(uy, y)
+            end
+        end
+        prev = cur
+    end
+    return ux, uy
+end
+
+function _extract_valid_xy(gx::AbstractVector{<:Real}, gy::AbstractVector{<:Real})
+    px = Float64[]
+    py = Float64[]
+    @inbounds for i in eachindex(gx, gy)
+        x = Float64(gx[i])
+        y = Float64(gy[i])
+        if !isnan(x) && !isnan(y)
+            push!(px, x)
+            push!(py, y)
+        end
+    end
+    return px, py
+end
 
 """
     _build_heatmap_data(samples, eye, xlims, ylims, bins, metric, sample_rate)
 
-Build the heatmap matrix for a given metric. Returns (x_centers, y_centers, values, label).
-
-Metrics:
-- `:samples` — raw sample counts per bin
-- `:dwell` — dwell time in ms (samples / sample_rate × 1000)
-- `:count` — fixation count (uses `fix_gavx`/`fix_gavy` centers)
-- `:proportion` — proportion of total samples per bin (sums to 1.0)
+Build the heatmap matrix for a given metric. Returns `(x_centers, y_centers, values, eye_label, cb_label)`.
 """
 function _build_heatmap_data(
-    samples::DataFrame,
+    samples::AbstractDataFrame,
     eye::Symbol,
     xlims,
     ylims,
     bins,
     metric::Symbol,
     sample_rate::Float64,
+    prefix::Union{Nothing,Symbol} = nothing,
 )
     gx, gy, eye_label = _select_eye(samples, eye)
 
     if metric == :count
-        # Use fixation centers instead of raw samples
-        # Find unique fixations by detecting transitions in fix_gavx/fix_gavy
-        if hasproperty(samples, :fix_gavx) && hasproperty(samples, :fix_gavy)
-            in_fix = samples.in_fix
-            fix_gx = samples.fix_gavx
-            fix_gy = samples.fix_gavy
-
-            ux, uy = Float64[], Float64[]
-            for i = 1:nrow(samples)
-                in_fix[i] || continue
-                # Detect fixation onset: first sample of a new fixation run
-                i > 1 && in_fix[i-1] && continue
-                fx_val, fy_val = Float64(fix_gx[i]), Float64(fix_gy[i])
-                isnan(fx_val) && continue
-                isnan(fy_val) && continue
-
-                push!(ux, fx_val)
-                push!(uy, fy_val)
-            end
-
+        c_infix = _prefixed_sym(prefix, :in_fix)
+        c_fgx = _prefixed_sym(prefix, :fix_gavx)
+        c_fgy = _prefixed_sym(prefix, :fix_gavy)
+        if hasproperty(samples, c_fgx) && hasproperty(samples, c_fgy) && hasproperty(samples, c_infix)
+            ux, uy = _extract_unique_fix_xy(samples, samples[!, c_infix], samples[!, c_fgx], samples[!, c_fgy])
             if !isempty(ux)
                 x_c, y_c, vals = _bin_samples(ux, uy, xlims, ylims, bins)
                 return x_c, y_c, vals, eye_label, "Fixation count"
             end
         end
-        # Fallback to sample count if no fixation data
         metric = :samples
     end
 
-    # Filter valid gaze samples
-    valid = .!isnan.(gx) .& .!isnan.(gy)
-    px = Float64.(gx[valid])
-    py = Float64.(gy[valid])
+    px, py = _extract_valid_xy(gx, gy)
     x_c, y_c, counts = _bin_samples(px, py, xlims, ylims, bins)
 
     if metric == :dwell
-        # Convert samples to milliseconds
         vals = counts ./ sample_rate .* 1000.0
         return x_c, y_c, vals, eye_label, "Dwell time (ms)"
     elseif metric == :proportion
         total = sum(counts)
         vals = total > 0 ? counts ./ total : counts
         return x_c, y_c, vals, eye_label, "Proportion"
-    else  # :samples
+    else
         return x_c, y_c, counts, eye_label, "Sample count"
     end
 end
-
-
 
 """
     plot_heatmap(df::EyeData; selection=nothing, eye=:auto,
                  xlims=(0,df.screen_res[1]), ylims=(0,df.screen_res[2]), ydir=:down,
                  bins=(50,50), colormap=:inferno, metric=:samples, sigma=2.0,
-                 background=nothing, split_by=nothing)
+                 background=nothing, split_by=nothing, aois=nothing)
 
 Plot a 2D gaze density heatmap from a wide DataFrame.
-
-# Metrics
-- `:samples` — raw sample count per bin
-- `:dwell` — dwell time in ms
-- `:count` — fixation count (uses fixation centers)
-- `:proportion` — proportion of total (sums to 1.0)
-
-# Parameters
-- `background`: path to stimulus image to overlay
-- `split_by`: column name (Symbol) for multi-panel comparison, e.g. `split_by=:type`
-- `sigma=0` to disable Gaussian smoothing
 """
 function plot_heatmap(
     df::EyeData;
@@ -103,42 +107,40 @@ function plot_heatmap(
     colormap = :inferno,
     metric::Symbol = :samples,
     sigma::Real = 2.0,
-    background = nothing,
-    split_by = nothing,
+    background::Union{String,Nothing} = nothing,
+    split_by::Union{Symbol,Nothing} = nothing,
     aois = nothing,
+    prefix::Union{Nothing,Symbol} = nothing,
 )
-    samples = _apply_selection(df, selection)
+    metric in (:samples, :dwell, :count, :proportion) ||
+        error("Invalid metric :$metric. Choose :samples, :dwell, :count, or :proportion")
+
+    samples = _apply_selection_view(df, selection)
     nrow(samples) == 0 && error("No samples found for the given selection.")
 
-    # ── Faceted multi-panel heatmap ──
+    bg_img_oriented = if !isnothing(background)
+        img = load_image(background)
+        ydir == :down ? permutedims(img, (2, 1)) : Makie.rotr90(img)
+    else
+        nothing
+    end
+
     if !isnothing(split_by)
         groups, split_vals, n_panels =
             _prepare_split_panels(samples, split_by; max_panels = 4)
 
-        # Compute all panels first to get shared color range
         sr = df.sample_rate
-        panel_data = []
-        for lev in split_vals
-            sub = filter(r -> r[split_by] == lev, groups)
+        panel_data = map(split_vals) do fval
+            sub = _panel_view(groups, split_by, fval)
             x_c, y_c, vals, _, cb_label =
-                _build_heatmap_data(sub, eye, xlims, ylims, bins, metric, sr)
+                _build_heatmap_data(sub, eye, xlims, ylims, bins, metric, sr, prefix)
             vals = _gaussian_smooth(vals, sigma)
-            push!(
-                panel_data,
-                (
-                    x_c = x_c,
-                    y_c = y_c,
-                    vals = vals,
-                    label = string(lev),
-                    cb_label = cb_label,
-                ),
-            )
+            (x_c = x_c, y_c = y_c, vals = vals, cb_label = cb_label, label = string(fval))
         end
 
-        # Find global min/max for shared colorbar
-        all_vals = reduce(vcat, [vec(pd.vals) for pd in panel_data])
-        vmin, vmax = minimum(all_vals), maximum(all_vals)
-        vmax == vmin && (vmax = vmin + 1.0)  # avoid degenerate range
+        vmin = minimum(minimum(pd.vals) for pd in panel_data)
+        vmax = maximum(maximum(pd.vals) for pd in panel_data)
+        vmin == vmax && (vmax = vmin + 1.0)
 
         aspect_ratio = (xlims[2] - xlims[1]) / (ylims[2] - ylims[1])
         fig = _create_split_figure(
@@ -161,9 +163,8 @@ function plot_heatmap(
             Makie.xlims!(ax, xlims...)
             Makie.ylims!(ax, ylims...)
 
-            if !isnothing(background)
-                img = load_image(background)
-                Makie.image!(ax, xlims[1]..xlims[2], ylims[1]..ylims[2], Makie.rotr90(img))
+            if !isnothing(bg_img_oriented)
+                Makie.image!(ax, xlims[1]..xlims[2], ylims[1]..ylims[2], bg_img_oriented)
             end
 
             hm_ref = Makie.heatmap!(
@@ -182,10 +183,9 @@ function plot_heatmap(
         return fig
     end
 
-    # ── Single panel ──
     sr = df.sample_rate
-    x_c, y_c, vals, eye_label, cb_label =
-        _build_heatmap_data(samples, eye, xlims, ylims, bins, metric, sr)
+    x_c, y_c, vals, _, cb_label =
+        _build_heatmap_data(samples, eye, xlims, ylims, bins, metric, sr, prefix)
     vals = _gaussian_smooth(vals, sigma)
 
     title = _format_title("Heatmap", selection)
@@ -205,9 +205,8 @@ function plot_heatmap(
     Makie.xlims!(ax, xlims...)
     Makie.ylims!(ax, ylims...)
 
-    if !isnothing(background)
-        img = load_image(background)
-        Makie.image!(ax, xlims[1]..xlims[2], ylims[1]..ylims[2], Makie.rotr90(img))
+    if !isnothing(bg_img_oriented)
+        Makie.image!(ax, xlims[1]..xlims[2], ylims[1]..ylims[2], bg_img_oriented)
     end
 
     hm = Makie.heatmap!(ax, x_c, y_c, vals; colormap = colormap, interpolate = true)

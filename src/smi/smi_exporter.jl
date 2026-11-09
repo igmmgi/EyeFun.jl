@@ -1,16 +1,10 @@
 """
-SMI TXT export — writes an SMIFile back to the tab-separated text format
-produced by SMI's BeGaze software, so that the Julia IDF binary reader
-can be sanity-checked against the native software export.
-"""
-
-"""
     write_et_ascii(smi::SMIFile, path::String)
 
 Write the sample data in `smi` to an SMI-format tab-separated text file.
 
-The output is byte-compatible with BeGaze's own TXT export, so it can be
-diff-ed or plotted against a native export to verify the IDF binary reader.
+The output is compatible with BeGaze's TXT export format so it can be re-imported
+or compared against a BeGaze export.
 
 # Columns written
 - Always: `Time` (µs), `Type`, `Trial`, `Trigger`
@@ -29,31 +23,43 @@ raw = read_smi("session.idf")           # reads IDF binary
 write_et_ascii(raw, "session_julia.txt")  # write equivalent TXT
 ```
 """
-function write_et_ascii(smi::SMIFile)
+function write_et_ascii(smi::SMIFile; verbose::Bool = false)
     path = replace(smi.filename, r"\.(idf|txt)$"i => "_exported.txt")
     if path == smi.filename
         path = path * "_exported.txt"
     end
-    write_et_ascii(smi, path)
+    write_et_ascii(smi, path; verbose = verbose)
 end
 
-function write_et_ascii(smi::SMIFile, path::String)
+function write_et_ascii(smi::SMIFile, path::String; verbose::Bool = false)
+    if !isempty(smi.filename) && abspath(path) == abspath(smi.filename)
+        error("Refusing to overwrite source file in-place: $path")
+    end
     df = smi.samples
     nrow(df) > 0 || error("SMIFile has no sample data to write.")
 
-    # ── Detect which eye columns are present and contain data ────────────── #
     has_left = hasproperty(df, :gxL) && any(!isnan, df.gxL)
     has_right = hasproperty(df, :gxR) && any(!isnan, df.gxR)
     has_pupxL = hasproperty(df, :pupxL) && any(!isnan, df.pupxL)
     has_pupxR = hasproperty(df, :pupxR) && any(!isnan, df.pupxR)
+    has_paL = hasproperty(df, :paL) && any(!isnan, df.paL)
+    has_paR = hasproperty(df, :paR) && any(!isnan, df.paR)
+    has_diaxL = hasproperty(df, :diaxL) && any(!isnan, df.diaxL)
+    has_diayL = hasproperty(df, :diayL) && any(!isnan, df.diayL)
+    has_diaxR = hasproperty(df, :diaxR) && any(!isnan, df.diaxR)
+    has_diayR = hasproperty(df, :diayR) && any(!isnan, df.diayR)
+    has_crxL = hasproperty(df, :crxL) && any(!isnan, df.crxL)
+    has_cryL = hasproperty(df, :cryL) && any(!isnan, df.cryL)
+    has_crxR = hasproperty(df, :crxR) && any(!isnan, df.crxR)
+    has_cryR = hasproperty(df, :cryR) && any(!isnan, df.cryR)
+    write_left = has_left || has_pupxL || has_paL || has_diaxL
+    write_right = has_right || has_pupxR || has_paR || has_diaxR
     has_trial = hasproperty(df, :trial)
     has_message = hasproperty(df, :message)
 
-    # ── Helper: NaN → 0.0  (SMI tracking-loss convention) ───────────────── #
     _px(v::Real) = isnan(v) ? 0.0 : v
 
     open(path, "w") do io
-        # ── Header ───────────────────────────────────────────────────────── #
         sr_str =
             isinteger(smi.sample_rate) ? "$(Int(smi.sample_rate))" :
             @sprintf("%.4f", smi.sample_rate)
@@ -85,8 +91,8 @@ function write_et_ascii(smi::SMIFile, path::String)
         println(io, "## Filter Depth [ms]:\t20")
 
         fmt_comps = String[]
-        (has_left || has_pupxL) && push!(fmt_comps, "LEFT")
-        (has_right || has_pupxR) && push!(fmt_comps, "RIGHT")
+        write_left && push!(fmt_comps, "LEFT")
+        write_right && push!(fmt_comps, "RIGHT")
         append!(
             fmt_comps,
             ["RAW", "DIAMETER", "CR", "POR", "QUALITY", "TRIGGER", "MSG", "FRAMECOUNTER"],
@@ -94,9 +100,8 @@ function write_et_ascii(smi::SMIFile, path::String)
         println(io, "## Format:\t" * join(fmt_comps, ", "))
         println(io, "## ")
 
-        # ── Column header row ─────────────────────────────────────────────── #
         cols = String["Time", "Type", "Trial"]
-        if has_left || has_pupxL
+        if write_left
             append!(
                 cols,
                 [
@@ -111,7 +116,7 @@ function write_et_ascii(smi::SMIFile, path::String)
                 ],
             )
         end
-        if has_right || has_pupxR
+        if write_right
             append!(
                 cols,
                 [
@@ -129,23 +134,34 @@ function write_et_ascii(smi::SMIFile, path::String)
         append!(cols, ["Timing", "Pupil Confidence", "Trigger", "Frame", "Aux1"])
         println(io, join(cols, "\t"))
 
-        # ── Sample rows ───────────────────────────────────────────────────── #
         n = nrow(df)
         for i = 1:n
             # Time: ms → µs (original SMI resolution), integer
             t_us = round(Int64, df.time[i] * 1000.0)
-            trial = has_trial ? df.trial[i] : 0
-            trig = has_message && !isempty(df.message[i]) ? df.message[i] : "0"
+            trial = has_trial && !ismissing(df.trial[i]) ? df.trial[i] : 0
+            trig = "0"
+            if has_message && !ismissing(df.message[i]) && !isempty(df.message[i])
+                raw_m = df.message[i]
+                for part in eachsplit(raw_m, "; ")
+                    sp = strip(part)
+                    isempty(sp) && continue
+                    if all(b -> UInt8('0') <= b <= UInt8('9'), codeunits(sp))
+                        trig = sp
+                    else
+                        println(io, t_us, "\tMSG\t", trial, "\t# Message: ", sp)
+                    end
+                end
+            end
 
             print(io, t_us, "\tSMP\t", trial)
 
-            if has_left || has_pupxL
+            if write_left
                 px = has_pupxL ? _px(df.pupxL[i]) : 0.0
                 py = has_pupxL ? _px(df.pupyL[i]) : 0.0
-                dx = hasproperty(df, :diaxL) && !isnan(df.diaxL[i]) ? df.diaxL[i] : 0.0
-                dy = hasproperty(df, :diayL) && !isnan(df.diayL[i]) ? df.diayL[i] : 0.0
-                cx = hasproperty(df, :crxL) && !isnan(df.crxL[i]) ? df.crxL[i] : 0.0
-                cy = hasproperty(df, :cryL) && !isnan(df.cryL[i]) ? df.cryL[i] : 0.0
+                dx = has_diaxL ? _px(df.diaxL[i]) : (has_paL ? _px(df.paL[i]) : 0.0)
+                dy = has_diayL ? _px(df.diayL[i]) : (has_paL ? _px(df.paL[i]) : 0.0)
+                cx = has_crxL ? _px(df.crxL[i]) : 0.0
+                cy = has_cryL ? _px(df.cryL[i]) : 0.0
                 gx = has_left ? _px(df.gxL[i]) : 0.0
                 gy = has_left ? _px(df.gyL[i]) : 0.0
                 @printf(
@@ -162,13 +178,13 @@ function write_et_ascii(smi::SMIFile, path::String)
                 )
             end
 
-            if has_right || has_pupxR
+            if write_right
                 px = has_pupxR ? _px(df.pupxR[i]) : 0.0
                 py = has_pupxR ? _px(df.pupyR[i]) : 0.0
-                dx = hasproperty(df, :diaxR) && !isnan(df.diaxR[i]) ? df.diaxR[i] : 0.0
-                dy = hasproperty(df, :diayR) && !isnan(df.diayR[i]) ? df.diayR[i] : 0.0
-                cx = hasproperty(df, :crxR) && !isnan(df.crxR[i]) ? df.crxR[i] : 0.0
-                cy = hasproperty(df, :cryR) && !isnan(df.cryR[i]) ? df.cryR[i] : 0.0
+                dx = has_diaxR ? _px(df.diaxR[i]) : (has_paR ? _px(df.paR[i]) : 0.0)
+                dy = has_diayR ? _px(df.diayR[i]) : (has_paR ? _px(df.paR[i]) : 0.0)
+                cx = has_crxR ? _px(df.crxR[i]) : 0.0
+                cy = has_cryR ? _px(df.cryR[i]) : 0.0
                 gx = has_right ? _px(df.gxR[i]) : 0.0
                 gy = has_right ? _px(df.gyR[i]) : 0.0
                 @printf(
@@ -191,6 +207,6 @@ function write_et_ascii(smi::SMIFile, path::String)
         end
     end
 
-    @info "SMI TXT: wrote $(nrow(df)) samples → $path"
+    verbose && @info "SMI TXT: wrote $(nrow(df)) samples → $path"
     return nothing
 end

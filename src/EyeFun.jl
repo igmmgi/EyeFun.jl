@@ -1,26 +1,33 @@
-"""
-EyeFun.jl — Eye-tracking data analysis and visualisation in Julia.
-"""
-
 module EyeFun
+
+"""
+    EyeFun
+
+Pure-Julia eye-tracking data import, preprocessing, event detection, spatial/AOI/pupil
+analysis, and interactive Makie visualisation across EyeLink, SMI, and Tobii formats.
+"""
+EyeFun
 
 using DataFrames
 using LinearAlgebra
 using Makie
+using PrecompileTools: @setup_workload, @compile_workload
 using Printf
+using Random
 using Statistics
 
-# no external dependencies beyond Makie now
-
-# ── Public API ─────────────────────────────────────────────────────────────── #
-
 # Types
+export EyeFile, EDFFile, SMIFile, TobiiFile
 export EyeData
-export AOI, RectAOI, CircleAOI, EllipseAOI, PolygonAOI
+export AOI, RectAOI, CircleAOI, EllipseAOI, PolygonAOI, DynamicAOI
 export in_aoi
 
 # I/O
 export read_et_data
+export read_eyelink, read_smi, read_tobii
+export read_et_delimited, write_et_delimited
+export create_eyefun_data
+export calibration_summary
 export write_et_ascii
 export read_stimuli
 
@@ -28,14 +35,20 @@ export read_stimuli
 export saccades
 export fixations
 export blinks
+export microsaccades
 export messages
 export variables
 export counts
 
 # Analysis
+export average_eyes!
+export set_time_zero!
 export data_quality
+export spatial_precision
 export aoi_metrics
 export group_summary
+export pupil_filter!
+export correct_pupil_foreshortening!
 export interpolate_blinks!
 export baseline_correct_pupil!
 export smooth_pupil!
@@ -66,10 +79,13 @@ export proportion_of_looks
 export velocity_filter!
 export outlier_filter!
 export interpolate_gaps!
+export savitzky_golay_filter!
 
 # Statistics
 export prepare_analysis_data
 export growth_curve_data
+export empirical_logit
+export cluster_permutation_test
 
 # Event detection
 export detect_events!
@@ -85,6 +101,7 @@ export plot_velocity
 export plot_dwell
 export plot_sequence
 export plot_transitions
+export plot_time_course
 export plot_databrowser
 export plot_stimuli
 export play_wav
@@ -96,8 +113,6 @@ export AbstractEyeFunMedia
 export ImageMedia
 export AudioMedia
 export TextMedia
-
-# ── Source files ──────────────────────────────────────────────────────────── #
 
 # Core types
 include("types.jl")
@@ -121,6 +136,7 @@ include("tobii/types.jl")
 include("tobii/tobii_reader.jl")
 
 # Data I/O
+include("io/delimited.jl")
 include("io/read.jl")
 include("io/write.jl")
 include("io/read_gif.jl")
@@ -158,8 +174,54 @@ include("plots/plot_velocity.jl")
 include("plots/plot_dwell.jl")
 include("plots/plot_sequence.jl")
 include("plots/plot_transitions.jl")
+include("plots/plot_time_course.jl")
 include("plots/databrowser_draw.jl")
 include("plots/plot_databrowser.jl")
 include("plots/plot_stimuli.jl")
+
+@setup_workload begin
+    n_pre = 180
+    gx_pre = vcat(fill(450.0f0, 70), [450.0f0 + 25.0f0 * k for k = 1:10], fill(700.0f0, 60), fill(NaN32, 40))
+    gy_pre = vcat(fill(400.0f0, 140), fill(NaN32, 40))
+    pa_pre = vcat(fill(1100.0f0, 140), fill(NaN32, 40))
+    df_pre = DataFrame(
+        participant = fill("P1", n_pre),
+        trial = fill(1, n_pre),
+        time = collect(1.0:n_pre),
+        gxL = gx_pre,
+        gyL = gy_pre,
+        paL = pa_pre,
+        message = fill("", n_pre),
+    )
+    aois_pre = AOI[
+        RectAOI("A", 450.0, 400.0, 120.0, 120.0),
+        CircleAOI("B", 700.0, 400.0, 80.0),
+    ]
+    asc_bytes_pre = Vector{UInt8}(
+        codeunits(
+            "** PRECOMPILE\nMSG\t1000 DISPLAY_COORDS 0 0 1919 1079\nMSG\t1000 TRIALID 1\nSTART\t1000 \tLEFT\tSAMPLES\tEVENTS\nSAMPLES\tGAZE\tLEFT\tRATE\t1000.00\n1000\t  500.0\t  400.0\t 1200.0\t...\n1001\t  501.0\t  400.0\t 1201.0\t...\nEFIX L   1000\t1001\t2\t  500.5\t  400.0\t   1200\nEND\t1002 \tSAMPLES\tEVENTS\tRES\t  35.00\t  35.00\n",
+        ),
+    )
+
+    @compile_workload begin
+        ed_pre = EyeData(df_pre; sample_rate = 1000.0)
+        detect_events!(ed_pre; method = :ivt, detect_blinks = true, min_blink_ms = 30)
+        interpolate_blinks!(ed_pre)
+        smooth_pupil!(ed_pre)
+        fixations(ed_pre)
+        saccades(ed_pre)
+        blinks(ed_pre)
+        data_quality(ed_pre)
+        aoi_metrics(ed_pre, aois_pre)
+        fixation_metrics(ed_pre, aois_pre)
+        saccade_metrics(ed_pre)
+        time_bin(ed_pre; bin_ms = 50)
+        proportion_of_looks(ed_pre, aois_pre; bin_ms = 50)
+
+        edf_pre = EDFFile("")
+        _parse_asc_bytes!(edf_pre, asc_bytes_pre, true, "TRIALID", "TRIAL_RESULT", false)
+        create_eyefun_data(edf_pre)
+    end
+end
 
 end

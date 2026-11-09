@@ -16,35 +16,44 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write  # Needed for deploydocs to push to gh-pages
+  contents: read
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed for deploydocs to push to gh-pages
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install VitePress dependencies
+        working-directory: docs
+        run: npm ci
+
       - name: Setup Julia
         uses: julia-actions/setup-julia@v2
         with:
-          version: '1.12'
-      
+          version: '1'
+
       - uses: julia-actions/cache@v2
-      
-      - name: Install binary dependencies
-        run: sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
-      
+
       - name: Build and deploy docs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GKSwstype: nul
           CI: true
-        run: >
-          cd docs;
-          DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24'
+        working-directory: docs
+        run: |
           julia --color=yes --project=. -e '
-            using Pkg;
-            Pkg.develop(PackageSpec(path=pwd() |> dirname));
-            Pkg.instantiate();
+            using Pkg
+            Pkg.develop(PackageSpec(path=dirname(pwd())))
+            Pkg.instantiate()
             include("make.jl")'

@@ -6,6 +6,10 @@ CollapsedDocStrings = true
 
 Complete documentation for all public EyeFun.jl functions and types.
 
+```@docs
+EyeFun
+```
+
 | Section | Contents |
 |---------|----------|
 | [Analysis](analysis.md) | I/O, event accessors, and analysis functions |
