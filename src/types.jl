@@ -113,7 +113,7 @@ Construct a new `EyeData` wrapping `df` while preserving all recording metadata
 (`source`, `sample_rate`, `screen_res`, `screen_width_cm`, `viewing_distance_cm`, `coords`) from `ed`.
 """
 function EyeData(ed::EyeData, df::DataFrame)
-    out = EyeData(
+    return EyeData(
         df,
         ed.source,
         ed.sample_rate,
@@ -122,7 +122,6 @@ function EyeData(ed::EyeData, df::DataFrame)
         ed.viewing_distance_cm,
         ed.coords,
     )
-    return out
 end
 
 """

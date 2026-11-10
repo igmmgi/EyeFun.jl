@@ -150,7 +150,7 @@ function _simplify_multimatch_fixations(
 )::Vector{NTuple{3,Float64}}
     length(fixs) <= 2 && return copy(fixs)
 
-    # Pass 1: Amplitude-based coalescing of sub-threshold saccades
+    # Coalesce sub-threshold saccade amplitudes
     cur = copy(fixs)
     if amp_thresh_px > 0.0
         merged = NTuple{3,Float64}[]
@@ -177,7 +177,7 @@ function _simplify_multimatch_fixations(
         cur = merged
     end
 
-    # Pass 2: Direction-based coalescing of nearly collinear consecutive saccades
+    # Coalesce nearly collinear consecutive saccades
     if dir_thresh_rad > 0.0 && length(cur) >= 3
         merged_dir = NTuple{3,Float64}[cur[1]]
         i = 2
@@ -720,18 +720,6 @@ function _aoi_index_sequence(
     end
 
     return seq
-end
-
-"""Extract AOI fixation sequence (String for `<= 26` AOIs, `Vector{String}` for `> 26`)."""
-function _aoi_sequence(
-    df::EyeData,
-    aois::Vector{<:AOI},
-    selection,
-    time_window,
-    prefix::Union{Nothing,Symbol} = nothing,
-)
-    idxs = _aoi_index_sequence(df, aois, selection, time_window, prefix)
-    return _format_aoi_sequence(idxs, aois)
 end
 
 """Levenshtein edit distance between two integer or string sequences."""

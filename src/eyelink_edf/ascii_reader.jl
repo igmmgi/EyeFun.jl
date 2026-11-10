@@ -27,15 +27,6 @@ end
     return true
 end
 
-@inline function _line_starts_with(data::Vector{UInt8}, ls::Int, le::Int, s::String)::Bool
-    len = sizeof(s)
-    le - ls + 1 >= len || return false
-    @inbounds for k = 1:len
-        data[ls+k-1] == codeunit(s, k) || return false
-    end
-    return true
-end
-
 @inline function _line_starts_with_kw(
     data::Vector{UInt8},
     ls::Int,

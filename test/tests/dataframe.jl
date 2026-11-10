@@ -5,7 +5,6 @@
     @test df isa EyeData
     @test nrow(df.df) == nrow(edf.samples)
 
-    # Expected sample and annotation columns
     for col in [
         :time,
         :gxL,
@@ -31,30 +30,22 @@
         @test hasproperty(df.df, col)
     end
 
-    # Annotations have data
     @test any(df.df.in_fix)
     @test any(df.df.in_sacc)
     @test any(df.df.in_blink)
 
-    # Event metric columns populated in annotated regions
     sacc_rows = df.df[df.df.in_sacc, :]
     @test any(!isnan, sacc_rows.sacc_ampl)
     @test any(!isnan, sacc_rows.sacc_pvel)
     @test any(>(0), df.df[df.df.in_blink, :blink_dur])
-
-    # Messages exist at trigger timestamps
     @test any(!isempty, df.df.message)
 
     @testset "copycols=false safety" begin
-        # Verify types are correct (not degraded by copycols=false)
         @test eltype(edf.samples.time) == UInt32
         @test eltype(edf.samples.gxL) == Float32
         @test eltype(edf.samples.flags) == UInt16
-
-        # Verify data is valid
         @test all(t -> t > UInt32(0), edf.samples.time)
 
-        # Events DataFrame columns are correct
         @test nrow(edf.events) > 0
         @test hasproperty(edf.events, :type)
         @test hasproperty(edf.events, :sttime)

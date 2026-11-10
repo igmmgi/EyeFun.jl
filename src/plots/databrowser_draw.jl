@@ -3,34 +3,32 @@
 
 Observable state for the interactive eye data viewer.
 """
-mutable struct EyeViewerMediaState
-    trial::Observable{Int}      # current segment index
-    frame::Observable{Int}
-    show_samples::Observable{Bool}
-    show_heatmap::Observable{Bool}
-    show_saccades::Observable{Bool}
-    show_fixations::Observable{Bool}
-    show_blinks::Observable{Bool}
-    show_messages::Observable{Bool}
-    show_aois::Observable{Bool}
-    selected_saccade::Observable{Int}
-    selected_fixation::Observable{Int}
+Base.@kwdef mutable struct EyeViewerMediaState
+    trial::Observable{Int} = Observable(1)
+    frame::Observable{Int} = Observable(1)
+    show_samples::Observable{Bool} = Observable(true)
+    show_heatmap::Observable{Bool} = Observable(false)
+    show_saccades::Observable{Bool} = Observable(true)
+    show_fixations::Observable{Bool} = Observable(true)
+    show_blinks::Observable{Bool} = Observable(false)
+    show_messages::Observable{Bool} = Observable(false)
+    show_aois::Observable{Bool} = Observable(true)
+    selected_saccade::Observable{Int} = Observable(0)
+    selected_fixation::Observable{Int} = Observable(0)
     segments::Vector{Any}
-    split_by::Union{Nothing,Symbol,Vector{Symbol}}
+    split_by::Union{Nothing,Symbol,Vector{Symbol}} = nothing
     screen_res::Tuple{Int,Int}
     eye::Symbol
     gx_col::Symbol
     gy_col::Symbol
     pa_col::Symbol
-    spatial_zoom::Union{Nothing,NTuple{4,Float64}}
-    window_samples::Int         # 0 = show all, >0 = visible window size
-    aois::Union{Nothing,Vector{<:AOI}}
-    bg_stimulus::Any               # optional function: segment_id -> Vector{AbstractEyeFunMedia}
+    spatial_zoom::Union{Nothing,NTuple{4,Float64}} = nothing
+    window_samples::Int = 0
+    aois::Union{Nothing,Vector{<:AOI}} = nothing
+    bg_stimulus::Any = nothing
     segment_views::Vector{AbstractDataFrame}
-    prefix::Union{Nothing,Symbol}
+    prefix::Union{Nothing,Symbol} = nothing
 end
-
-
 
 """Point-to-line-segment distance."""
 function _point_to_segment_dist(px, py, x1, y1, x2, y2)
@@ -44,22 +42,8 @@ function _point_to_segment_dist(px, py, x1, y1, x2, y2)
     return sqrt((px - proj_x)^2 + (py - proj_y)^2)
 end
 
-
-"""Extract data for a given segment based on split_by."""
-function _dbnew_get_segment_data(df::EyeData, segment, split_by)
-    if isnothing(split_by)
-        return df.df
-    elseif split_by isa Symbol
-        mask = trues(nrow(df.df))
-        _mark_equal!(mask, df.df[!, split_by], segment)
-        return @view df.df[mask, :]
-    else
-        return _apply_selection_view(df, segment)
-    end
-end
-
 """Generate a human-readable label for the current segment."""
-function _dbnew_segment_label(state)
+function _db_segment_label(state)
     idx = state.trial[]
     n = length(state.segments)
     seg = state.segments[idx]
@@ -75,7 +59,7 @@ function _dbnew_segment_label(state)
 end
 
 """Draw blink shading bands on a time-series axis."""
-function _dbnew_draw_blink_bands!(ax, g::AbstractDataFrame, t::Vector{Float64}, state)
+function _db_draw_blink_bands!(ax, g::AbstractDataFrame, t::Vector{Float64}, state)
     !state.show_blinks[] && return
     c_blink = _prefixed_sym(state.prefix, :in_blink)
     !hasproperty(g, c_blink) && return
@@ -97,7 +81,6 @@ function _dbnew_draw_blink_bands!(ax, g::AbstractDataFrame, t::Vector{Float64}, 
             blink_start = 0
         end
     end
-    # Handle blink at end of trial
     if blink_start > 0
         lo = t[blink_start]
         push!(xlo, lo)
@@ -109,8 +92,80 @@ function _dbnew_draw_blink_bands!(ax, g::AbstractDataFrame, t::Vector{Float64}, 
     end
 end
 
-function _render_media_items!(ax, items, sx, sy)
-    for stim_val in items
+function _to_media_item(stim_val, sx::Real, sy::Real)::Union{Nothing,AbstractEyeFunMedia}
+    stim_val isa AbstractEyeFunMedia && return stim_val
+
+    if stim_val isa Tuple &&
+       length(stim_val) >= 2 &&
+       stim_val[2] isa Number &&
+       stim_val[1] isa AbstractArray
+        return AudioMedia(content = stim_val)
+    elseif stim_val isa AbstractString && endswith(lowercase(stim_val), ".wav")
+        return AudioMedia(content = String(stim_val))
+    elseif stim_val isa AbstractString &&
+           (endswith(lowercase(stim_val), ".txt") || endswith(lowercase(stim_val), ".csv"))
+        disp_txt = length(stim_val) > 400 ? first(stim_val, 400) * "..." : String(stim_val)
+        return TextMedia(content = disp_txt, position = (Float64(sx) / 2, Float64(sy) / 2))
+    elseif stim_val isa Tuple &&
+           length(stim_val) == 2 &&
+           (stim_val[1] isa AbstractMatrix || stim_val[1] isa AbstractString)
+        coord = stim_val[2]
+        if coord isa Tuple && length(coord) == 4
+            return ImageMedia(
+                content = stim_val[1],
+                bbox = (
+                    Float64(coord[1]),
+                    Float64(coord[2]),
+                    Float64(coord[3]),
+                    Float64(coord[4]),
+                ),
+            )
+        elseif coord isa Tuple && length(coord) == 2
+            return ImageMedia(
+                content = stim_val[1],
+                position = (Float64(coord[1]), Float64(coord[2])),
+            )
+        end
+    elseif stim_val isa AbstractMatrix || stim_val isa AbstractString
+        return ImageMedia(
+            content = stim_val,
+            position = (Float64(sx) / 2, Float64(sy) / 2),
+        )
+    end
+    return nothing
+end
+
+function _normalize_media_items(raw_items, sx::Real, sy::Real)::Vector{AbstractEyeFunMedia}
+    isnothing(raw_items) && return AbstractEyeFunMedia[]
+    src = raw_items isa AbstractVector ? raw_items : (raw_items,)
+    items = AbstractEyeFunMedia[]
+    for v in src
+        m = _to_media_item(v, sx, sy)
+        !isnothing(m) && push!(items, m)
+    end
+    sort!(items, by = x -> x isa ImageMedia ? x.z_index : 0)
+    return items
+end
+
+function _media_is_active(m::AbstractEyeFunMedia, t_ms::Union{Nothing,Float64})::Bool
+    (isnothing(t_ms) || isnan(t_ms)) && return true
+    t_on = hasproperty(m, :time_on) ? getproperty(m, :time_on) : nothing
+    t_off = hasproperty(m, :time_off) ? getproperty(m, :time_off) : nothing
+    !isnothing(t_on) && t_ms < t_on && return false
+    !isnothing(t_off) && t_ms > t_off && return false
+    return true
+end
+
+function _render_media_items!(
+    ax,
+    items,
+    sx,
+    sy;
+    current_time_ms::Union{Nothing,Float64} = nothing,
+)
+    norm_items = items isa Vector{AbstractEyeFunMedia} ? items : _normalize_media_items(items, sx, sy)
+    for stim_val in norm_items
+        _media_is_active(stim_val, current_time_ms) || continue
         if stim_val isa AudioMedia
             text!(
                 ax,
@@ -123,7 +178,6 @@ function _render_media_items!(ax, items, sx, sy)
                 glowwidth = 3,
                 glowcolor = :black,
             )
-
         elseif stim_val isa TextMedia
             pos_x = isnothing(stim_val.position) ? sx / 2 : stim_val.position[1]
             pos_y = isnothing(stim_val.position) ? sy / 2 : stim_val.position[2]
@@ -137,7 +191,6 @@ function _render_media_items!(ax, items, sx, sy)
                 word_wrap_width = 500,
                 color = stim_val.color,
             )
-
         elseif stim_val isa ImageMedia
             img_mat =
                 stim_val.content isa AbstractString ? load_image(stim_val.content) :
@@ -161,91 +214,12 @@ function _render_media_items!(ax, items, sx, sy)
                     img_rotated,
                 )
             end
-
-        else
-            is_audio_tuple =
-                stim_val isa Tuple &&
-                length(stim_val) >= 2 &&
-                stim_val[2] isa Number &&
-                stim_val[1] isa AbstractArray
-            if is_audio_tuple ||
-               (stim_val isa AbstractString && endswith(lowercase(stim_val), ".wav"))
-                text!(
-                    ax,
-                    sx / 2,
-                    sy * 0.95;
-                    text = "AUDIO ATTACHED (Press [Space] to Play)",
-                    align = (:center, :top),
-                    fontsize = 18,
-                    color = :white,
-                    glowwidth = 3,
-                    glowcolor = :black,
-                )
-            elseif stim_val isa AbstractString && (
-                endswith(lowercase(stim_val), ".txt") ||
-                endswith(lowercase(stim_val), ".csv")
-            )
-                disp_txt = length(stim_val) > 400 ? first(stim_val, 400) * "..." : stim_val
-                text!(
-                    ax,
-                    sx / 2,
-                    sy / 2;
-                    text = disp_txt,
-                    align = (:center, :center),
-                    fontsize = 16,
-                    word_wrap_width = 500,
-                    color = :black,
-                )
-
-            else
-                img_mat = nothing
-                bbox = nothing
-                center = nothing
-
-                if stim_val isa Tuple &&
-                   length(stim_val) == 2 &&
-                   (stim_val[1] isa AbstractMatrix || stim_val[1] isa AbstractString)
-                    img_mat =
-                        stim_val[1] isa AbstractMatrix ? stim_val[1] :
-                        load_image(stim_val[1])
-                    coord = stim_val[2]
-                    if coord isa Tuple && length(coord) == 4
-                        bbox = coord
-                    elseif coord isa Tuple && length(coord) == 2
-                        center = coord
-                    end
-                elseif stim_val isa AbstractMatrix
-                    img_mat = stim_val
-                    center = (sx / 2, sy / 2) # Fallback to Center 
-                elseif stim_val isa AbstractString
-                    img_mat = load_image(stim_val)
-                    center = (sx / 2, sy / 2) # Fallback to Center 
-                end
-
-                if !isnothing(img_mat)
-                    # permutedims instead of rotr90: avoids flipping on yreversed axes
-                    img_rotated = permutedims(img_mat, (2, 1))
-
-                    if !isnothing(bbox)
-                        # (xmin, xmax, ymin, ymax) Box stretch
-                        x_range = bbox[1] .. bbox[2]
-                        y_range = bbox[3] .. bbox[4]
-                        Makie.image!(ax, x_range, y_range, img_rotated)
-                    elseif !isnothing(center)
-                        w, h = size(img_rotated)
-                        cx, cy = center
-                        x_range = (cx - w / 2) .. (cx + w / 2)
-                        y_range = (cy - h / 2) .. (cy + h / 2)
-                        Makie.image!(ax, x_range, y_range, img_rotated)
-                    end
-                end
-            end
         end
     end
 end
 
 """Draw the spatial view (gaze on screen) for the current trial."""
-function _dbnew_draw_spatial!(
+function _db_draw_spatial!(
     ax,
     gx::Vector{Float64},
     gy::Vector{Float64},
@@ -273,29 +247,16 @@ function _dbnew_draw_spatial!(
 
     sx, sy = state.screen_res
 
-    # Screen boundary
     lines!(ax, [0, sx, sx, 0, 0], [0, 0, sy, sy, 0]; color = :grey70, linewidth = 1)
-
-    # Screen center crosshair
     lines!(ax, [sx / 2, sx / 2], [0, sy]; color = :grey85, linewidth = 0.5)
     lines!(ax, [0, sx], [sy / 2, sy / 2]; color = :grey85, linewidth = 0.5)
 
-    # Background image drawing
     if !isnothing(state.bg_stimulus)
         try
             segment_id = state.segments[state.trial[]]
             stim_vals = state.bg_stimulus(segment_id)
-
             if !isnothing(stim_vals)
-                items = stim_vals isa AbstractVector ? collect(stim_vals) : Any[stim_vals]
-                # Sort items if they support z_index to ensure correct layering
-                sort!(
-                    items,
-                    by = x ->
-                        (x isa AbstractEyeFunMedia && hasproperty(x, :z_index)) ?
-                        x.z_index : 0,
-                )
-
+                items = _normalize_media_items(stim_vals, sx, sy)
                 _render_media_items!(ax, items, sx, sy)
             end
         catch e
@@ -318,7 +279,6 @@ function _dbnew_draw_spatial!(
         end
     end
 
-    # Fixations (use pre-extracted list)
     if state.show_fixations[]
         fxs = Float64[]
         fys = Float64[]
@@ -351,7 +311,6 @@ function _dbnew_draw_spatial!(
         end
     end
 
-    # Saccades
     if state.show_saccades[]
         slx = Float64[]
         sly = Float64[]
@@ -398,8 +357,22 @@ function _dbnew_draw_spatial!(
     end
 end
 
+function _fixation_bar_rects(fixations::Vector{FixationInfo}, t::Vector{Float64}, bar_h::Real)
+    rects = Rect2f[]
+    for f in fixations
+        ts = max(1, f.time_start)
+        te = min(length(t), f.time_end)
+        if ts <= te
+            x = t[ts]
+            w = t[te] - x
+            push!(rects, Rect2f(x, 0.0, max(w, 1e-5), bar_h))
+        end
+    end
+    return rects
+end
+
 """Draw the XY position trace panel."""
-function _dbnew_draw_xy_trace!(
+function _db_draw_xy_trace!(
     ax,
     g::AbstractDataFrame,
     gx::Vector{Float64},
@@ -455,24 +428,11 @@ function _dbnew_draw_xy_trace!(
     bar_h = abs(lims.widths[2]) * 0.05
     cache[:xy_bar_h] = bar_h
 
-    # Fixation bars first (drawn below saccade markers)
     if state.show_fixations[]
-        rects = Rect2f[]
-        for f in fixations
-            ts = max(1, f.time_start)
-            te = min(length(t), f.time_end)
-            if ts <= te
-                x = t[ts]
-                w = t[te] - x
-                push!(rects, Rect2f(x, 0.0, max(w, 1e-5), bar_h))
-            end
-        end
-        if !isempty(rects)
-            poly!(ax, rects; color = (:red, 0.3))
-        end
+        rects = _fixation_bar_rects(fixations, t, bar_h)
+        !isempty(rects) && poly!(ax, rects; color = (:red, 0.3))
     end
 
-    # Saccade markers on top
     if state.show_saccades[]
         sx = [t[s.time_idx] for s in saccades if 1 <= s.time_idx <= length(t)]
         if !isempty(sx)
@@ -480,7 +440,6 @@ function _dbnew_draw_xy_trace!(
         end
     end
 
-    # Message markers
     if state.show_messages[] && hasproperty(g, :message)
         msg_x = Float64[]
         for i in eachindex(g.message)
@@ -493,12 +452,11 @@ function _dbnew_draw_xy_trace!(
         end
     end
 
-    # Blink shading
-    _dbnew_draw_blink_bands!(ax, g, t, state)
+    _db_draw_blink_bands!(ax, g, t, state)
 
     !isnan(t[1]) && !isnan(t[end]) && t[1] < t[end] && xlims!(ax, t[1], t[end])
 end
-function _dbnew_draw_velocity!(
+function _db_draw_velocity!(
     ax,
     g::AbstractDataFrame,
     t::Vector{Float64},
@@ -519,25 +477,12 @@ function _dbnew_draw_velocity!(
     bar_h = abs(lims.widths[2]) * 0.05
     cache[:vel_bar_h] = bar_h
 
-    # Fixation bars first
     c_fgx = _prefixed_sym(state.prefix, :fix_gavx)
     if state.show_fixations[] && (hasproperty(g, c_fgx) || !isempty(fixations))
-        rects = Rect2f[]
-        for f in fixations
-            ts = max(1, f.time_start)
-            te = min(length(t), f.time_end)
-            if ts <= te
-                x = t[ts]
-                w = t[te] - x
-                push!(rects, Rect2f(x, 0.0, max(w, 1e-5), bar_h))
-            end
-        end
-        if !isempty(rects)
-            poly!(ax, rects; color = (:red, 0.3))
-        end
+        rects = _fixation_bar_rects(fixations, t, bar_h)
+        !isempty(rects) && poly!(ax, rects; color = (:red, 0.3))
     end
 
-    # Saccade markers on top
     if state.show_saccades[]
         sx = [t[s.time_idx] for s in saccades if 1 <= s.time_idx <= length(t)]
         if !isempty(sx)
@@ -545,12 +490,11 @@ function _dbnew_draw_velocity!(
         end
     end
 
-    # Blink shading
-    _dbnew_draw_blink_bands!(ax, g, t, state)
+    _db_draw_blink_bands!(ax, g, t, state)
 
     !isnan(t[1]) && !isnan(t[end]) && t[1] < t[end] && xlims!(ax, t[1], t[end])
 end
-function _dbnew_draw_pupil!(
+function _db_draw_pupil!(
     ax,
     g::AbstractDataFrame,
     pa::Vector{Float64},
@@ -561,8 +505,7 @@ function _dbnew_draw_pupil!(
 
     lines!(ax, t, pa; color = :black, linewidth = 1)
 
-    # Blink shading: use vspan! for full-height vertical bands
-    _dbnew_draw_blink_bands!(ax, g, t, state)
+    _db_draw_blink_bands!(ax, g, t, state)
 
     !isnan(t[1]) && !isnan(t[end]) && t[1] < t[end] && xlims!(ax, t[1], t[end])
 end
@@ -587,7 +530,7 @@ function _trial_time(g::AbstractDataFrame)
 end
 
 """Draw a polar rose plot of saccade directions for the current trial."""
-function _dbnew_draw_saccade_polar!(
+function _db_draw_saccade_polar!(
     ax,
     state,
     saccades::Vector{SaccadeInfo},
@@ -634,7 +577,7 @@ function _dbnew_draw_saccade_polar!(
 end
 
 """Redraw all panels for the current trial/segment. Populates cache for click handlers."""
-function _dbnew_draw_all!(
+function _db_draw_all!(
     axes,
     df::EyeData,
     state,
@@ -647,9 +590,9 @@ function _dbnew_draw_all!(
     n_full = nrow(g_full)
     n_full == 0 && return
 
-    trial_label[] = _dbnew_segment_label(state)
+    trial_label[] = _db_segment_label(state)
 
-    # Extract events from full data (cached for _dbnew_redraw_window!)
+    # Extract events from full data (cached for _db_redraw_window!)
     saccades_full = _extract_saccades(g_full; prefix = state.prefix)
     fixations_full = _extract_fixations(g_full; prefix = state.prefix)
     t_full = _trial_time(g_full)
@@ -660,7 +603,6 @@ function _dbnew_draw_all!(
     ppd = Float64(pixels_per_degree(df))
     spd = _compute_velocity_deg(gx, gy, ppd, df.sample_rate)
 
-    # Cache full segment data
     cache[:g] = g_full
     cache[:saccades] = saccades_full
     cache[:fixations] = fixations_full
@@ -668,8 +610,7 @@ function _dbnew_draw_all!(
     cache[:n_full] = n_full
     cache[:speed] = spd
 
-    # Draw windowed view
-    _dbnew_redraw_window!(
+    _db_redraw_window!(
         axes,
         state,
         cache;
@@ -679,7 +620,7 @@ function _dbnew_draw_all!(
 end
 
 """Redraw the visible sample window using cached full-segment data."""
-function _dbnew_redraw_window!(
+function _db_redraw_window!(
     axes,
     state,
     cache::Dict{Symbol,Any};
@@ -691,7 +632,6 @@ function _dbnew_redraw_window!(
     saccades_full = cache[:saccades]
     fixations_full = cache[:fixations]
 
-    # Compute window range
     ws = state.window_samples
     if ws > 0 && n_full > ws
         w_start = clamp(window_start, 1, n_full - ws + 1)
@@ -704,7 +644,6 @@ function _dbnew_redraw_window!(
     cache[:window_start] = w_start
     cache[:window_end] = w_end
 
-    # Pre-extract column data once (avoids repeated Float64.() copies in draw functions)
     n_win = nrow(g)
     gx = hasproperty(g, state.gx_col) ? Float64.(g[!, state.gx_col]) : fill(NaN, n_win)
     gy = hasproperty(g, state.gy_col) ? Float64.(g[!, state.gy_col]) : fill(NaN, n_win)
@@ -744,12 +683,11 @@ function _dbnew_redraw_window!(
         ) for f in fixations_win
     ]
 
-    # Cache windowed events and time for click handlers
     cache[:saccades_win] = saccades_draw
     cache[:fixations_win] = fixations_draw
     cache[:t_win] = t
 
-    _dbnew_draw_spatial!(
+    _db_draw_spatial!(
         axes[1],
         gx,
         gy,
@@ -758,8 +696,8 @@ function _dbnew_redraw_window!(
         fixations_draw;
         reset_zoom = reset_zoom,
     )
-    _dbnew_draw_saccade_polar!(axes[2], state, saccades_draw, cache)
-    _dbnew_draw_xy_trace!(
+    _db_draw_saccade_polar!(axes[2], state, saccades_draw, cache)
+    _db_draw_xy_trace!(
         axes[3],
         g,
         gx,
@@ -770,7 +708,7 @@ function _dbnew_redraw_window!(
         fixations_draw,
         cache,
     )
-    _dbnew_draw_velocity!(
+    _db_draw_velocity!(
         axes[4],
         g,
         t,
@@ -780,11 +718,11 @@ function _dbnew_redraw_window!(
         fixations_draw,
         cache,
     )
-    _dbnew_draw_pupil!(axes[5], g, pa, t, state)
+    _db_draw_pupil!(axes[5], g, pa, t, state)
 end
 
-"""Add cursor scatter dots to all axes (call after _dbnew_draw_all! which clears axes)."""
-function _dbnew_add_cursor_dots!(axes, cursor_obs)
+"""Add cursor scatter dots to all axes (call after _db_draw_all! which clears axes)."""
+function _db_add_cursor_dots!(axes, cursor_obs)
     scatter!(
         axes[1],
         cursor_obs[:spatial_pts];
@@ -828,7 +766,7 @@ function _dbnew_add_cursor_dots!(axes, cursor_obs)
 end
 
 """Update the black dot cursor positions across all panels for the current frame."""
-function _dbnew_update_cursor!(cursor_obs, cache::Dict{Symbol,Any}, state)
+function _db_update_cursor!(cursor_obs, cache::Dict{Symbol,Any}, state)
     haskey(cache, :g) || return
     g = cache[:g]::AbstractDataFrame
     nrow(g) == 0 && return

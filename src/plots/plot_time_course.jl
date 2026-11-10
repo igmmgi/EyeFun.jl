@@ -1,3 +1,10 @@
+@inline function _ribbon_halfwidth(ss::Float64, cnt::Int, error_mode::Symbol)::Float64
+    sd = sqrt(ss / (cnt - 1))
+    error_mode === :sd && return sd
+    sem = sd / sqrt(Float64(cnt))
+    return error_mode === :ci95 ? _student_t_crit_two_tailed(0.05, Float64(cnt - 1)) * sem : sem
+end
+
 function _aggregate_series_ribbon(
     df::AbstractDataFrame,
     time_col::Symbol,
@@ -75,12 +82,7 @@ function _aggregate_series_ribbon(
                         ss += d * d
                     end
                 end
-                sd = sqrt(ss / (cnt - 1))
-                sem = sd / sqrt(Float64(cnt))
-                errs[b] =
-                    error_mode === :sd ? sd :
-                    error_mode === :ci95 ? _student_t_crit_two_tailed(0.05, Float64(cnt - 1)) * sem :
-                    sem
+                errs[b] = _ribbon_halfwidth(ss, cnt, error_mode)
             end
         end
     else
@@ -119,12 +121,7 @@ function _aggregate_series_ribbon(
             @inbounds for b = 1:nb
                 cnt = bcnt[b]
                 cnt < 2 && continue
-                sd = sqrt(bss[b] / (cnt - 1))
-                sem = sd / sqrt(Float64(cnt))
-                errs[b] =
-                    error_mode === :sd ? sd :
-                    error_mode === :ci95 ? _student_t_crit_two_tailed(0.05, Float64(cnt - 1)) * sem :
-                    sem
+                errs[b] = _ribbon_halfwidth(bss[b], cnt, error_mode)
             end
         end
     end
@@ -168,7 +165,6 @@ function plot_time_course(
     error in (:sem, :ci95, :sd, :none) ||
         throw(ArgumentError("Invalid error=:$error. Choose :sem, :ci95, :sd, or :none."))
 
-    # Resolve target value column(s)
     val_cols = if value_col isa AbstractVector
         Symbol[Symbol(c) for c in value_col]
     elseif value_col !== :auto
@@ -209,7 +205,6 @@ function plot_time_course(
         title = String(title),
     )
 
-    # Shade significant temporal clusters if supplied
     if !isnothing(clusters) && nrow(clusters) > 0 &&
        hasproperty(clusters, :t_start) && hasproperty(clusters, :t_end)
         clo = Float64[]

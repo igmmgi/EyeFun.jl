@@ -87,21 +87,6 @@ end
     return (text_start, text_end, next_pos)
 end
 
-"""Parse a MESSAGEEVENT payload from a byte vector. Returns (text, new_pos)."""
-@inline function _msg_bytes(data::Vector{UInt8}, pos::Int)
-    text_start, text_end, next_pos = _msg_span_bytes(data, pos)
-    text_end < text_start && return ("", next_pos)
-    has_null = false
-    @inbounds for i = text_start:text_end
-        if data[i] == 0x00
-            has_null = true
-            break
-        end
-    end
-    text = GC.@preserve data unsafe_string(pointer(data, text_start), text_end - text_start + 1)
-    return (has_null ? replace(text, '\0' => "") : text), next_pos
-end
-
 """Parse an INPUT/BUTTON payload from a byte vector. Returns (value, new_pos)."""
 function _input_bytes(data::Vector{UInt8}, pos::Int)
     n = length(data)

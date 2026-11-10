@@ -1,82 +1,3 @@
-const _TOBII_POW10 = (
-    1.0,
-    10.0,
-    100.0,
-    1_000.0,
-    10_000.0,
-    100_000.0,
-    1_000_000.0,
-    10_000_000.0,
-    100_000_000.0,
-    1_000_000_000.0,
-    10_000_000_000.0,
-    100_000_000_000.0,
-)
-
-@inline function _tobii_parse_f64(s::AbstractString)
-    n = ncodeunits(s)
-    i = 1
-    @inbounds while i <= n && (codeunit(s, i) == UInt8(' ') || codeunit(s, i) == UInt8('\r'))
-        i += 1
-    end
-    j = n
-    @inbounds while j >= i && (codeunit(s, j) == UInt8(' ') || codeunit(s, j) == UInt8('\r'))
-        j -= 1
-    end
-    i > j && return NaN
-    neg = false
-    @inbounds b = codeunit(s, i)
-    if b == UInt8('-')
-        neg = true
-        i += 1
-    elseif b == UInt8('+')
-        i += 1
-    end
-    i > j && return NaN
-    acc = Int64(0)
-    n_frac = 0
-    in_frac = false
-    n_digits = 0
-    @inbounds while i <= j
-        c = codeunit(s, i)
-        if c >= UInt8('0') && c <= UInt8('9')
-            n_digits += 1
-            if n_digits <= 17
-                acc = acc * 10 + Int64(c - UInt8('0'))
-                in_frac && (n_frac += 1)
-            else
-                v = tryparse(Float64, occursin(',', s) ? replace(s, ',' => '.') : s)
-                return (isnothing(v) || !isfinite(v)) ? NaN : v
-            end
-        elseif (c == UInt8('.') || c == UInt8(',')) && !in_frac
-            in_frac = true
-        else
-            v = tryparse(Float64, occursin(',', s) ? replace(s, ',' => '.') : s)
-            return (isnothing(v) || !isfinite(v)) ? NaN : v
-        end
-        i += 1
-    end
-    n_digits == 0 && return NaN
-    val = n_frac == 0 ? Float64(acc) :
-          (n_frac <= 11 ? Float64(acc) / @inbounds(_TOBII_POW10[n_frac+1]) : Float64(acc) * 10.0^(-n_frac))
-    return neg ? -val : val
-end
-
-@inline _tobii_parse_float(s::AbstractString) = Float32(_tobii_parse_f64(s))
-
-@inline function _is_invalid_tobii(s::AbstractString)
-    ncodeunits(s) == 7 || return false
-    @inbounds begin
-        (codeunit(s, 1) | 0x20) == UInt8('i') &&
-            (codeunit(s, 2) | 0x20) == UInt8('n') &&
-            (codeunit(s, 3) | 0x20) == UInt8('v') &&
-            (codeunit(s, 4) | 0x20) == UInt8('a') &&
-            (codeunit(s, 5) | 0x20) == UInt8('l') &&
-            (codeunit(s, 6) | 0x20) == UInt8('i') &&
-            (codeunit(s, 7) | 0x20) == UInt8('d')
-    end
-end
-
 @inline function _is_invalid_tobii_bytes(data::Vector{UInt8}, a::Int, b::Int)::Bool
     a, b = _tsv_trim_span(data, a, b)
     (b - a + 1) == 7 || return false
@@ -127,6 +48,162 @@ end
 )::Float32
     (idx > 0 && idx <= n_cols) || return NaN32
     return Float32(_bytes_parse_f64(data, @inbounds(col_a[idx]), @inbounds(col_b[idx])))
+end
+
+function _parse_tobii_header!(
+    col_a::Vector{Int},
+    col_b::Vector{Int},
+    raw::Vector{UInt8},
+    ls::Int,
+    le::Int,
+    path::String,
+)
+    n_tabs = 0
+    @inbounds for k = ls:le
+        raw[k] == UInt8('\t') && (n_tabs += 1)
+    end
+    cap = max(n_tabs + 8, 32)
+    resize!(col_a, cap)
+    resize!(col_b, cap)
+    n_hdr = _tsv_split_spans!(col_a, col_b, raw, ls, le)
+    col_map = Dict{String,Int}()
+    sizehint!(col_map, n_hdr)
+    @inbounds for i = 1:n_hdr
+        ha, hb = _tsv_trim_span(raw, col_a[i], col_b[i])
+        ha <= hb && (col_map[_span_to_string(raw, ha, hb)] = i)
+    end
+
+    if haskey(col_map, "Recording timestamp [ms]")
+        idx_time = col_map["Recording timestamp [ms]"]
+        time_scale = 1.0
+    elseif haskey(col_map, "Recording timestamp [μs]")
+        idx_time = col_map["Recording timestamp [μs]"]
+        time_scale = 1e-3
+    elseif haskey(col_map, "Recording timestamp [µs]")
+        idx_time = col_map["Recording timestamp [µs]"]
+        time_scale = 1e-3
+    elseif haskey(col_map, "Recording timestamp [us]")
+        idx_time = col_map["Recording timestamp [us]"]
+        time_scale = 1e-3
+    elseif haskey(col_map, "Recording timestamp")
+        idx_time = col_map["Recording timestamp"]
+        time_scale = 1.0
+    else
+        error(
+            "Required timestamp column (e.g. 'Recording timestamp [ms]' or 'Recording timestamp [μs]') not found in Tobii TSV: $path",
+        )
+    end
+
+    idx_sensor = get(col_map, "Sensor", 0)
+    idx_evt = get(col_map, "Event", 0)
+    idx_evt_val = get(col_map, "Event value", 0)
+    idx_stim = get(col_map, "Presented Stimulus name", 0)
+    idx_valL = get(col_map, "Validity left", 0)
+    idx_valR = get(col_map, "Validity right", 0)
+    idx_pvalL = get(col_map, "Validity pupil left", 0)
+    idx_pvalR = get(col_map, "Validity pupil right", 0)
+
+    idx_gxL = get(col_map, "Gaze point left X [DACS px]", 0)
+    idx_gyL = get(col_map, "Gaze point left Y [DACS px]", 0)
+    idx_gxR = get(col_map, "Gaze point right X [DACS px]", 0)
+    idx_gyR = get(col_map, "Gaze point right Y [DACS px]", 0)
+
+    idx_gxL_norm = get(
+        col_map,
+        "Gaze point left X [ADCS norm]",
+        get(col_map, "Gaze point left X [MCS norm]", 0),
+    )
+    idx_gyL_norm = get(
+        col_map,
+        "Gaze point left Y [ADCS norm]",
+        get(col_map, "Gaze point left Y [MCS norm]", 0),
+    )
+    idx_gxR_norm = get(
+        col_map,
+        "Gaze point right X [ADCS norm]",
+        get(col_map, "Gaze point right X [MCS norm]", 0),
+    )
+    idx_gyR_norm = get(
+        col_map,
+        "Gaze point right Y [ADCS norm]",
+        get(col_map, "Gaze point right Y [MCS norm]", 0),
+    )
+
+    idx_gx_fused = get(col_map, "Gaze point X [DACS px]", 0)
+    idx_gy_fused = get(col_map, "Gaze point Y [DACS px]", 0)
+    idx_gx_fused_norm = get(
+        col_map,
+        "Gaze point X [ADCS norm]",
+        get(col_map, "Gaze point X [MCS norm]", 0),
+    )
+    idx_gy_fused_norm = get(
+        col_map,
+        "Gaze point Y [ADCS norm]",
+        get(col_map, "Gaze point Y [MCS norm]", 0),
+    )
+
+    use_fused_gaze =
+        (idx_gxL == 0 && idx_gxR == 0 && idx_gxL_norm == 0 && idx_gxR_norm == 0) &&
+        (idx_gx_fused > 0 || idx_gx_fused_norm > 0)
+
+    idx_paL = get(col_map, "Pupil diameter left [mm]", get(col_map, "Pupil diameter left", 0))
+    idx_paR = get(col_map, "Pupil diameter right [mm]", get(col_map, "Pupil diameter right", 0))
+    idx_pa_fused = get(
+        col_map,
+        "Pupil diameter filtered [mm]",
+        get(col_map, "Pupil diameter [mm]", 0),
+    )
+    use_fused_pupil = (idx_paL == 0 && idx_paR == 0 && idx_pa_fused > 0)
+
+    idx_subj = get(col_map, "Participant name", 0)
+    idx_trial = get(col_map, "Trial", get(col_map, "Trial number", 0))
+
+    idx_em_type = get(col_map, "Eye movement type", 0)
+    idx_em_dur = get(
+        col_map,
+        "Eye movement event duration [ms]",
+        get(col_map, "Eye movement event duration", 0),
+    )
+    idx_em_idx = get(col_map, "Eye movement type index", 0)
+    idx_fix_x = get(col_map, "Fixation point X [DACS px]", 0)
+    idx_fix_y = get(col_map, "Fixation point Y [DACS px]", 0)
+
+    return (;
+        idx_time,
+        time_scale,
+        idx_sensor,
+        idx_evt,
+        idx_evt_val,
+        idx_stim,
+        idx_valL,
+        idx_valR,
+        idx_pvalL,
+        idx_pvalR,
+        idx_gxL,
+        idx_gyL,
+        idx_gxR,
+        idx_gyR,
+        idx_gxL_norm,
+        idx_gyL_norm,
+        idx_gxR_norm,
+        idx_gyR_norm,
+        idx_gx_fused,
+        idx_gy_fused,
+        idx_gx_fused_norm,
+        idx_gy_fused_norm,
+        use_fused_gaze,
+        idx_paL,
+        idx_paR,
+        idx_pa_fused,
+        use_fused_pupil,
+        idx_subj,
+        idx_trial,
+        idx_em_type,
+        idx_em_dur,
+        idx_em_idx,
+        idx_fix_x,
+        idx_fix_y,
+    )
 end
 
 """
@@ -237,116 +314,43 @@ function read_tobii(
         ta > tb && continue
 
         if !header_parsed
-            n_tabs = 0
-            for k = ls:le
-                raw[k] == UInt8('\t') && (n_tabs += 1)
-            end
-            cap = max(n_tabs + 8, 32)
-            resize!(col_a, cap)
-            resize!(col_b, cap)
-            n_hdr = _tsv_split_spans!(col_a, col_b, raw, ls, le)
-            col_map = Dict{String,Int}()
-            sizehint!(col_map, n_hdr)
-            for i = 1:n_hdr
-                ha, hb = _tsv_trim_span(raw, col_a[i], col_b[i])
-                ha <= hb && (col_map[_span_to_string(raw, ha, hb)] = i)
-            end
+            (;
+                idx_time,
+                time_scale,
+                idx_sensor,
+                idx_evt,
+                idx_evt_val,
+                idx_stim,
+                idx_valL,
+                idx_valR,
+                idx_pvalL,
+                idx_pvalR,
+                idx_gxL,
+                idx_gyL,
+                idx_gxR,
+                idx_gyR,
+                idx_gxL_norm,
+                idx_gyL_norm,
+                idx_gxR_norm,
+                idx_gyR_norm,
+                idx_gx_fused,
+                idx_gy_fused,
+                idx_gx_fused_norm,
+                idx_gy_fused_norm,
+                use_fused_gaze,
+                idx_paL,
+                idx_paR,
+                idx_pa_fused,
+                use_fused_pupil,
+                idx_subj,
+                idx_trial,
+                idx_em_type,
+                idx_em_dur,
+                idx_em_idx,
+                idx_fix_x,
+                idx_fix_y,
+            ) = _parse_tobii_header!(col_a, col_b, raw, ls, le, path)
             header_parsed = true
-
-            if haskey(col_map, "Recording timestamp [ms]")
-                idx_time = col_map["Recording timestamp [ms]"]
-                time_scale = 1.0
-            elseif haskey(col_map, "Recording timestamp [μs]")
-                idx_time = col_map["Recording timestamp [μs]"]
-                time_scale = 1e-3
-            elseif haskey(col_map, "Recording timestamp [µs]")
-                idx_time = col_map["Recording timestamp [µs]"]
-                time_scale = 1e-3
-            elseif haskey(col_map, "Recording timestamp [us]")
-                idx_time = col_map["Recording timestamp [us]"]
-                time_scale = 1e-3
-            elseif haskey(col_map, "Recording timestamp")
-                idx_time = col_map["Recording timestamp"]
-                time_scale = 1.0
-            else
-                error(
-                    "Required timestamp column (e.g. 'Recording timestamp [ms]' or 'Recording timestamp [μs]') not found in Tobii TSV: $path",
-                )
-            end
-
-            idx_sensor = get(col_map, "Sensor", 0)
-            idx_evt = get(col_map, "Event", 0)
-            idx_evt_val = get(col_map, "Event value", 0)
-            idx_stim = get(col_map, "Presented Stimulus name", 0)
-            idx_valL = get(col_map, "Validity left", 0)
-            idx_valR = get(col_map, "Validity right", 0)
-            idx_pvalL = get(col_map, "Validity pupil left", 0)
-            idx_pvalR = get(col_map, "Validity pupil right", 0)
-
-            idx_gxL = get(col_map, "Gaze point left X [DACS px]", 0)
-            idx_gyL = get(col_map, "Gaze point left Y [DACS px]", 0)
-            idx_gxR = get(col_map, "Gaze point right X [DACS px]", 0)
-            idx_gyR = get(col_map, "Gaze point right Y [DACS px]", 0)
-
-            idx_gxL_norm = get(
-                col_map,
-                "Gaze point left X [ADCS norm]",
-                get(col_map, "Gaze point left X [MCS norm]", 0),
-            )
-            idx_gyL_norm = get(
-                col_map,
-                "Gaze point left Y [ADCS norm]",
-                get(col_map, "Gaze point left Y [MCS norm]", 0),
-            )
-            idx_gxR_norm = get(
-                col_map,
-                "Gaze point right X [ADCS norm]",
-                get(col_map, "Gaze point right X [MCS norm]", 0),
-            )
-            idx_gyR_norm = get(
-                col_map,
-                "Gaze point right Y [ADCS norm]",
-                get(col_map, "Gaze point right Y [MCS norm]", 0),
-            )
-
-            idx_gx_fused = get(col_map, "Gaze point X [DACS px]", 0)
-            idx_gy_fused = get(col_map, "Gaze point Y [DACS px]", 0)
-            idx_gx_fused_norm = get(
-                col_map,
-                "Gaze point X [ADCS norm]",
-                get(col_map, "Gaze point X [MCS norm]", 0),
-            )
-            idx_gy_fused_norm = get(
-                col_map,
-                "Gaze point Y [ADCS norm]",
-                get(col_map, "Gaze point Y [MCS norm]", 0),
-            )
-
-            use_fused_gaze =
-                (idx_gxL == 0 && idx_gxR == 0 && idx_gxL_norm == 0 && idx_gxR_norm == 0) &&
-                (idx_gx_fused > 0 || idx_gx_fused_norm > 0)
-
-            idx_paL = get(col_map, "Pupil diameter left [mm]", get(col_map, "Pupil diameter left", 0))
-            idx_paR = get(col_map, "Pupil diameter right [mm]", get(col_map, "Pupil diameter right", 0))
-            idx_pa_fused = get(
-                col_map,
-                "Pupil diameter filtered [mm]",
-                get(col_map, "Pupil diameter [mm]", 0),
-            )
-            use_fused_pupil = (idx_paL == 0 && idx_paR == 0 && idx_pa_fused > 0)
-
-            idx_subj = get(col_map, "Participant name", 0)
-            idx_trial = get(col_map, "Trial", get(col_map, "Trial number", 0))
-
-            idx_em_type = get(col_map, "Eye movement type", 0)
-            idx_em_dur = get(
-                col_map,
-                "Eye movement event duration [ms]",
-                get(col_map, "Eye movement event duration", 0),
-            )
-            idx_em_idx = get(col_map, "Eye movement type index", 0)
-            idx_fix_x = get(col_map, "Fixation point X [DACS px]", 0)
-            idx_fix_y = get(col_map, "Fixation point Y [DACS px]", 0)
             continue
         end
 

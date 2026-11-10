@@ -15,24 +15,14 @@ function _extract_sacc_vel_stems(
     @inbounds for i in eachindex(in_sacc)
         if _is_new_plot_trial(tr_col, p_col, times, i)
             prev = false
-            if i == 1 || (!isnothing(p_col) && !isequal(p_col[i], p_col[i-1])) || Float64(times[i]) < Float64(times[i-1])
-                part_t0 = Float64(times[i])
-            end
         end
+        t_val, part_t0 = _plot_sample_time(times, time_rel, p_col, i, part_t0)
         cur = in_sacc[i]
         if cur & !prev
             pv = Float64(sacc_pvel[i])
-            if !isnan(pv)
-                t_val = if !isnothing(time_rel)
-                    rv = time_rel[i]
-                    ismissing(rv) ? NaN : Float64(rv)
-                else
-                    Float64(times[i]) - part_t0
-                end
-                if !isnan(t_val)
-                    push!(t_mid, t_val)
-                    push!(pvel, pv)
-                end
+            if !isnan(pv) && !isnan(t_val)
+                push!(t_mid, t_val)
+                push!(pvel, pv)
             end
         end
         prev = cur

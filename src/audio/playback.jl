@@ -50,7 +50,7 @@ function play_wav(
                 )
             end
         catch e
-            @warn "[play_wav] Playback error" exception = e
+            @warn "Audio playback failed" exception = e
         finally
             cleanup && isfile(path) && rm(path; force = true)
         end

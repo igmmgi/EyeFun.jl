@@ -44,18 +44,18 @@ const BLUE = :blue
 print_colored(color::Symbol, message::String) = printstyled(message * "\n"; color = color)
 
 function print_header()
-    print_colored(BLUE, "=== EyeFun Test Runner and Coverage Analysis ===")
+    print_colored(BLUE, "EyeFun Test Runner and Coverage Analysis")
     println()
 end
 
 function run_tests_with_coverage()
     clean_coverage_files() # ensure fresh coverage data
-    print_colored(YELLOW, "Step 1: Running tests with coverage...")
-    try # Run tests with coverage=true
+    print_colored(YELLOW, "Running tests with coverage...")
+    try
         run(`julia --project=. -e "using Pkg; Pkg.test(coverage=true)"`)
-        print_colored(GREEN, "✓ Tests completed successfully")
+        print_colored(GREEN, "Tests completed.")
     catch e
-        print_colored(RED, "✗ Error running tests: $e")
+        print_colored(RED, "Error running tests: $e")
     end
     println()
 end
@@ -81,7 +81,7 @@ end
 
 function print_file_analysis(c, stats, max_uncovered = 50)
     filename = replace(c.filename, "src/" => "")
-    println("\n--- $filename ---")
+    println("\n$filename:")
     println("Total lines: $(stats.total_lines)")
     println("Covered lines: $(stats.covered)")
     println("Uncovered lines: $(stats.uncovered)")
@@ -103,11 +103,9 @@ function print_file_analysis(c, stats, max_uncovered = 50)
 end
 
 function show_coverage_summary()
-    print_colored(YELLOW, "Step 2: Coverage Summary")
+    print_colored(YELLOW, "Coverage Summary")
     try
         coverage = process_folder("src")
-        println("Coverage Summary:")
-        println("=================")
 
         total_covered = 0
         total_uncovered = 0
@@ -138,7 +136,7 @@ function show_coverage_summary()
 end
 
 function show_detailed_analysis()
-    print_colored(YELLOW, "Step 3: Detailed Analysis")
+    print_colored(YELLOW, "Detailed Analysis")
     try
         coverage = process_folder("src")
 
@@ -204,7 +202,7 @@ function show_missed_branches(target_file::String)
                         start_line = max(1, line_num - 2)
                         end_line = min(length(lines), line_num + 2)
 
-                        println("\n--- Around line $line_num ---")
+                        println("\nLine $line_num:")
                         for j = start_line:end_line
                             marker = j == line_num ? ">>> " : "    "
                             println("$marker$j: $(lines[j])")
@@ -227,26 +225,23 @@ function show_missed_branches(target_file::String)
 end
 
 function generate_html_report()
-    print_colored(YELLOW, "Step 4: Generating HTML Coverage Report")
+    print_colored(YELLOW, "Generating HTML coverage report...")
 
     try
         coverage = process_folder("src")
 
-        # Generate LCOV file in test directory
         lcov_file = "test/coverage.lcov"
         CoverageTools.LCOV.writefile(lcov_file, coverage)
-        print_colored(GREEN, "✓ LCOV file generated: $lcov_file")
+        print_colored(GREEN, "LCOV file generated: $lcov_file")
 
-        # Check if genhtml is available
         try
             run(`which genhtml`)
-            print_colored(GREEN, "✓ genhtml found, generating HTML report...")
             run(`genhtml test/coverage.lcov -o test/coverage_html`)
-            print_colored(GREEN, "✓ HTML report generated: test/coverage_html/index.html")
+            print_colored(GREEN, "HTML report generated: test/coverage_html/index.html")
             open_cmd = Sys.isapple() ? "open" : (Sys.islinux() ? "xdg-open" : "start")
             println("Open with: $open_cmd test/coverage_html/index.html")
         catch
-            print_colored(YELLOW, "⚠ genhtml not found. Install lcov")
+            print_colored(YELLOW, "genhtml not found. Install lcov")
             println("Then run: genhtml test/coverage.lcov -o test/coverage_html")
         end
 
@@ -260,9 +255,8 @@ function clean_coverage_files()
     print_colored(YELLOW, "Cleaning up .cov files...")
 
     CoverageTools.clean_folder(".")
-    print_colored(GREEN, "✓ Cleaned .cov files")
+    print_colored(GREEN, "Cleaned .cov files")
 
-    # Also remove secondary artifacts
     lcov_file = "test/coverage.lcov"
     if isfile(lcov_file)
         println("Removing $lcov_file...")
@@ -279,11 +273,11 @@ function clean_coverage_files()
 end
 
 function run_all_analyses()
-    print_colored(BLUE, "=== Running Complete Workflow ===")
+    print_colored(BLUE, "Running complete workflow...")
     run_tests_with_coverage()
     show_coverage_summary()
     generate_html_report()
-    print_colored(GREEN, "✓ Complete workflow finished")
+    print_colored(GREEN, "Workflow finished.")
 end
 
 function show_interactive_menu()

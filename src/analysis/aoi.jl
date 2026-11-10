@@ -1,4 +1,4 @@
-"""Union-split point-in-AOI test avoiding dynamic dispatch on `Vector{AOI}`."""
+"""Point-in-AOI test with explicit subtype dispatch for `AOI` containers."""
 @inline function _in_aoi_fast(@nospecialize(aoi::AOI), x::Float64, y::Float64)::Bool
     if aoi isa RectAOI
         return in_aoi(aoi, x, y)

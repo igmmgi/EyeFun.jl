@@ -1,20 +1,3 @@
-function _mark_not_nan!(valid::BitVector, col::AbstractVector{<:Real})
-    @inbounds for i in eachindex(valid, col)
-        if valid[i] && isnan(col[i])
-            valid[i] = false
-        end
-    end
-    return valid
-end
-
-function _slice_float64(col::AbstractVector{<:Real}, idx::Vector{Int})
-    out = Vector{Float64}(undef, length(idx))
-    @inbounds for i in eachindex(idx)
-        out[i] = Float64(col[idx[i]])
-    end
-    return out
-end
-
 """
     prepare_analysis_data(df::EyeData; selection=nothing, eye=:auto,
                           group_by=:auto, measures=[:pupil], prefix=nothing)

@@ -296,8 +296,8 @@ end
 """
     _valid_groups(df_or_samples, group_by) -> (grouped, group_cols)
 
-Resolve group columns, skip rows with missing group values without copying the
-underlying DataFrame, and return a grouped DataFrame and the resolved column list.
+Resolve group columns, skip rows with missing group values, and return a
+`GroupedDataFrame` along with the resolved column list.
 """
 function _valid_groups(df_or_samples, group_by)
     d = df_or_samples isa EyeData ? df_or_samples.df : df_or_samples
@@ -409,8 +409,8 @@ end
 """
     _foreach_trial_segment(f, df::AbstractDataFrame)
 
-Invoke `f(lo, hi)` on each contiguous `(participant, trial)` segment in `df`
-without allocating intermediate `SubDataFrame`s or index vectors.
+Invoke `f(lo, hi)` on the row index bounds of each contiguous `(participant, trial)`
+segment in `df`.
 """
 function _foreach_trial_segment(f::F, df::AbstractDataFrame) where {F}
     n = nrow(df)

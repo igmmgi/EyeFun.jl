@@ -1,8 +1,5 @@
 # IDE Workflows for Julia
 
-> [!TIP]
-> Working in a good editor significantly improves the Julia experience. Choose whichever option fits your existing workflow best.
-
 Most Julia workflows pair an editor with a live REPL session, providing syntax highlighting, inline documentation, and keybindings to evaluate lines or selections directly in the running session.
 
 ## VS Code/VSCodium

@@ -209,38 +209,6 @@ end
     return neg ? -val : val
 end
 
-@inline function _smi_parse_int(s::AbstractString)
-    n = ncodeunits(s)
-    i = 1
-    @inbounds while i <= n && (codeunit(s, i) == UInt8(' ') || codeunit(s, i) == UInt8('\r'))
-        i += 1
-    end
-    j = n
-    @inbounds while j >= i && (codeunit(s, j) == UInt8(' ') || codeunit(s, j) == UInt8('\r'))
-        j -= 1
-    end
-    i > j && return 0
-    neg = false
-    @inbounds b = codeunit(s, i)
-    if b == UInt8('-')
-        neg = true
-        i += 1
-    elseif b == UInt8('+')
-        i += 1
-    end
-    acc = 0
-    @inbounds while i <= j
-        c = codeunit(s, i)
-        if c >= UInt8('0') && c <= UInt8('9')
-            acc = acc * 10 + Int(c - UInt8('0'))
-        else
-            return parse(Int, strip(s))
-        end
-        i += 1
-    end
-    return neg ? -acc : acc
-end
-
 @inline function _smi_le_u32(data::Vector{UInt8}, off::Integer)
     return ltoh(GC.@preserve data unsafe_load(Ptr{UInt32}(pointer(data, Int(off)))))
 end
@@ -253,6 +221,82 @@ end
     return ltoh(GC.@preserve data unsafe_load(Ptr{Float64}(pointer(data, Int(off)))))
 end
 
+
+function _parse_smi_txt_columns!(
+    col_a::Vector{Int},
+    col_b::Vector{Int},
+    raw::Vector{UInt8},
+    sa::Int,
+    sb::Int,
+    path::String,
+)
+    idx_time = idx_type = idx_trial = idx_trigger = 0
+    idx_lpx = idx_lpy = idx_lrx = idx_lry = idx_ldx = idx_ldy = 0
+    idx_rpx = idx_rpy = idx_rrx = idx_rry = idx_rdx = idx_rdy = 0
+
+    col_header = split(_span_to_string(raw, sa, sb), '\t')
+    for (ci, h_raw) in enumerate(col_header)
+        h = strip(h_raw)
+        if h == "Time" && idx_time == 0
+            idx_time = ci
+        elseif h == "Type" && idx_type == 0
+            idx_type = ci
+        elseif h == "Trial" && idx_trial == 0
+            idx_trial = ci
+        elseif h == "Trigger" && idx_trigger == 0
+            idx_trigger = ci
+        elseif h == "L POR X [px]" && idx_lpx == 0
+            idx_lpx = ci
+        elseif h == "L POR Y [px]" && idx_lpy == 0
+            idx_lpy = ci
+        elseif h == "L Raw X [px]" && idx_lrx == 0
+            idx_lrx = ci
+        elseif h == "L Raw Y [px]" && idx_lry == 0
+            idx_lry = ci
+        elseif h == "L Dia X [px]" && idx_ldx == 0
+            idx_ldx = ci
+        elseif h == "L Dia Y [px]" && idx_ldy == 0
+            idx_ldy = ci
+        elseif h == "R POR X [px]" && idx_rpx == 0
+            idx_rpx = ci
+        elseif h == "R POR Y [px]" && idx_rpy == 0
+            idx_rpy = ci
+        elseif h == "R Raw X [px]" && idx_rrx == 0
+            idx_rrx = ci
+        elseif h == "R Raw Y [px]" && idx_rry == 0
+            idx_rry = ci
+        elseif h == "R Dia X [px]" && idx_rdx == 0
+            idx_rdx = ci
+        elseif h == "R Dia Y [px]" && idx_rdy == 0
+            idx_rdy = ci
+        end
+    end
+    idx_time == 0 && error("Required 'Time' column not found in SMI TXT header: $path")
+
+    need_cols = max(length(col_header) + 4, 24)
+    if length(col_a) < need_cols
+        resize!(col_a, need_cols)
+        resize!(col_b, need_cols)
+    end
+    return (;
+        idx_time,
+        idx_type,
+        idx_trial,
+        idx_trigger,
+        idx_lpx,
+        idx_lpy,
+        idx_lrx,
+        idx_lry,
+        idx_ldx,
+        idx_ldy,
+        idx_rpx,
+        idx_rpy,
+        idx_rrx,
+        idx_rry,
+        idx_rdx,
+        idx_rdy,
+    )
+end
 
 function _read_smi_txt(path::String; verbose::Bool = false)
     raw = Base.read(path)
@@ -339,50 +383,24 @@ function _read_smi_txt(path::String; verbose::Bool = false)
                 continue
             end
 
-            col_header = split(_span_to_string(raw, sa, sb), '\t')
-            for (ci, h_raw) in enumerate(col_header)
-                h = strip(h_raw)
-                if h == "Time" && idx_time == 0
-                    idx_time = ci
-                elseif h == "Type" && idx_type == 0
-                    idx_type = ci
-                elseif h == "Trial" && idx_trial == 0
-                    idx_trial = ci
-                elseif h == "Trigger" && idx_trigger == 0
-                    idx_trigger = ci
-                elseif h == "L POR X [px]" && idx_lpx == 0
-                    idx_lpx = ci
-                elseif h == "L POR Y [px]" && idx_lpy == 0
-                    idx_lpy = ci
-                elseif h == "L Raw X [px]" && idx_lrx == 0
-                    idx_lrx = ci
-                elseif h == "L Raw Y [px]" && idx_lry == 0
-                    idx_lry = ci
-                elseif h == "L Dia X [px]" && idx_ldx == 0
-                    idx_ldx = ci
-                elseif h == "L Dia Y [px]" && idx_ldy == 0
-                    idx_ldy = ci
-                elseif h == "R POR X [px]" && idx_rpx == 0
-                    idx_rpx = ci
-                elseif h == "R POR Y [px]" && idx_rpy == 0
-                    idx_rpy = ci
-                elseif h == "R Raw X [px]" && idx_rrx == 0
-                    idx_rrx = ci
-                elseif h == "R Raw Y [px]" && idx_rry == 0
-                    idx_rry = ci
-                elseif h == "R Dia X [px]" && idx_rdx == 0
-                    idx_rdx = ci
-                elseif h == "R Dia Y [px]" && idx_rdy == 0
-                    idx_rdy = ci
-                end
-            end
-            idx_time == 0 && error("Required 'Time' column not found in SMI TXT header: $path")
-
-            need_cols = max(length(col_header) + 4, 24)
-            if length(col_a) < need_cols
-                resize!(col_a, need_cols)
-                resize!(col_b, need_cols)
-            end
+            (;
+                idx_time,
+                idx_type,
+                idx_trial,
+                idx_trigger,
+                idx_lpx,
+                idx_lpy,
+                idx_lrx,
+                idx_lry,
+                idx_ldx,
+                idx_ldy,
+                idx_rpx,
+                idx_rpy,
+                idx_rrx,
+                idx_rry,
+                idx_rdx,
+                idx_rdy,
+            ) = _parse_smi_txt_columns!(col_a, col_b, raw, sa, sb, path)
             header_parsed = true
             continue
         end

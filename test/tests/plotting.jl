@@ -226,6 +226,54 @@
             wav_stereo = joinpath(tmpdir, "stereo.wav")
             EyeFun._write_pcm16_wav(wav_stereo, zeros(Float32, 5, 2), 22050)
             @test filesize(wav_stereo) == 44 + 5 * 2 * 2
+
+            # Media normalization, time_on/time_off filtering, and IMGLOAD auto-discovery
+            raw_items = Any[
+                ImageMedia(content = fill(Makie.RGBf(0, 1, 0), 2, 2), z_index = 5),
+                TextMedia(content = "Overlay", time_on = 100.0, time_off = 500.0),
+                (fill(Makie.RGBf(1, 0, 0), 4, 6), (200, 300)),
+                (Float32[0.0, 0.2], 8000),
+                wav_mono,
+                "Plain prompt",
+            ]
+            norm_items = EyeFun._normalize_media_items(raw_items, 1920, 1080)
+            @test length(norm_items) == 6
+            @test all(x -> x isa AbstractEyeFunMedia, norm_items)
+            @test norm_items[end] isa ImageMedia
+            @test norm_items[end].z_index == 5
+
+            timed_med = norm_items[1]
+            @test timed_med isa TextMedia
+            @test !EyeFun._media_is_active(timed_med, 50.0)
+            @test EyeFun._media_is_active(timed_med, 250.0)
+            @test !EyeFun._media_is_active(timed_med, 600.0)
+            @test EyeFun._media_is_active(timed_med, NaN)
+
+            stim_keys = collect(keys(stim_mix))
+            img_center = EyeFun._parse_imgload_directive(
+                "!V IMGLOAD CENTER b_mat.png",
+                stim_mix,
+                stim_keys,
+                1920,
+                1080,
+            )
+            @test img_center isa ImageMedia
+            @test img_center.position == (960.0, 540.0)
+
+            img_xy = EyeFun._parse_imgload_directive(
+                "!V IMGLOAD 100 200 b_mat.png",
+                stim_mix,
+                stim_keys,
+                1920,
+                1080,
+            )
+            @test img_xy isa ImageMedia
+            @test img_xy.position == (102.0, 202.0)
+
+            var_df = DataFrame(trial = [1], stim_col = ["b_mat"], message = [missing])
+            disc = EyeFun._discover_segment_stimuli(var_df, stim_mix, stim_keys, 1920, 1080)
+            @test length(disc) == 1
+            @test disc[1] isa ImageMedia
         end
     end
 end

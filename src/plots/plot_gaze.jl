@@ -17,24 +17,12 @@ function _build_gaze_panel_traces(
 
     part_t0 = Float64(times[1])
     @inbounds for i = 1:n
-        if i > 1
-            new_part = !isnothing(p_col) && !isequal(p_col[i], p_col[i-1])
-            new_tr = new_part || (!isnothing(tr_col) && !isequal(tr_col[i], tr_col[i-1])) || (Float64(times[i]) < Float64(times[i-1]))
-            if new_part || Float64(times[i]) < Float64(times[i-1])
-                part_t0 = Float64(times[i])
-            end
-            if new_tr && !isempty(tx_buf)
-                push!(tx_buf, NaN)
-                push!(gx_buf, NaN)
-                push!(gy_buf, NaN)
-            end
+        if i > 1 && _is_new_plot_trial(tr_col, p_col, times, i) && !isempty(tx_buf)
+            push!(tx_buf, NaN)
+            push!(gx_buf, NaN)
+            push!(gy_buf, NaN)
         end
-        tv = if !isnothing(trel)
-            rv = trel[i]
-            ismissing(rv) ? NaN : Float64(rv)
-        else
-            Float64(times[i]) - part_t0
-        end
+        tv, part_t0 = _plot_sample_time(times, trel, p_col, i, part_t0)
         push!(tx_buf, tv)
         push!(gx_buf, ismissing(gx[i]) ? NaN : Float64(gx[i]))
         push!(gy_buf, ismissing(gy[i]) ? NaN : Float64(gy[i]))

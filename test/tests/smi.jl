@@ -24,7 +24,6 @@
 
     @testset "create_eyefun_data (txt): EyeData with events" begin
         raw = Main.TEST_SMI_TXT
-        # Create fresh DataFrame
         ed = EyeFun.create_eyefun_data(deepcopy(raw))
 
         @test ed isa EyeData
@@ -33,15 +32,12 @@
         @test ed.screen_res == (1280, 1024)
         @test nrow(ed.df) == nrow(raw.samples)
 
-        # Before detect_events!: event columns are absent
         @test !hasproperty(ed.df, :in_fix)
         @test !hasproperty(ed.df, :in_sacc)
         @test !hasproperty(ed.df, :in_blink)
 
-        # Run event detection
         detect_events!(ed)
 
-        # Event columns populated
         @test hasproperty(ed.df, :in_fix)
         @test hasproperty(ed.df, :in_sacc)
         @test hasproperty(ed.df, :in_blink)
@@ -49,10 +45,8 @@
         @test hasproperty(ed.df, :sacc_gstx)
         @test hasproperty(ed.df, :blink_dur)
 
-        # High-level accessors work
         fix = fixations(ed)
         @test fix isa DataFrame
-        # Zero fixations expected since the file entirely lacks calibrated gaze coords
         @test nrow(fix) == 0
 
         sacc = saccades(ed)
@@ -154,13 +148,9 @@
             txt_path = joinpath(Main.DATA_DIR_SMI, txt_fn)
             if isfile(idf_path) && isfile(txt_path)
                 raw = _compare_idf_parity(idf_path, txt_path)
-
-                # Verify trigger events were extracted
                 @test nrow(raw.events) > 0
                 @test all(==("MSG"), raw.events.type)
                 @test all(m -> !isnothing(tryparse(Int, m)), raw.events.message)
-
-                # Verify sample rate detection
                 @test 49.0 < raw.sample_rate < 51.0
             else
                 @warn "SMI test data not found for $label, skipping"

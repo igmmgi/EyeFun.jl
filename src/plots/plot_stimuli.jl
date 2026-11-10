@@ -102,11 +102,11 @@ function plot_stimuli(stim::Dict; audio_device = nothing, resolution = (1920, 10
                 align = (:center, :center),
                 fontsize = 24,
             )
-        elseif typeof(val) <: AbstractMatrix || (
-            typeof(val) <: String && occursin(r"\.(png|jpg|jpeg|bmp|gif)$", lowercase(k))
+        elseif val isa AbstractMatrix || (
+            val isa AbstractString && occursin(r"\.(png|jpg|jpeg|bmp|gif)$", lowercase(k))
         )
             try
-                img_mat = typeof(val) <: String ? load_image(val) : val
+                img_mat = val isa AbstractString ? load_image(val) : val
                 img_rotated = rotr90(img_mat)
                 w, h = size(img_rotated)
 

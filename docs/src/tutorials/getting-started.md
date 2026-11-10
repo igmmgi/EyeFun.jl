@@ -44,7 +44,7 @@ Pkg.add(url="https://github.com/igmmgi/EyeFun.jl")
 ```julia
 using EyeFun
 
-# One-step reader into a unified EyeData object (auto-detects .edf, .asc, .idf, .txt, .tsv, .csv)
+# Read directly into an EyeData object (auto-detects .edf, .asc, .idf, .txt, .tsv, .csv)
 df = read_et_data("path/to/recording.edf"; trial_time_zero="Stimulus On")
 
 # Or inspect the low-level EyeLink file container first:
@@ -75,7 +75,7 @@ msg = messages(df)    # time, message
 
 ## Plotting
 
-Plotting functions in EyeFun.jl operate on the whole dataset by default, allowing you to view aggregate behavior. To inspect specific subsets (such as a single trial or range of trials), pass a `NamedTuple` to the `selection` keyword:
+Plotting functions operate on the full dataset by default. To plot a subset (such as a single trial or trial range), pass a `NamedTuple` to the `selection` keyword:
 
 ```julia
 # Launch the interactive data viewer

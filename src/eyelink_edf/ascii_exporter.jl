@@ -4,8 +4,6 @@ using DataFrames
 using Dates
 using Printf
 
-# Write decimal values into a pre-allocated Vector{UInt8} at position `pos` and return new `pos`.
-
 """Write a UInt32 as decimal ASCII digits into buf at pos. Returns new pos."""
 @inline function _buf_uint32!(buf::Vector{UInt8}, pos::Int, v::UInt32)
     if v == UInt32(0)
@@ -455,12 +453,6 @@ function _eye_long(eye_code::Integer)
     return "LEFT"  # EYE_LEFT or unknown
 end
 
-"""Map recording eye code to the single-letter used in event lines (SFIX, ESACC, ...)."""
-function _eye_letter(eye_code::Integer)
-    eye_code == EYE_RIGHT && return "R"
-    return "L"
-end
-
 """Map pupil_type code to the keyword used in the PUPIL line."""
 function _pupil_keyword(pupil_type::Integer)
     pupil_type == PUPIL_DIAMETER && return "DIAMETER"
@@ -569,7 +561,7 @@ function _append_rec_start_lines!(
 end
 
 @inline function _msg_ascii_status(s::AbstractString)::Int
-    # 1 = clean single-line printable ASCII; 0 = needs slow path (Unicode / newline / nul); -1 = non-printable
+    # 1 = single-line printable ASCII; 0 = Unicode, newline, or NUL; -1 = non-printable
     nb = ncodeunits(s)
     @inbounds for i = 1:nb
         b = codeunit(s, i)

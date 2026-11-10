@@ -157,14 +157,6 @@ function _adaptive_ivt_stats(
     return (max(10.0, pt), mean_v, sigma)
 end
 
-function _adaptive_ivt_threshold(
-    vel::AbstractVector{<:AbstractFloat},
-    lo::Int,
-    hi::Int,
-)::Float64
-    return _adaptive_ivt_stats(vel, lo, hi)[1]
-end
-
 function _refine_saccades_and_pso_u8!(
     labels::Vector{UInt8},
     vel::AbstractVector{<:AbstractFloat},

@@ -231,7 +231,6 @@ function _savgol_local_eval(
     end
 
     d = eff_p + 1
-    max_pow = 2 * eff_p
     @inbounds begin
         for c = 1:d, r = 1:d
             G[r, c] = 0.0
@@ -254,7 +253,6 @@ function _savgol_local_eval(
                 end
                 r < d && (p_r *= dx)
             end
-            _ = max_pow
         end
         # Tiny ridge on diagonal for numerical safety on ill-conditioned gaps
         for r = 1:d

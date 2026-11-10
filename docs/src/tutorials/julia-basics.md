@@ -211,7 +211,7 @@ julia> "hello" * " " * "world"
 
 ## Dictionaries
 
-Key–value storage, useful for mapping trigger codes to condition labels:
+Key-value storage, useful for mapping trigger codes to condition labels:
 
 ```julia-repl
 julia> triggers = Dict("MSG_1" => "standard", "MSG_2" => "deviant")
@@ -374,7 +374,7 @@ julia> methods(describe)
 # 3 methods for generic function "describe"
 ```
 
-Types in Julia are organised in a hierarchy that you can explore with `supertype` and `subtypes`. Both `Int64` and `Float64` are subtypes of `Number`, so you can write a single method that accepts any number:
+Types in Julia form a hierarchy that can be inspected with `supertype` and `subtypes`. Both `Int64` and `Float64` are subtypes of `Number`, so a single method can accept any number:
 
 ```julia-repl
 julia> double(x::Number) = x * 2
@@ -413,5 +413,5 @@ help?> read_et_data
 | --- | --- |
 | Julia Manual | [docs.julialang.org](https://docs.julialang.org/en/v1/) |
 | Julia learning resources | [julialang.org/learning](https://julialang.org/learning/) |
-| MATLAB–Python–Julia cheat sheet | [cheatsheets.quantecon.org](https://cheatsheets.quantecon.org/) |
+| MATLAB-Python-Julia cheat sheet | [cheatsheets.quantecon.org](https://cheatsheets.quantecon.org/) |
 | Think Julia (free book) | [benlauwens.github.io/ThinkJulia.jl](https://benlauwens.github.io/ThinkJulia.jl/latest/book.html) |

@@ -12,7 +12,6 @@
         df_ivt = deepcopy(df)
         detect_events!(df_ivt; method = :ivt, velocity_threshold = 30.0)
 
-        # Column schema must match
         for col in [
             :in_fix,
             :fix_gavx,
@@ -31,13 +30,11 @@
             @test hasproperty(df_ivt.df, col)
         end
 
-        # Types
         @test eltype(df_ivt.df.in_fix) == Bool
         @test eltype(df_ivt.df.in_sacc) == Bool
         @test eltype(df_ivt.df.fix_gavx) == Float64
         @test eltype(df_ivt.df.sacc_ampl) == Float64
 
-        # Should find some fixations and saccades
         ivt_fix_count = count(
             i -> df_ivt.df.in_fix[i] && (i == 1 || !df_ivt.df.in_fix[i-1]),
             eachindex(df_ivt.df.in_fix),
@@ -48,17 +45,13 @@
         )
         @test ivt_fix_count > 0
         @test ivt_sacc_count > 0
-
-        # Fixation count should be in the right ballpark (within 5×)
         @test ivt_fix_count > eyelink_fix_count ÷ 5
         @test ivt_fix_count < eyelink_fix_count * 5
 
-        # Fixation centroids should be within screen bounds
         valid_fx = filter(!isnan, df_ivt.df.fix_gavx)
         @test !isempty(valid_fx)
-        @test all(v -> -500 < v < 2500, valid_fx)  # generous bounds
+        @test all(v -> -500 < v < 2500, valid_fx)
 
-        # Saccade amplitudes should be positive
         valid_ampl = filter(!isnan, df_ivt.df.sacc_ampl)
         @test !isempty(valid_ampl)
         @test all(>=(0), valid_ampl)
@@ -68,7 +61,6 @@
         df_idt = deepcopy(df)
         detect_events!(df_idt; method = :idt, dispersion_threshold = 1.5)
 
-        # Should find fixations
         idt_fix_count = count(
             i -> df_idt.df.in_fix[i] && (i == 1 || !df_idt.df.in_fix[i-1]),
             eachindex(df_idt.df.in_fix),
@@ -78,21 +70,15 @@
 
     @testset "Prefix mode" begin
         df_pfx = deepcopy(df)
-        # Save original EyeLink values
         orig_in_fix = copy(df_pfx.df.in_fix)
 
         detect_events!(df_pfx; method = :ivt, prefix = :ivt)
 
-        # Original columns should be untouched
         @test df_pfx.df.in_fix == orig_in_fix
-
-        # Prefixed columns should exist
         @test hasproperty(df_pfx.df, :ivt_in_fix)
         @test hasproperty(df_pfx.df, :ivt_fix_gavx)
         @test hasproperty(df_pfx.df, :ivt_sacc_ampl)
         @test hasproperty(df_pfx.df, :ivt_sacc_pvel)
-
-        # Prefixed columns should have data
         @test any(df_pfx.df.ivt_in_fix)
         @test any(df_pfx.df.ivt_in_sacc)
     end
@@ -160,25 +146,20 @@
             eye = :left,
         )
 
-        # Should detect at least 2 fixations
         fix_count = count(
             i -> syn.df.in_fix[i] && (i == 1 || !syn.df.in_fix[i-1]),
             eachindex(syn.df.in_fix),
         )
         @test fix_count >= 2
 
-        # Should detect at least 1 saccade
         sacc_count = count(
             i -> syn.df.in_sacc[i] && (i == 1 || !syn.df.in_sacc[i-1]),
             eachindex(syn.df.in_sacc),
         )
         @test sacc_count >= 1
 
-        # First fixation centroid should be near (500, 500)
         first_fix_x = syn.df.fix_gavx[findfirst(syn.df.in_fix)]
         @test 490 < first_fix_x < 510
-
-        # NaN samples (421:500) are not labeled as saccades
         @test !any(syn.df.in_sacc[421:500])
     end
 

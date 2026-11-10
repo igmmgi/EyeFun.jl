@@ -57,7 +57,7 @@ function Base.show(io::IO, ::MIME"text/plain", smi::SMIFile)
         print(io, "  $ns samples")
         sr > 0 && print(io, " ($(sr_str) Hz")
 
-        # Eye presence (limit to first 1000 samples to avoid O(N) scan on missing eyes)
+        # Check first 1000 samples for eye presence
         check_eye(col) =
             hasproperty(smi.samples, col) &&
             any(!isnan, view(smi.samples[!, col], 1:min(1000, nrow(smi.samples))))

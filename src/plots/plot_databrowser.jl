@@ -1,3 +1,211 @@
+function _match_stimulus_key(filename::AbstractString, stim_dict::Dict, stim_keys::Vector)
+    clean_val_with_ext = split(filename, r"[/\\]")[end]
+    haskey(stim_dict, clean_val_with_ext) && return clean_val_with_ext
+    clean_val_no_ext = lowercase(splitext(clean_val_with_ext)[1])
+    for k in stim_keys
+        if lowercase(splitext(k)[1]) == clean_val_no_ext
+            return k
+        end
+    end
+    return nothing
+end
+
+function _parse_imgload_directive(
+    msg::AbstractString,
+    stim_dict::Dict,
+    stim_keys::Vector,
+    sx::Real,
+    sy::Real,
+)::Union{Nothing,AbstractEyeFunMedia}
+    occursin("IMGLOAD", msg) || return nothing
+    parts = split(msg)
+    idx = findfirst(==("IMGLOAD"), parts)
+    (isnothing(idx) || length(parts) < idx + 2) && return nothing
+
+    pos_cmd = parts[idx+1]
+    filename = ""
+    cx, cy = Float64(sx) / 2, Float64(sy) / 2
+    topleft = false
+    pos_x, pos_y = 0.0, 0.0
+
+    if pos_cmd == "CENTER" || pos_cmd == "FILL"
+        filename = parts[end]
+    elseif pos_cmd == "TOP_LEFT" || pos_cmd == "TOPLEFT"
+        filename = parts[end]
+        topleft = true
+    else
+        px = tryparse(Float64, pos_cmd)
+        py = tryparse(Float64, get(parts, idx + 2, ""))
+        if !isnothing(px) && !isnothing(py) && length(parts) >= idx + 3
+            filename = join(parts[(idx+3):end], " ")
+            pos_x, pos_y = px, py
+            topleft = true
+        else
+            filename = parts[end]
+        end
+    end
+    isempty(filename) && return nothing
+
+    match_k = _match_stimulus_key(filename, stim_dict, stim_keys)
+    isnothing(match_k) && return nothing
+
+    val = stim_dict[match_k]
+    if topleft
+        @debug "Parsed IMGLOAD top-left layout" pos_x pos_y match_k
+        if val isa AbstractMatrix
+            h, w = size(val)
+            cx, cy = pos_x + w / 2, pos_y + h / 2
+        elseif val isa AbstractString && isfile(val)
+            h, w = image_size(val)
+            cx, cy = pos_x + w / 2, pos_y + h / 2
+        else
+            cx, cy = pos_x, pos_y
+        end
+    else
+        @debug "Parsed IMGLOAD centered layout" match_k
+    end
+    return _to_media_item((val, (cx, cy)), sx, sy)
+end
+
+function _discover_segment_stimuli(
+    trial_df::AbstractDataFrame,
+    stim_dict::Dict,
+    stim_keys::Vector,
+    sx::Real,
+    sy::Real,
+)
+    matched_media = AbstractEyeFunMedia[]
+
+    if hasproperty(trial_df, :message)
+        for msg in skipmissing(trial_df.message)
+            item = _parse_imgload_directive(msg, stim_dict, stim_keys, sx, sy)
+            !isnothing(item) && push!(matched_media, item)
+        end
+    end
+
+    if isempty(matched_media)
+        row = trial_df[1, :]
+        for col in names(row)
+            val = row[col]
+            ismissing(val) && continue
+            val_str = strip(string(val))
+            isempty(val_str) && continue
+            match_k = _match_stimulus_key(val_str, stim_dict, stim_keys)
+            if !isnothing(match_k)
+                item = _to_media_item(stim_dict[match_k], sx, sy)
+                if !isnothing(item)
+                    push!(matched_media, item)
+                    @debug "Found variable stimulus" match_k
+                end
+            end
+        end
+    end
+
+    unique!(matched_media)
+    if isempty(matched_media)
+        @debug "No stimulus media found in IMGLOAD or variables"
+        return nothing
+    end
+    return matched_media
+end
+
+function _make_bg_stimulus_callback(
+    df::EyeData,
+    split_by::Union{Nothing,Symbol,Vector{Symbol}},
+    seg_lookup::Dict{Any,AbstractDataFrame},
+    stimuli::Union{Nothing,Dict},
+    match_stimuli::Union{Nothing,Function},
+    sx::Real,
+    sy::Real,
+)
+    stim_dict = isnothing(stimuli) ? Dict{String,Any}() : stimuli
+    cached_vars = !isnothing(match_stimuli) ? EyeFun.variables(df) : nothing
+    stim_keys = collect(keys(stim_dict))
+
+    return function (segment_id)
+        if !isnothing(match_stimuli)
+            all_vars = cached_vars::DataFrame
+            segment_vars = if split_by isa Symbol || isnothing(split_by)
+                col = isnothing(split_by) ? :trial : split_by
+                hasproperty(all_vars, col) ?
+                filter(r -> (!ismissing(r[col]) && r[col] == segment_id), all_vars) :
+                DataFrame()
+            else
+                cols = Symbol.(split_by)
+                all(c -> hasproperty(all_vars, c), cols) ?
+                filter(
+                    r -> Tuple(r[c] for c in cols) == Tuple(segment_id[c] for c in cols),
+                    all_vars,
+                ) : DataFrame()
+            end
+
+            row_arg = if nrow(segment_vars) > 0
+                segment_vars[1, :]
+            else
+                tdf = get(seg_lookup, segment_id, nothing)
+                (isnothing(tdf) || nrow(tdf) == 0) && return nothing
+                tdf[1, :]
+            end
+
+            return applicable(match_stimuli, row_arg, stim_dict) ?
+                   match_stimuli(row_arg, stim_dict) :
+                   match_stimuli(row_arg)
+        end
+
+        trial_df = get(seg_lookup, segment_id, nothing)
+        (isnothing(trial_df) || nrow(trial_df) == 0) && return nothing
+        return _discover_segment_stimuli(trial_df, stim_dict, stim_keys, sx, sy)
+    end
+end
+
+function _play_segment_audio(state::EyeViewerMediaState)
+    isnothing(state.bg_stimulus) && return
+    try
+        segment_id = state.segments[state.trial[]]
+        stim_vals = state.bg_stimulus(segment_id)
+        isnothing(stim_vals) && return
+        sx, sy = state.screen_res
+        media_items = _normalize_media_items(stim_vals, sx, sy)
+
+        # Concatenate in-memory audio buffers into a single stream to avoid ALSA lock contention
+        audio_buffers = Any[]
+        audio_fs = nothing
+        audio_paths = String[]
+        for item in media_items
+            item isa AudioMedia || continue
+            if item.content isa Tuple
+                push!(audio_buffers, item.content[1])
+                audio_fs = item.content[2]
+            elseif item.content isa AbstractString
+                push!(audio_paths, item.content)
+            end
+        end
+
+        if !isempty(audio_paths)
+            @async begin
+                for i in eachindex(audio_paths)
+                    wait(play_wav(audio_paths[i]))
+                    i < length(audio_paths) && sleep(0.3)
+                end
+            end
+        end
+        if !isempty(audio_buffers) && !isnothing(audio_fs)
+            n_sil = round(Int, 0.3 * audio_fs)
+            first_buf = audio_buffers[1]
+            silence =
+                ndims(first_buf) == 1 ? zeros(Float64, n_sil) :
+                zeros(Float64, n_sil, size(first_buf, 2))
+            combined = first_buf
+            for i = 2:length(audio_buffers)
+                combined = vcat(combined, silence, audio_buffers[i])
+            end
+            play_wav((combined, audio_fs))
+        end
+    catch e
+        @warn "Failed to play segment audio" exception = e
+    end
+end
+
 """
     plot_databrowser(df::EyeData; eye=:auto, split_by=nothing, aois=nothing,
                      bg_stimulus=nothing, stimuli=nothing, match_stimuli=nothing)
@@ -62,8 +270,6 @@ function plot_databrowser(
     prefix::Union{Nothing,Symbol} = nothing,
     display_plot::Bool = true,
 )
-
-    # Resolve eye and screen dimensions
     resolved_eye = _resolve_eye(df, eye)
     _ensure_eye_cols!(df, resolved_eye; cols = :gaze)
     _ensure_eye_cols!(df, resolved_eye; cols = :pupil)
@@ -91,195 +297,29 @@ function plot_databrowser(
     )
 
     if !isnothing(stimuli) || !isnothing(match_stimuli)
-        stim_dict = isnothing(stimuli) ? Dict{String,Any}() : stimuli
-        cached_vars = !isnothing(match_stimuli) ? EyeFun.variables(df) : nothing
-        stim_keys = collect(keys(stim_dict))
-        bg_stimulus = function (segment_id)
-            # User-provided layout parser (supports 1-arg `(row)` or 2-arg `(row, stimuli)`)
-            if !isnothing(match_stimuli)
-                all_vars = cached_vars::DataFrame
-                segment_vars = if split_by isa Symbol || isnothing(split_by)
-                    col = isnothing(split_by) ? :trial : split_by
-                    hasproperty(all_vars, col) ?
-                    filter(r -> (!ismissing(r[col]) && r[col] == segment_id), all_vars) :
-                    DataFrame()
-                else
-                    cols = Symbol.(split_by)
-                    all(c -> hasproperty(all_vars, c), cols) ?
-                    filter(
-                        r ->
-                            Tuple(r[c] for c in cols) == Tuple(segment_id[c] for c in cols),
-                        all_vars,
-                    ) : DataFrame()
-                end
-
-                # Fall back to first row of trial_df if variables() lacks split_by columns
-                row_arg = if nrow(segment_vars) > 0
-                    segment_vars[1, :]
-                else
-                    tdf = get(seg_lookup, segment_id, nothing)
-                    (isnothing(tdf) || nrow(tdf) == 0) && return nothing
-                    tdf[1, :]
-                end
-
-                return applicable(match_stimuli, row_arg, stim_dict) ?
-                       match_stimuli(row_arg, stim_dict) :
-                       match_stimuli(row_arg)
-            end
-
-            # Standard Fallback: Auto-discovery logic
-            trial_df = get(seg_lookup, segment_id, nothing)
-            (isnothing(trial_df) || nrow(trial_df) == 0) && return nothing
-
-            matched_media = Any[]
-            row = trial_df[1, :]
-
-            # Auto-discovery: 1. Scan message log for !V IMGLOAD directives
-            if hasproperty(trial_df, :message)
-                for msg in skipmissing(trial_df.message)
-                    if occursin("IMGLOAD", msg)
-                        parts = split(msg)
-                        idx = findfirst(x -> x == "IMGLOAD", parts)
-                        if !isnothing(idx) && length(parts) >= idx + 2
-                            pos_cmd = parts[idx+1]
-
-                            filename = ""
-                            cx, cy = sx / 2, sy / 2  # Default to center
-                            topleft = false
-                            pos_x, pos_y = nothing, nothing
-
-                            if pos_cmd == "CENTER" || pos_cmd == "FILL"
-                                filename = length(parts) > idx + 1 ? parts[end] : ""
-                            elseif pos_cmd == "TOP_LEFT" || pos_cmd == "TOPLEFT"
-                                filename = length(parts) > idx + 1 ? parts[end] : ""
-                                pos_x, pos_y = 0.0, 0.0
-                                topleft = true
-                            else
-                                # Check if it's explicit coordinates: IMGLOAD X Y file.png
-                                px = tryparse(Float64, parts[idx+1])
-                                py = tryparse(Float64, get(parts, idx + 2, ""))
-                                if !isnothing(px) &&
-                                   !isnothing(py) &&
-                                   length(parts) >= idx + 3
-                                    filename = join(parts[(idx+3):end], " ")
-                                    pos_x, pos_y = px, py
-                                    topleft = true
-                                else
-                                    filename = parts[end]
-                                end
-                            end
-
-                            if !isempty(filename)
-                                clean_val_with_ext = split(filename, r"[/\\]")[end]
-                                clean_val_no_ext = splitext(clean_val_with_ext)[1]
-
-                                match_k = nothing
-                                if haskey(stim_dict, clean_val_with_ext)
-                                    match_k = clean_val_with_ext
-                                else
-                                    for k in stim_keys
-                                        if lowercase(splitext(k)[1]) ==
-                                           lowercase(clean_val_no_ext)
-                                            match_k = k
-                                            break
-                                        end
-                                    end
-                                end
-
-                                if !isnothing(match_k)
-                                    if topleft && !isnothing(pos_x) && !isnothing(pos_y)
-                                        @debug "[Auto-Discovery] Parsed IMGLOAD Top-Left Layout" pos_x pos_y match_k
-                                        # Convert top-left hook to center geometry (w/2, h/2 offset)
-                                        mat = stim_dict[match_k]
-                                        if mat isa AbstractMatrix
-                                            h, w = size(mat)
-                                            push!(
-                                                matched_media,
-                                                (mat, (pos_x + w / 2, pos_y + h / 2)),
-                                            )
-                                        elseif mat isa AbstractString && isfile(mat)
-                                            h, w = image_size(mat)
-                                            push!(
-                                                matched_media,
-                                                (mat, (pos_x + w / 2, pos_y + h / 2)),
-                                            )
-                                        else
-                                            push!(matched_media, (mat, (pos_x, pos_y)))
-                                        end
-                                    else
-                                        @debug "[Auto-Discovery] Parsed IMGLOAD Centered Layout" match_k
-                                        push!(matched_media, (stim_dict[match_k], (cx, cy)))
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-
-            # Auto-discovery: 2. Fallback to generic variable metadata strings
-            if isempty(matched_media)
-                for col in names(row)
-                    val = row[col]
-                    ismissing(val) && continue
-
-                    val_str = strip(string(val))
-                    isempty(val_str) && continue
-
-                    clean_val_with_ext = split(val_str, r"[/\\]")[end]
-                    clean_val_no_ext = splitext(clean_val_with_ext)[1]
-
-                    if haskey(stim_dict, clean_val_with_ext)
-                        push!(matched_media, stim_dict[clean_val_with_ext])
-                        @debug "[Auto-Discovery] Found Generic Variable Stimulus" clean_val_with_ext
-                        continue
-                    end
-
-                    for k in stim_keys
-                        if lowercase(splitext(k)[1]) == lowercase(clean_val_no_ext)
-                            if k != clean_val_with_ext
-                                push!(matched_media, stim_dict[k])
-                                @debug "[Auto-Discovery] Found Generic Variable Stimulus (Fuzzy)" k
-                            end
-                        end
-                    end
-                end
-            end
-
-            matched_media = unique(matched_media)
-            if isempty(matched_media)
-                @debug "[Auto-Discovery] No media directives found in IMGLOAD or Variables."
-                return nothing
-            end
-
-            return matched_media
-        end
+        bg_stimulus = _make_bg_stimulus_callback(
+            df,
+            split_by,
+            seg_lookup,
+            stimuli,
+            match_stimuli,
+            sx,
+            sy,
+        )
     end
 
     g_first = segment_views[1]
     auto_window = isnothing(split_by) && nrow(g_first) > 5000 ? 5000 : 0
 
-    state = EyeViewerMediaState(
-        Observable(1),          # segment index
-        Observable(1),          # frame
-        Observable(true),       # show_samples
-        Observable(false),      # show_heatmap
-        Observable(true),       # show_saccades
-        Observable(true),       # show_fixations
-        Observable(false),      # show_blinks
-        Observable(false),      # show_messages
-        Observable(true),       # show_aois
-        Observable(0),          # selected_saccade
-        Observable(0),          # selected_fixation
+    state = EyeViewerMediaState(;
         segments,
         split_by,
-        df.screen_res,
-        resolved_eye,
+        screen_res = df.screen_res,
+        eye = resolved_eye,
         gx_col,
         gy_col,
         pa_col,
-        nothing,                # spatial_zoom
-        auto_window,            # window_samples
+        window_samples = auto_window,
         aois,
         bg_stimulus,
         segment_views,
@@ -343,17 +383,112 @@ function plot_databrowser(
 
     axes = [ax_spatial, ax_polar, ax_xy, ax_vel, ax_pup]
 
+    _cache = Dict{Symbol,Any}()
+    cursor_obs = Dict(
+        :spatial_pts => Observable(Point2f[(0, 0)]),
+        :xy_x_pt => Observable(Point2f[(0, 0)]),
+        :xy_y_pt => Observable(Point2f[(0, 0)]),
+        :vel_pts => Observable(Point2f[(0, 0)]),
+        :pup_pts => Observable(Point2f[(0, 0)]),
+    )
+
+    # Persistent selection highlight observables
+    _hl_sacc_spatial_pts = Observable(Point2f[])
+    _hl_sacc_xy_t = Observable(Float64[])
+    _hl_sacc_vel_t = Observable(Float64[])
+    _hl_sacc_vis = Observable(false)
+
+    _hl_fix_spatial_pts = Observable(Point2f[])
+    _hl_fix_spatial_ms = Observable(10.0)
+    _hl_fix_xy_pts = Observable(Point2f[(0, 0), (0, 0), (0, 0), (0, 0)])
+    _hl_fix_vel_pts = Observable(Point2f[(0, 0), (0, 0), (0, 0), (0, 0)])
+    _hl_fix_vis = Observable(false)
+
+    function _create_overlay_plots!()
+        lines!(
+            axes[1],
+            _hl_sacc_spatial_pts;
+            color = (:green, 0.9),
+            linewidth = 6,
+            visible = _hl_sacc_vis,
+        )
+        vlines!(
+            axes[3],
+            _hl_sacc_xy_t;
+            color = (:green, 0.7),
+            linewidth = 3,
+            visible = _hl_sacc_vis,
+        )
+        vlines!(
+            axes[4],
+            _hl_sacc_vel_t;
+            color = (:green, 0.7),
+            linewidth = 3,
+            visible = _hl_sacc_vis,
+        )
+
+        scatter!(
+            axes[1],
+            _hl_fix_spatial_pts;
+            color = (:red, 0.1),
+            markersize = _hl_fix_spatial_ms,
+            marker = :circle,
+            strokewidth = 3,
+            strokecolor = :red,
+            visible = _hl_fix_vis,
+        )
+        poly!(axes[3], _hl_fix_xy_pts; color = (:red, 0.5), visible = _hl_fix_vis)
+        poly!(axes[4], _hl_fix_vel_pts; color = (:red, 0.5), visible = _hl_fix_vis)
+    end
+
+    function _update_highlight_overlay!()
+        haskey(_cache, :saccades_win) || return
+        saccades = _cache[:saccades_win]::Vector{SaccadeInfo}
+        fixations = get(_cache, :fixations_win, FixationInfo[])::Vector{FixationInfo}
+
+        t = get(_cache, :t_win, Float64[])::Vector{Float64}
+        isempty(t) && return
+
+        sel_s = state.selected_saccade[]
+        if sel_s > 0 && sel_s <= length(saccades)
+            s = saccades[sel_s]
+            _hl_sacc_spatial_pts[] = [Point2f(s.x1, s.y1), Point2f(s.x2, s.y2)]
+            ti = clamp(s.time_idx, 1, length(t))
+            _hl_sacc_xy_t[] = [t[ti]]
+            _hl_sacc_vel_t[] = [t[ti]]
+            _hl_sacc_vis[] = true
+        else
+            _hl_sacc_vis[] = false
+        end
+
+        sel_f = state.selected_fixation[]
+        if sel_f > 0 && sel_f <= length(fixations)
+            f = fixations[sel_f]
+            _hl_fix_spatial_pts[] = [Point2f(f.x, f.y)]
+            _hl_fix_spatial_ms[] = max(3.0, min(f.dur / 10.0, 40.0))
+
+            t_lo = t[clamp(f.time_start, 1, length(t))]
+            t_hi = t[clamp(f.time_end, 1, length(t))]
+
+            xy_h = _cache[:xy_bar_h]
+            vel_h = _cache[:vel_bar_h]
+            _hl_fix_xy_pts[] = Point2f[(t_lo, 0), (t_hi, 0), (t_hi, xy_h), (t_lo, xy_h)]
+            _hl_fix_vel_pts[] = Point2f[(t_lo, 0), (t_hi, 0), (t_hi, vel_h), (t_lo, vel_h)]
+
+            _hl_fix_vis[] = true
+        else
+            _hl_fix_vis[] = false
+        end
+    end
+
     # Left column (under spatial): navigation + toggles
     left_controls = fig[2, 1] = GridLayout(valign = :top)
 
-    trial_label = Observable(_dbnew_segment_label(state))
-    n_segs = length(state.segments)
-
+    trial_label = Observable(_db_segment_label(state))
     window_view_obs = Observable(state.window_samples > 0)
 
     col = 1
     if isnothing(state.split_by)
-        # Single segment: show "All Data" label without navigation buttons
         Label(
             left_controls[1, col],
             "All Data";
@@ -406,49 +541,7 @@ function plot_databrowser(
         col += 1
     end
 
-    toggles = [
-        ("Samples", state.show_samples),
-        ("Heatmap", state.show_heatmap),
-        ("Fixations", state.show_fixations),
-        ("Saccades", state.show_saccades),
-        ("Blinks", state.show_blinks),
-        ("Messages", state.show_messages),
-    ]
-
-    # Only add the AOI checkbox if AOIs were actually provided
-    if !isnothing(state.aois) && !isempty(state.aois)
-        push!(toggles, ("AOIs", state.show_aois))
-    end
-
-    tcol = 0
-    for (i, (label, obs)) in enumerate(toggles)
-        tcol += 1
-        tog = Toggle(left_controls[2, tcol]; active = obs[], tellwidth = true)
-        tcol += 1
-        Label(
-            left_controls[2, tcol],
-            label;
-            fontsize = 12,
-            halign = :left,
-            tellwidth = true,
-        )
-        on(tog.active) do val
-            obs[] = val
-            _dbnew_redraw_window!(
-                axes,
-                state,
-                _cache;
-                window_start = isnothing(sl_scroll) ? 1 : round(Int, sl_scroll.value[]),
-            )
-            _dbnew_add_cursor_dots!(axes, cursor_obs)
-            _dbnew_update_cursor!(cursor_obs, _cache, state)
-            _create_overlay_plots!()
-        end
-    end
-    colgap!(left_controls, 4)
-    rowgap!(left_controls, 4)
-
-    # Scrubber area: sliders in column 2 aligned exactly with plots
+    # Scrubber area: sliders in column 2 aligned with time-series plots
     slider_controls = fig[2, 2] = GridLayout(valign = :top)
 
     g1 = state.segment_views[1]
@@ -456,7 +549,6 @@ function plot_databrowser(
     ws = state.window_samples
     _is_windowed = ws > 0 && n_samples_init > ws
 
-    # Row 1: play button (col 1) + frame slider (col 2)
     frame_range = _is_windowed ? ws : n_samples_init
     btn_play = Button(
         slider_controls[1, 1];
@@ -473,7 +565,6 @@ function plot_databrowser(
         tellwidth = false,
     )
 
-    # Row 2: speed label (col 1) + speed slider (col 2)
     lbl_speed = Label(
         slider_controls[2, 1],
         "Speed:";
@@ -492,7 +583,6 @@ function plot_databrowser(
         tellwidth = false,
     )
 
-    # Row 3: scroll play button (col 1) + scroll slider (col 2)
     btn_scroll_play = Button(
         slider_controls[3, 1];
         label = "▶",
@@ -509,6 +599,47 @@ function plot_databrowser(
         tellwidth = false,
     )
 
+    toggles = [
+        ("Samples", state.show_samples),
+        ("Heatmap", state.show_heatmap),
+        ("Fixations", state.show_fixations),
+        ("Saccades", state.show_saccades),
+        ("Blinks", state.show_blinks),
+        ("Messages", state.show_messages),
+    ]
+
+    if !isnothing(state.aois) && !isempty(state.aois)
+        push!(toggles, ("AOIs", state.show_aois))
+    end
+
+    tcol = 0
+    for (label, obs) in toggles
+        tcol += 1
+        tog = Toggle(left_controls[2, tcol]; active = obs[], tellwidth = true)
+        tcol += 1
+        Label(
+            left_controls[2, tcol],
+            label;
+            fontsize = 12,
+            halign = :left,
+            tellwidth = true,
+        )
+        on(tog.active) do val
+            obs[] = val
+            _db_redraw_window!(
+                axes,
+                state,
+                _cache;
+                window_start = round(Int, sl_scroll.value[]),
+            )
+            _db_add_cursor_dots!(axes, cursor_obs)
+            _db_update_cursor!(cursor_obs, _cache, state)
+            _create_overlay_plots!()
+        end
+    end
+    colgap!(left_controls, 4)
+    rowgap!(left_controls, 4)
+
     on(window_view_obs) do is_win
         btn_scroll_play.blockscene.visible = is_win && isnothing(state.split_by)
         sl_scroll.blockscene.visible = is_win && isnothing(state.split_by)
@@ -522,17 +653,15 @@ function plot_databrowser(
 
         if ws > 0 && n > ws
             sl_scroll.range[] = 1:max(1, n-ws+1)
-            # Avoid triggering the slider hook synchronously if possible, safely bypass set_close_to! cascade
             sl_scroll.value.val = 1
         end
 
-        _dbnew_redraw_window!(axes, state, _cache; reset_zoom = true, window_start = 1)
-        _dbnew_add_cursor_dots!(axes, cursor_obs)
-        _dbnew_update_cursor!(cursor_obs, _cache, state)
+        _db_redraw_window!(axes, state, _cache; reset_zoom = true, window_start = 1)
+        _db_add_cursor_dots!(axes, cursor_obs)
+        _db_update_cursor!(cursor_obs, _cache, state)
         _create_overlay_plots!()
     end
 
-    # Initialize visibility
     btn_scroll_play.blockscene.visible = window_view_obs[] && isnothing(state.split_by)
     sl_scroll.blockscene.visible = window_view_obs[] && isnothing(state.split_by)
 
@@ -567,7 +696,6 @@ function plot_databrowser(
         end
     end
 
-    # Scroll play button: advances window through data
     on(btn_scroll_play.clicks) do _
         _scroll_playing[] = !_scroll_playing[]
         btn_scroll_play.label[] = _scroll_playing[] ? "||" : "▶"
@@ -588,14 +716,6 @@ function plot_databrowser(
         end
     end
 
-    cursor_obs = Dict(
-        :spatial_pts => Observable(Point2f[(0, 0)]),
-        :xy_x_pt => Observable(Point2f[(0, 0)]),
-        :xy_y_pt => Observable(Point2f[(0, 0)]),
-        :vel_pts => Observable(Point2f[(0, 0)]),
-        :pup_pts => Observable(Point2f[(0, 0)]),
-    )
-
     function _goto_trial!(idx::Int)
         idx = clamp(idx, 1, length(state.segments))
         _playing[] = false
@@ -608,21 +728,18 @@ function plot_databrowser(
         g = state.segment_views[idx]
         n = max(1, nrow(g))
 
-        # Update windowed state
         ws = state.window_samples
         if ws > 0 && n > ws
-            if !isnothing(sl_scroll)
-                sl_scroll.range[] = 1:max(1, n-ws+1)
-                set_close_to!(sl_scroll, 1)
-            end
+            sl_scroll.range[] = 1:max(1, n-ws+1)
+            set_close_to!(sl_scroll, 1)
             sl_frame.range[] = 1:ws
         else
             sl_frame.range[] = 1:n
         end
         set_close_to!(sl_frame, 1)
         state.frame[] = 1
-        w_start = isnothing(sl_scroll) ? 1 : sl_scroll.value[]
-        _dbnew_draw_all!(
+        w_start = sl_scroll.value[]
+        _db_draw_all!(
             axes,
             df,
             state,
@@ -631,8 +748,8 @@ function plot_databrowser(
             reset_zoom = true,
             window_start = w_start,
         )
-        _dbnew_add_cursor_dots!(axes, cursor_obs)
-        _dbnew_update_cursor!(cursor_obs, _cache, state)
+        _db_add_cursor_dots!(axes, cursor_obs)
+        _db_update_cursor!(cursor_obs, _cache, state)
         _create_overlay_plots!()
     end
 
@@ -647,7 +764,6 @@ function plot_databrowser(
         end
     end
 
-    # Jump to trial/segment by value, string label, or 1-based index
     if !isnothing(tb_trial)
         on(tb_trial.stored_string) do s
             isnothing(s) && return
@@ -679,23 +795,19 @@ function plot_databrowser(
         end
     end
 
-    # Frame slider: cursor within visible window
     on(sl_frame.value) do f
         w_start = get(_cache, :window_start, 1)
         state.frame[] = w_start + f - 1
-        _dbnew_update_cursor!(cursor_obs, _cache, state)
+        _db_update_cursor!(cursor_obs, _cache, state)
     end
 
-    # Scroll slider: visible window start
-    if !isnothing(sl_scroll)
-        on(sl_scroll.value) do w
-            w_start = round(Int, w)
-            _dbnew_redraw_window!(axes, state, _cache; window_start = w_start)
-            _dbnew_add_cursor_dots!(axes, cursor_obs)
-            _create_overlay_plots!()
-            state.frame[] = w_start + sl_frame.value[] - 1
-            _dbnew_update_cursor!(cursor_obs, _cache, state)
-        end
+    on(sl_scroll.value) do w
+        w_start = round(Int, w)
+        _db_redraw_window!(axes, state, _cache; window_start = w_start)
+        _db_add_cursor_dots!(axes, cursor_obs)
+        _create_overlay_plots!()
+        state.frame[] = w_start + sl_frame.value[] - 1
+        _db_update_cursor!(cursor_obs, _cache, state)
     end
 
     on(events(fig).keyboardbutton) do event
@@ -711,15 +823,15 @@ function plot_databrowser(
                 end
                 return Consume(true)
             elseif event.key == Keyboard.r
-                _dbnew_redraw_window!(
+                _db_redraw_window!(
                     axes,
                     state,
                     _cache;
                     reset_zoom = true,
                     window_start = get(_cache, :window_start, 1),
                 )
-                _dbnew_add_cursor_dots!(axes, cursor_obs)
-                _dbnew_update_cursor!(cursor_obs, _cache, state)
+                _db_add_cursor_dots!(axes, cursor_obs)
+                _db_update_cursor!(cursor_obs, _cache, state)
                 _create_overlay_plots!()
                 return Consume(true)
             elseif event.key == Keyboard.escape
@@ -727,109 +839,13 @@ function plot_databrowser(
                 state.selected_fixation[] = 0
                 _update_highlight_overlay!()
                 return Consume(true)
+            elseif event.key == Keyboard.space && event.action == Keyboard.press
+                _play_segment_audio(state)
+                return Consume(true)
             end
         end
         return Consume(false)
     end
-
-    # Persistent selection highlight observables
-    _hl_sacc_spatial_pts = Observable(Point2f[])
-    _hl_sacc_xy_t = Observable(Float64[])
-    _hl_sacc_vel_t = Observable(Float64[])
-
-    _hl_sacc_vis = Observable(false)
-
-    _hl_fix_spatial_pts = Observable(Point2f[])
-    _hl_fix_spatial_ms = Observable(10.0)
-    _hl_fix_xy_pts = Observable(Point2f[(0, 0), (0, 0), (0, 0), (0, 0)])
-    _hl_fix_vel_pts = Observable(Point2f[(0, 0), (0, 0), (0, 0), (0, 0)])
-    _hl_fix_vis = Observable(false)
-
-    # Create/recreate persistent overlay plots (must be called after any _dbnew_draw_all!)
-    function _create_overlay_plots!()
-        lines!(
-            axes[1],
-            _hl_sacc_spatial_pts;
-            color = (:green, 0.9),
-            linewidth = 6,
-            visible = _hl_sacc_vis,
-        )
-        vlines!(
-            axes[3],
-            _hl_sacc_xy_t;
-            color = (:green, 0.7),
-            linewidth = 3,
-            visible = _hl_sacc_vis,
-        )
-        vlines!(
-            axes[4],
-            _hl_sacc_vel_t;
-            color = (:green, 0.7),
-            linewidth = 3,
-            visible = _hl_sacc_vis,
-        )
-
-        scatter!(
-            axes[1],
-            _hl_fix_spatial_pts;
-            color = (:red, 0.1),
-            markersize = _hl_fix_spatial_ms,
-            marker = :circle,
-            strokewidth = 3,
-            strokecolor = :red,
-            visible = _hl_fix_vis,
-        )
-        poly!(axes[3], _hl_fix_xy_pts; color = (:red, 0.5), visible = _hl_fix_vis)
-        poly!(axes[4], _hl_fix_vel_pts; color = (:red, 0.5), visible = _hl_fix_vis)
-    end
-
-    function _update_highlight_overlay!()
-        haskey(_cache, :saccades_win) || return
-        saccades = _cache[:saccades_win]::Vector{SaccadeInfo}
-        fixations = get(_cache, :fixations_win, FixationInfo[])::Vector{FixationInfo}
-
-        # Use cached windowed time (matches what's plotted on axes)
-        t = get(_cache, :t_win, Float64[])::Vector{Float64}
-        isempty(t) && return
-
-        # Saccade highlight
-        sel_s = state.selected_saccade[]
-
-
-        if sel_s > 0 && sel_s <= length(saccades)
-            s = saccades[sel_s]
-            _hl_sacc_spatial_pts[] = [Point2f(s.x1, s.y1), Point2f(s.x2, s.y2)]
-            ti = clamp(s.time_idx, 1, length(t))
-            _hl_sacc_xy_t[] = [t[ti]]
-            _hl_sacc_vel_t[] = [t[ti]]
-
-            _hl_sacc_vis[] = true
-        else
-            _hl_sacc_vis[] = false
-        end
-
-        # Fixation highlight
-        sel_f = state.selected_fixation[]
-        if sel_f > 0 && sel_f <= length(fixations)
-            f = fixations[sel_f]
-            _hl_fix_spatial_pts[] = [Point2f(f.x, f.y)]
-            _hl_fix_spatial_ms[] = max(3.0, min(f.dur / 10.0, 40.0))
-
-            t_lo = t[clamp(f.time_start, 1, length(t))]
-            t_hi = t[clamp(f.time_end, 1, length(t))]
-
-            xy_h = _cache[:xy_bar_h]
-            vel_h = _cache[:vel_bar_h]
-            _hl_fix_xy_pts[] = Point2f[(t_lo, 0), (t_hi, 0), (t_hi, xy_h), (t_lo, xy_h)]
-            _hl_fix_vel_pts[] = Point2f[(t_lo, 0), (t_hi, 0), (t_hi, vel_h), (t_lo, vel_h)]
-
-            _hl_fix_vis[] = true
-        else
-            _hl_fix_vis[] = false
-        end
-    end
-
-
 
     function _toggle_fixation!(idx::Int, within_threshold::Bool)
         if within_threshold && state.selected_fixation[] == idx
@@ -961,8 +977,7 @@ function plot_databrowser(
     register_interaction!(ax_xy, :event_select, _make_time_select_handler())
     register_interaction!(ax_vel, :event_select, _make_time_select_handler())
 
-    _cache = Dict{Symbol,Any}()
-    _dbnew_draw_all!(
+    _db_draw_all!(
         axes,
         df,
         state,
@@ -971,70 +986,9 @@ function plot_databrowser(
         reset_zoom = true,
         window_start = 1,
     )
-    _dbnew_add_cursor_dots!(axes, cursor_obs)
-    _dbnew_update_cursor!(cursor_obs, _cache, state)
+    _db_add_cursor_dots!(axes, cursor_obs)
+    _db_update_cursor!(cursor_obs, _cache, state)
     _create_overlay_plots!()
-
-    on(events(fig).keyboardbutton) do event
-        if event.action == Keyboard.press && event.key == Keyboard.space
-            if !isnothing(state.bg_stimulus)
-                try
-                    segment_id = state.segments[state.trial[]]
-                    stim_vals = state.bg_stimulus(segment_id)
-                    if !isnothing(stim_vals)
-                        items = stim_vals isa AbstractVector ? stim_vals : [stim_vals]
-                        # Collect all audio buffers first, then concatenate and play as one stream
-                        # to avoid ALSA device lock contention from concurrent @async calls.
-                        audio_buffers = []
-                        audio_fs = nothing
-                        audio_paths = String[]
-                        for val in items
-                            if val isa AudioMedia && val.content isa Tuple
-                                push!(audio_buffers, val.content[1])
-                                audio_fs = val.content[2]
-                            elseif val isa AudioMedia && val.content isa AbstractString
-                                push!(audio_paths, val.content)
-                            elseif val isa Tuple &&
-                                   length(val) >= 2 &&
-                                   val[2] isa Number &&
-                                   val[1] isa AbstractArray
-                                push!(audio_buffers, val[1])
-                                audio_fs = val[2]
-                            elseif val isa AbstractString &&
-                                   endswith(lowercase(val), ".wav")
-                                push!(audio_paths, val)
-                            end
-                        end
-                        if !isempty(audio_paths)
-                            @async begin
-                                for i in 1:length(audio_paths)
-                                    wait(play_wav(audio_paths[i]))
-                                    if i < length(audio_paths)
-                                        sleep(0.3)
-                                    end
-                                end
-                            end
-                        end
-                        if !isempty(audio_buffers) && !isnothing(audio_fs)
-                            # Insert 0.3s silence between clips
-                            n_sil = round(Int, 0.3 * audio_fs)
-                            first_buf = audio_buffers[1]
-                            silence =
-                                ndims(first_buf) == 1 ? zeros(Float64, n_sil) :
-                                zeros(Float64, n_sil, size(first_buf, 2))
-                            combined = first_buf
-                            for i = 2:length(audio_buffers)
-                                combined = vcat(combined, silence, audio_buffers[i])
-                            end
-                            play_wav((combined, audio_fs))
-                        end
-                    end
-                catch
-                end
-            end
-        end
-        return Consume(false)
-    end
 
     # Figure layout columns and UI rows
     colsize!(fig.layout, 1, Relative(0.58))

@@ -51,19 +51,7 @@ function plot_pupil(
         prev_tv = 0.0
 
         @inbounds for i = 1:n
-            new_seg = false
-            if i > 1
-                new_part = !isnothing(p_col) && !isequal(p_col[i], p_col[i-1])
-                new_seg =
-                    new_part ||
-                    (!isnothing(tr_col) && !isequal(tr_col[i], tr_col[i-1])) ||
-                    (Float64(times[i]) < Float64(times[i-1]))
-                if new_part || Float64(times[i]) < Float64(times[i-1])
-                    part_t0 = Float64(times[i])
-                end
-            end
-
-            if new_seg
+            if i > 1 && _is_new_plot_trial(tr_col, p_col, times, i)
                 if in_blk_run
                     !isnan(blk_t0) && !isnan(prev_tv) && begin
                         push!(xlo, blk_t0)
@@ -77,12 +65,7 @@ function plot_pupil(
                 end
             end
 
-            tv = if !isnothing(trel)
-                rv = trel[i]
-                ismissing(rv) ? NaN : Float64(rv)
-            else
-                Float64(times[i]) - part_t0
-            end
+            tv, part_t0 = _plot_sample_time(times, trel, p_col, i, part_t0)
 
             if !isnothing(bm)
                 cur_b = bm[i] === true
@@ -116,31 +99,4 @@ function plot_pupil(
     end
 
     return fig
-end
-
-"""Shade blink periods on an axis as gray vertical bands."""
-function _shade_blinks!(ax, samples, t::Vector{Float64}, c_blink::Symbol = :in_blink)
-    !hasproperty(samples, c_blink) && return
-    bm = samples[!, c_blink]
-    dt_ms = length(t) > 1 ? max(1e-3, (t[end] - t[1]) / max(1, length(t) - 1)) : 1.0
-    xlo = Float64[]
-    xhi = Float64[]
-    n = length(bm)
-    i = 1
-    @inbounds while i <= n
-        if bm[i]
-            j = i + 1
-            while j <= n && bm[j]
-                j += 1
-            end
-            lo = t[i]
-            hi = j <= length(t) ? t[j] : t[end]
-            push!(xlo, lo)
-            push!(xhi, max(lo + dt_ms, hi))
-            i = j
-        else
-            i += 1
-        end
-    end
-    !isempty(xlo) && Makie.vspan!(ax, xlo, xhi; color = (:gray, 0.15))
 end

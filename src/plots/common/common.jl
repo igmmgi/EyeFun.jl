@@ -266,6 +266,29 @@ end
     return false
 end
 
+@inline function _plot_sample_time(
+    times::AbstractVector,
+    trel::Union{Nothing,AbstractVector},
+    p_col::Union{Nothing,AbstractVector},
+    i::Int,
+    part_t0::Float64,
+)::Tuple{Float64,Float64}
+    ti = Float64(@inbounds times[i])
+    if i > 1 && (
+        (!isnothing(p_col) && !isequal(@inbounds(p_col[i]), @inbounds(p_col[i-1]))) ||
+        ti < Float64(@inbounds times[i-1])
+    )
+        part_t0 = ti
+    end
+    tv = if !isnothing(trel)
+        rv = @inbounds trel[i]
+        ismissing(rv) ? NaN : Float64(rv)
+    else
+        ti - part_t0
+    end
+    return tv, part_t0
+end
+
 function _nonmissing_col_mask(col::AbstractVector)
     mask = BitVector(undef, length(col))
     @inbounds for i in eachindex(col)

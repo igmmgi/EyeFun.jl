@@ -207,6 +207,6 @@ function write_et_ascii(smi::SMIFile, path::String; verbose::Bool = false)
         end
     end
 
-    verbose && @info "SMI TXT: wrote $(nrow(df)) samples → $path"
+    verbose && @info "SMI TXT: wrote $(nrow(df)) samples to $path"
     return nothing
 end
