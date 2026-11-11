@@ -109,6 +109,71 @@ function _cyclopean_pair!(
     return out
 end
 
+@inline _as_float_vec(v::AbstractVector{<:AbstractFloat}) = v
+@inline _as_float_vec(v::AbstractVector) = Float64[ismissing(x) ? NaN : Float64(x) for x in v]
+
+function _ensure_float_col!(df::DataFrame, col::Symbol)
+    hasproperty(df, col) || return nothing
+    v = df[!, col]
+    eltype(v) <: AbstractFloat && return v
+    cm = DataFrames.colmetadata(df, col, "eyefun_coords", nothing)
+    fv = _as_float_vec(v)
+    df[!, col] = fv
+    !isnothing(cm) && DataFrames.colmetadata!(df, col, "eyefun_coords", cm; style = :note)
+    return fv
+end
+
+@inline function _group_seam_cols(df::AbstractDataFrame)
+    tr_col = hasproperty(df, :trial) ? df[!, :trial] : nothing
+    pt_col = hasproperty(df, :participant) ? df[!, :participant] : nothing
+    return tr_col, pt_col
+end
+
+@inline function _is_group_row_contig(
+    r_prev::Int,
+    r_cur::Int,
+    tr_col::Union{Nothing,AbstractVector},
+    pt_col::Union{Nothing,AbstractVector},
+)::Bool
+    r_cur == r_prev + 1 || return false
+    if !isnothing(tr_col)
+        tp = @inbounds tr_col[r_prev]
+        tc = @inbounds tr_col[r_cur]
+        (tc === tp || isequal(tc, tp)) || return false
+    end
+    if !isnothing(pt_col)
+        pp = @inbounds pt_col[r_prev]
+        pc = @inbounds pt_col[r_cur]
+        (pc === pp || isequal(pc, pp)) || return false
+    end
+    return true
+end
+
+function _check_and_merge_eye_coords(
+    d::AbstractDataFrame,
+    cL::Symbol,
+    cR::Symbol,
+    fb::Symbol,
+)::Symbol
+    hasL = hasproperty(d, cL)
+    hasR = hasproperty(d, cR)
+    if hasL && hasR
+        mL = DataFrames.colmetadata(d, cL, "eyefun_coords", fb)
+        mR = DataFrames.colmetadata(d, cR, "eyefun_coords", fb)
+        mL === mR || throw(
+            ArgumentError(
+                "Cannot average :$cL ($mL) and :$cR ($mR) with mismatched coordinate systems; convert both eyes first.",
+            ),
+        )
+        return mL
+    elseif hasL
+        return DataFrames.colmetadata(d, cL, "eyefun_coords", fb)
+    elseif hasR
+        return DataFrames.colmetadata(d, cR, "eyefun_coords", fb)
+    end
+    return fb
+end
+
 function _cyclopean_col(df::AbstractDataFrame, cL::Symbol, cR::Symbol)
     n = nrow(df)
     hasL = hasproperty(df, cL)
@@ -120,12 +185,10 @@ function _cyclopean_col(df::AbstractDataFrame, cL::Symbol, cR::Symbol)
         return _cyclopean_pair!(Vector{T}(undef, n), vL, vR)
     elseif hasL
         vL = df[!, cL]
-        return eltype(vL) <: AbstractFloat ? copy(vL) :
-               Float64[ismissing(v) ? NaN : Float64(v) for v in vL]
+        return eltype(vL) <: AbstractFloat ? copy(vL) : _as_float_vec(vL)
     elseif hasR
         vR = df[!, cR]
-        return eltype(vR) <: AbstractFloat ? copy(vR) :
-               Float64[ismissing(v) ? NaN : Float64(v) for v in vR]
+        return eltype(vR) <: AbstractFloat ? copy(vR) : _as_float_vec(vR)
     else
         return fill(NaN, n)
     end
@@ -142,11 +205,16 @@ Return `ed`.
 """
 function average_eyes!(ed::EyeData)
     d = ed.df
+    fb = ed.coords
     if hasproperty(d, :gxL) || hasproperty(d, :gxR)
+        mx = _check_and_merge_eye_coords(d, :gxL, :gxR, fb)
         d[!, :gx] = _cyclopean_col(d, :gxL, :gxR)
+        mx !== fb && DataFrames.colmetadata!(d, :gx, "eyefun_coords", mx; style = :note)
     end
     if hasproperty(d, :gyL) || hasproperty(d, :gyR)
+        my = _check_and_merge_eye_coords(d, :gyL, :gyR, fb)
         d[!, :gy] = _cyclopean_col(d, :gyL, :gyR)
+        my !== fb && DataFrames.colmetadata!(d, :gy, "eyefun_coords", my; style = :note)
     end
     if hasproperty(d, :paL) || hasproperty(d, :paR)
         d[!, :pa] = _cyclopean_col(d, :paL, :paR)
@@ -164,23 +232,29 @@ function _ensure_eye_cols!(ed::EyeData, eye::Symbol; cols::Symbol = :gaze)
     return nothing
 end
 
-@inline function _get_gaze_vecs(samples::AbstractDataFrame, eye::Symbol)
+@inline function _get_gaze_vecs(
+    samples::AbstractDataFrame,
+    eye::Symbol;
+    fallback_coords::Symbol = :px,
+)
     if eye == :both
         if hasproperty(samples, :gx) && hasproperty(samples, :gy)
-            return samples[!, :gx], samples[!, :gy]
+            return _as_float_vec(samples[!, :gx]), _as_float_vec(samples[!, :gy])
         end
+        _check_and_merge_eye_coords(samples, :gxL, :gxR, fallback_coords)
+        _check_and_merge_eye_coords(samples, :gyL, :gyR, fallback_coords)
         return _cyclopean_col(samples, :gxL, :gxR), _cyclopean_col(samples, :gyL, :gyR)
     end
     ecols = _eye_columns(eye)
-    return samples[!, ecols.gx], samples[!, ecols.gy]
+    return _as_float_vec(samples[!, ecols.gx]), _as_float_vec(samples[!, ecols.gy])
 end
 
 @inline function _get_pupil_vec(samples::AbstractDataFrame, eye::Symbol)
     if eye == :both
-        hasproperty(samples, :pa) && return samples[!, :pa]
+        hasproperty(samples, :pa) && return _as_float_vec(samples[!, :pa])
         return _cyclopean_col(samples, :paL, :paR)
     end
-    return samples[!, _eye_columns(eye).pa]
+    return _as_float_vec(samples[!, _eye_columns(eye).pa])
 end
 
 function _mark_equal!(mask::BitVector, col::AbstractVector, val)
@@ -289,9 +363,6 @@ function _resolve_group_cols(dat, group_by)
         error("Grouping columns $cols not found in DataFrame.")
     return cols
 end
-
-@inline _coord_units_per_deg(ed::EyeData)::Float64 =
-    ed.coords === :deg ? 1.0 : pixels_per_degree(ed)
 
 """
     _valid_groups(df_or_samples, group_by) -> (grouped, group_cols)
@@ -427,38 +498,6 @@ function _foreach_trial_segment(f::F, df::AbstractDataFrame) where {F}
 end
 
 """
-    _resolve_time_window(g::AbstractDataFrame, time_window)
-
-Resolve the time window for a specific group of samples `g`.
-Supports `(start, end)` tuples with real numbers, or tuples of Symbols representing
-column names in `g` containing the window bounds (e.g. `(:target_onset, :target_offset)`).
-Returns `(NaN, NaN)` if a Symbol bound evaluates to `missing` or `NaN` in `g`.
-"""
-function _resolve_time_window(g::AbstractDataFrame, time_window)
-    isnothing(time_window) && return nothing
-    if time_window isa Tuple && length(time_window) == 2
-        nrow(g) == 0 && return (NaN, NaN)
-        t_start, t_end = time_window
-        start_val = if t_start isa Symbol
-            hasproperty(g, t_start) || error("time_window column :$t_start not found in DataFrame.")
-            v = g[1, t_start]
-            ismissing(v) ? NaN : Float64(v)
-        else
-            Float64(t_start)
-        end
-        end_val = if t_end isa Symbol
-            hasproperty(g, t_end) || error("time_window column :$t_end not found in DataFrame.")
-            v = g[1, t_end]
-            ismissing(v) ? NaN : Float64(v)
-        else
-            Float64(t_end)
-        end
-        return (start_val, end_val)
-    end
-    error("time_window must be nothing, or a tuple of two numbers or column symbols.")
-end
-
-"""
     counts(v::AbstractVector{Bool}) -> Int
 
 Count the number of onset transitions (false → true) in a Bool vector.
@@ -466,9 +505,9 @@ Useful for counting discrete events in sample-level annotation columns.
 
 # Example
 ```julia
-counts(df.in_fix)     # number of fixations
-counts(df.in_sacc)    # number of saccades
-counts(df.in_blink)   # number of blinks
+counts(ed.df.in_fix)     # number of fixations
+counts(ed.df.in_sacc)    # number of saccades
+counts(ed.df.in_blink)   # number of blinks
 ```
 """
 function counts(v::AbstractVector{Bool})
@@ -712,10 +751,13 @@ function _spatial_precision_kernel(
     in_fix::Union{Nothing,AbstractVector{Bool}},
     in_sacc::Union{Nothing,AbstractVector{Bool}},
     in_blink::Union{Nothing,AbstractVector{Bool}},
+    rows::AbstractVector{Int},
+    tr_col::Union{Nothing,AbstractVector},
+    pt_col::Union{Nothing,AbstractVector},
     inv_ppd::Float64,
     bcea_k::Float64,
 )
-    n = length(gx)
+    n = length(rows)
     s2s_sq_sum = 0.0
     s2s_cnt = 0
     sxx = 0.0
@@ -727,9 +769,11 @@ function _spatial_precision_kernel(
     if !isnothing(in_fix)
         i = 1
         @inbounds while i <= n
-            if in_fix[i]
+            if in_fix[rows[i]]
                 j = i + 1
-                while j <= n && in_fix[j]
+                while j <= n &&
+                          in_fix[rows[j]] &&
+                          _is_group_row_contig(rows[j-1], rows[j], tr_col, pt_col)
                     j += 1
                 end
                 j_end = j - 1
@@ -740,8 +784,9 @@ function _spatial_precision_kernel(
                 prev_x = 0.0
                 prev_y = 0.0
                 for k = i:j_end
-                    xk = Float64(gx[k])
-                    yk = Float64(gy[k])
+                    rk = rows[k]
+                    xk = Float64(gx[rk])
+                    yk = Float64(gy[rk])
                     if !isnan(xk) && !isnan(yk)
                         sum_x += xk
                         sum_y += yk
@@ -763,8 +808,9 @@ function _spatial_precision_kernel(
                     mx = sum_x / cnt
                     my = sum_y / cnt
                     for k = i:j_end
-                        xk = Float64(gx[k])
-                        yk = Float64(gy[k])
+                        rk = rows[k]
+                        xk = Float64(gx[rk])
+                        yk = Float64(gy[rk])
                         if !isnan(xk) && !isnan(yk)
                             dx = xk - mx
                             dy = yk - my
@@ -784,56 +830,71 @@ function _spatial_precision_kernel(
             end
         end
     else
-        sum_x = 0.0
-        sum_y = 0.0
-        prev_ok = false
-        prev_x = 0.0
-        prev_y = 0.0
-        @inbounds for i = 1:n
-            xi = Float64(gx[i])
-            yi = Float64(gy[i])
-            ok =
-                !isnan(xi) &&
-                !isnan(yi) &&
-                (isnothing(in_sacc) || !in_sacc[i]) &&
-                (isnothing(in_blink) || !in_blink[i])
-            if ok
-                sum_x += xi
-                sum_y += yi
-                n_used += 1
-                if prev_ok
-                    dx = xi - prev_x
-                    dy = yi - prev_y
-                    s2s_sq_sum += dx * dx + dy * dy
-                    s2s_cnt += 1
-                end
-                prev_x = xi
-                prev_y = yi
-                prev_ok = true
-            else
-                prev_ok = false
+        i = 1
+        @inbounds while i <= n
+            j = i + 1
+            while j <= n && _is_group_row_contig(rows[j-1], rows[j], tr_col, pt_col)
+                j += 1
             end
-        end
-        if n_used >= 2
-            mx = sum_x / n_used
-            my = sum_y / n_used
-            @inbounds for i = 1:n
-                xi = Float64(gx[i])
-                yi = Float64(gy[i])
+            j_end = j - 1
+            sum_x = 0.0
+            sum_y = 0.0
+            cnt = 0
+            prev_ok = false
+            prev_x = 0.0
+            prev_y = 0.0
+            for k = i:j_end
+                rk = rows[k]
+                xi = Float64(gx[rk])
+                yi = Float64(gy[rk])
                 ok =
                     !isnan(xi) &&
                     !isnan(yi) &&
-                    (isnothing(in_sacc) || !in_sacc[i]) &&
-                    (isnothing(in_blink) || !in_blink[i])
+                    (isnothing(in_sacc) || !in_sacc[rk]) &&
+                    (isnothing(in_blink) || !in_blink[rk])
                 if ok
-                    dx = xi - mx
-                    dy = yi - my
-                    sxx += dx * dx
-                    syy += dy * dy
-                    sxy += dx * dy
+                    sum_x += xi
+                    sum_y += yi
+                    cnt += 1
+                    if prev_ok
+                        dx = xi - prev_x
+                        dy = yi - prev_y
+                        s2s_sq_sum += dx * dx + dy * dy
+                        s2s_cnt += 1
+                    end
+                    prev_x = xi
+                    prev_y = yi
+                    prev_ok = true
+                else
+                    prev_ok = false
                 end
             end
-            dof = n_used - 1
+            if cnt >= 2
+                mx = sum_x / cnt
+                my = sum_y / cnt
+                for k = i:j_end
+                    rk = rows[k]
+                    xi = Float64(gx[rk])
+                    yi = Float64(gy[rk])
+                    ok =
+                        !isnan(xi) &&
+                        !isnan(yi) &&
+                        (isnothing(in_sacc) || !in_sacc[rk]) &&
+                        (isnothing(in_blink) || !in_blink[rk])
+                    if ok
+                        dx = xi - mx
+                        dy = yi - my
+                        sxx += dx * dx
+                        syy += dy * dy
+                        sxy += dx * dy
+                    end
+                end
+                dof += (cnt - 1)
+                n_used += cnt
+            elseif cnt == 1
+                n_used += 1
+            end
+            i = j
         end
     end
 
@@ -903,6 +964,7 @@ function spatial_precision(
     sacc_all = has_sacc ? d[!, c_sacc] : nothing
     blink_all = has_blink ? d[!, c_blink] : nothing
 
+    tr_col, pt_col = _group_seam_cols(d)
     ng = length(grouped)
     row_first_idx = Vector{Int}(undef, ng)
     nsamp_v = Vector{Int}(undef, ng)
@@ -914,11 +976,14 @@ function spatial_precision(
         rows = parentindices(grouped[gi])[1]
         row_first_idx[gi] = rows[1]
         sp = _spatial_precision_kernel(
-            view(gx_all, rows),
-            view(gy_all, rows),
-            has_fix ? view(fix_all, rows) : nothing,
-            has_sacc ? view(sacc_all, rows) : nothing,
-            has_blink ? view(blink_all, rows) : nothing,
+            gx_all,
+            gy_all,
+            fix_all,
+            sacc_all,
+            blink_all,
+            rows,
+            tr_col,
+            pt_col,
             inv_ppd,
             bcea_k,
         )
@@ -951,6 +1016,8 @@ function _group_summary_kernel!(
     sacc_ampl::Union{Nothing,AbstractVector{<:Real}},
     in_blink::Union{Nothing,AbstractVector{Bool}},
     rows::AbstractVector{Int},
+    tr_col::Union{Nothing,AbstractVector} = nothing,
+    pt_col::Union{Nothing,AbstractVector} = nothing,
 )
     n_samples = length(rows)
     valid_n = 0
@@ -975,7 +1042,7 @@ function _group_summary_kernel!(
         @inbounds for k = 1:n_samples
             r = rows[k]
             cur = in_fix[r]
-            if cur && (!prev || r != prev_r + 1) && !isnan(fix_gavx[r])
+            if cur && (!prev || !_is_group_row_contig(prev_r, r, tr_col, pt_col)) && !isnan(fix_gavx[r])
                 fd = Float64(fix_dur[r])
                 push!(fix_durs, fd)
                 fix_sum += fd
@@ -996,7 +1063,7 @@ function _group_summary_kernel!(
         @inbounds for k = 1:n_samples
             r = rows[k]
             cur = in_sacc[r]
-            if cur && (!prev || r != prev_r + 1) && !isnan(sacc_pvel[r])
+            if cur && (!prev || !_is_group_row_contig(prev_r, r, tr_col, pt_col)) && !isnan(sacc_pvel[r])
                 n_sacc += 1
                 sacc_pvel_sum += Float64(sacc_pvel[r])
                 if !isnothing(sacc_ampl) && !isnan(sacc_ampl[r])
@@ -1016,7 +1083,7 @@ function _group_summary_kernel!(
         @inbounds for k = 1:n_samples
             r = rows[k]
             cur = in_blink[r]
-            if cur && (!prev || r != prev_r + 1)
+            if cur && (!prev || !_is_group_row_contig(prev_r, r, tr_col, pt_col))
                 n_blinks += 1
             end
             prev = cur
@@ -1124,6 +1191,7 @@ function group_summary(
     fix_durs = Float64[]
     sizehint!(fix_durs, 64)
 
+    tr_col, pt_col = _group_seam_cols(d)
     if !isnothing(contig_ranges)
         @inbounds for gi = 1:ng
             rows = contig_ranges[gi]
@@ -1141,6 +1209,8 @@ function group_summary(
                 sampl_all,
                 in_blink_all,
                 rows,
+                tr_col,
+                pt_col,
             )
             nfix_v[gi] = s.n_fixations
             mfd_v[gi] = s.mean_fix_dur
@@ -1169,6 +1239,8 @@ function group_summary(
                 sampl_all,
                 in_blink_all,
                 rows,
+                tr_col,
+                pt_col,
             )
             nfix_v[gi] = s.n_fixations
             mfd_v[gi] = s.mean_fix_dur
@@ -1283,11 +1355,22 @@ function _fill_rel_time_from_raw!(
     time_col::AbstractVector{<:Real},
     rows::AbstractVector{Int},
     m::Int,
+    tr_col::Union{Nothing,AbstractVector} = nothing,
+    pt_col::Union{Nothing,AbstractVector} = nothing,
 )
     m == 0 && return nothing
-    t0 = Float64(@inbounds time_col[rows[1]])
-    @inbounds for k = 1:m
-        t_buf[k] = Float64(time_col[rows[k]]) - t0
+    r1 = @inbounds rows[1]
+    t0 = Float64(@inbounds time_col[r1])
+    @inbounds t_buf[1] = 0.0
+    r_prev = r1
+    @inbounds for k = 2:m
+        rk = rows[k]
+        tk = Float64(time_col[rk])
+        if !_is_group_row_contig(r_prev, rk, tr_col, pt_col) || tk < Float64(time_col[r_prev])
+            t0 = tk
+        end
+        t_buf[k] = tk - t0
+        r_prev = rk
     end
     return nothing
 end
@@ -1298,6 +1381,8 @@ function _fill_group_rel_time!(
     trel_col,
     time_col::AbstractVector{<:Real},
     rows::AbstractVector{Int},
+    tr_col::Union{Nothing,AbstractVector} = nothing,
+    pt_col::Union{Nothing,AbstractVector} = nothing,
 )::Int
     m = length(rows)
     length(t_buf) < m && resize!(t_buf, m)
@@ -1305,7 +1390,7 @@ function _fill_group_rel_time!(
         _fill_rel_time_from_trel!(t_buf, trel_col, rows, m)
         return m
     end
-    _fill_rel_time_from_raw!(t_buf, time_col, rows, m)
+    _fill_rel_time_from_raw!(t_buf, time_col, rows, m, tr_col, pt_col)
     return m
 end
 
@@ -1335,15 +1420,6 @@ function _resolve_time_window_rows(
         return (start_val, end_val)
     end
     error("time_window must be nothing, or a tuple of two numbers or column symbols.")
-end
-
-function _gather_group_col(src::AbstractVector, row_first_idx::Vector{Int})
-    n_out = length(row_first_idx)
-    out = similar(src, n_out)
-    @inbounds for i = 1:n_out
-        out[i] = src[row_first_idx[i]]
-    end
-    return out
 end
 
 @inline function _msg_matches_anchor(

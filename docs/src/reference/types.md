@@ -17,7 +17,6 @@ EyeFun.EyeData
 ```@docs
 EyeFun.EyeFile
 EyeFun.EDFFile
-EyeFun.EDFRecording
 EyeFun.SMIFile
 EyeFun.TobiiFile
 ```

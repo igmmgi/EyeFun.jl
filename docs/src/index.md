@@ -47,6 +47,7 @@ Read and analyse eye-tracking data:
 
 ```julia
 using EyeFun
+using GLMakie
 
 # Read an eye-tracking data file (format auto-detected)
 dat = read_et_data("path/to/file.edf")

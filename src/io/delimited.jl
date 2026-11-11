@@ -1,13 +1,13 @@
 function _find_bids_sidecar(path::AbstractString)::Union{Nothing,String}
     base = String(path)
     if endswith(lowercase(base), ".gz")
-        base = base[1:end-3]
+        base = String(chop(base; tail = 3))
     end
     stem, _ = splitext(base)
     cand1 = stem * ".json"
     isfile(cand1) && return cand1
     if endswith(stem, "_samples")
-        cand2 = stem[1:end-8] * "_eyetrack.json"
+        cand2 = String(chop(stem; tail = 8)) * "_eyetrack.json"
         isfile(cand2) && return cand2
     end
     return nothing
@@ -242,9 +242,10 @@ end
         :sacc_geny,
         :sacc_ampl,
         :sacc_pvel,
+        :msacc_dx,
+        :msacc_dy,
         :msacc_ampl,
         :msacc_pvel,
-        :msacc_dir,
     ) ||
            endswith(s, "_fix_gavx") ||
            endswith(s, "_fix_gavy") ||
@@ -254,7 +255,11 @@ end
            endswith(s, "_sacc_genx") ||
            endswith(s, "_sacc_geny") ||
            endswith(s, "_sacc_ampl") ||
-           endswith(s, "_sacc_pvel")
+           endswith(s, "_sacc_pvel") ||
+           endswith(s, "_msacc_dx") ||
+           endswith(s, "_msacc_dy") ||
+           endswith(s, "_msacc_ampl") ||
+           endswith(s, "_msacc_pvel")
 end
 
 @inline function _bytes_parse_bool(data::Vector{UInt8}, a::Int, b::Int)::Bool
@@ -289,7 +294,7 @@ end
                       col_map=nothing, time_unit=:auto, sample_rate=nothing,
                       screen_res=nothing, screen_width_cm=nothing,
                       viewing_distance_cm=nothing, coords=nothing,
-                      trial_time_zero=nothing, source=:delimited) -> EyeData
+                      trial_time_zero=nothing, source=:delimited, verbose=false) -> EyeData
 
 Read a generic CSV, TSV, or BIDS `*_eyetrack.tsv` eye-tracking file into an `EyeData`
 container.
@@ -310,6 +315,7 @@ headerless BIDS `Columns` definitions.
 - `coords::Union{Nothing,Symbol}=nothing`: `:topleft` or `:center`
 - `trial_time_zero::Union{Nothing,AbstractString}=nothing`: optional message anchor for `:time_rel`
 - `source::Symbol=:delimited`: `EyeData.source` tag (unless overridden by sidecar)
+- `verbose::Bool=false`: print loading diagnostics
 """
 function read_et_delimited(
     path::AbstractString;
@@ -327,6 +333,11 @@ function read_et_delimited(
     verbose::Bool = false,
 )
     isfile(path) || error("File not found: $path")
+    endswith(lowercase(path), ".gz") && throw(
+        ArgumentError(
+            "Gzip-compressed files (.gz) are not directly supported; decompress the file first.",
+        ),
+    )
     time_unit in (:auto, :ms, :s, :us) ||
         throw(ArgumentError("Invalid time_unit=:$time_unit. Expected :auto, :ms, :s, or :us."))
 
@@ -335,6 +346,13 @@ function read_et_delimited(
 
     raw = Base.read(path)
     total_len = length(raw)
+    if total_len >= 2 && @inbounds(raw[1]) == 0x1f && @inbounds(raw[2]) == 0x8b
+        throw(
+            ArgumentError(
+                "Gzip-compressed files (.gz) are not directly supported; decompress the file first.",
+            ),
+        )
+    end
     pos = 1
     if total_len >= 3 && @inbounds(raw[1]) == 0xEF && @inbounds(raw[2]) == 0xBB && @inbounds(raw[3]) == 0xBF
         pos = 4
@@ -493,6 +511,8 @@ function read_et_delimited(
     last_part_a = 1
     last_part_b = 0
     last_part_str = empty_str
+    trial_missing_rows = Int[]
+    trial_col_idx = findfirst(==(:trial), target_syms)
 
     n_rows = 0
     @inbounds while pos <= total_len
@@ -528,8 +548,29 @@ function read_et_delimited(
                 push!(col_vecs[i]::Vector{Float32}, v32)
             elseif kind == 3
                 ua, ub, _ = _delim_unquote_trim(raw, ca, cb)
-                vi = ua > ub ? 1 : _bytes_parse_int(raw, ua, ub)
-                push!(col_vecs[i]::Vector{Int}, vi)
+                if ua > ub
+                    push!(trial_missing_rows, n_rows)
+                    push!(col_vecs[i]::Vector{Int}, 0)
+                else
+                    has_dot = false
+                    for bi = ua:ub
+                        if raw[bi] == UInt8('.')
+                            has_dot = true
+                            break
+                        end
+                    end
+                    if has_dot
+                        vf = _bytes_parse_f64(raw, ua, ub)
+                        if isfinite(vf)
+                            push!(col_vecs[i]::Vector{Int}, round(Int, vf))
+                        else
+                            push!(trial_missing_rows, n_rows)
+                            push!(col_vecs[i]::Vector{Int}, 0)
+                        end
+                    else
+                        push!(col_vecs[i]::Vector{Int}, _bytes_parse_int(raw, ua, ub))
+                    end
+                end
             elseif kind == 4
                 ua, ub, _ = _delim_unquote_trim(raw, ca, cb)
                 vi32 = ua > ub ? Int32(0) : Int32(clamp(_bytes_parse_int(raw, ua, ub), Int(typemin(Int32)), Int(typemax(Int32))))
@@ -601,6 +642,18 @@ function read_et_delimited(
         end
     end
 
+    if !isnothing(trial_col_idx) && !isempty(trial_missing_rows)
+        src_tr = col_vecs[trial_col_idx]::Vector{Int}
+        tr_union = Vector{Union{Int,Missing}}(undef, n_rows)
+        @inbounds for r = 1:n_rows
+            tr_union[r] = src_tr[r]
+        end
+        @inbounds for r in trial_missing_rows
+            tr_union[r] = missing
+        end
+        col_vecs[trial_col_idx] = tr_union
+    end
+
     df = DataFrame()
     for i = 1:n_schema
         df[!, target_syms[i]] = col_vecs[i]
@@ -609,7 +662,8 @@ function read_et_delimited(
     sr_meta = !isnothing(meta) ? meta.sample_rate : nothing
     sr_init = !isnothing(sample_rate) ? Float64(sample_rate) : (!isnothing(sr_meta) ? sr_meta : 0.0)
 
-    if !hasproperty(df, :time)
+    had_time_col = hasproperty(df, :time)
+    if !had_time_col
         sr_synth = sr_init > 0.0 ? sr_init : 1000.0
         t0_ms = (!isnothing(meta) && !isnothing(meta.start_time)) ? meta.start_time * 1000.0 : 0.0
         dt_ms = 1000.0 / sr_synth
@@ -620,24 +674,28 @@ function read_et_delimited(
         insertcols!(df, 1, :time => tvec)
     end
 
-    # Estimate sample rate from timestamps if not explicitly specified
     times = df[!, :time]
-    if sr_init <= 0.0 && n_rows > 1
-        n_check = min(n_rows, 2000)
-        diffs = Float64[]
-        sizehint!(diffs, n_check)
-        @inbounds for r = 2:n_check
-            dt = times[r] - times[r-1]
-            dt > 0.0 && isfinite(dt) && push!(diffs, dt)
-        end
-        if !isempty(diffs)
-            med_dt = median!(diffs)
-            if time_unit === :auto && raw_time_header == "" && med_dt < 0.1
-                # Heuristic: sub-0.1 steps (< 0.1 -> >= 10 Hz in seconds vs > 10 kHz in ms)
-                times .*= 1000.0
-                med_dt *= 1000.0
+    if had_time_col && n_rows > 1
+        if time_unit === :auto && !(raw_time_header in ("time_ms", "time_s", "time_us"))
+            n_check = min(n_rows, 2000)
+            diffs = Float64[]
+            sizehint!(diffs, n_check)
+            @inbounds for r = 2:n_check
+                dt = times[r] - times[r-1]
+                dt > 0.0 && isfinite(dt) && push!(diffs, dt)
             end
-            med_dt > 0.0 && (sr_init = round(1000.0 / med_dt; digits = 4))
+            if !isempty(diffs)
+                med_dt = median!(diffs)
+                is_seconds =
+                    sr_init > 0.0 ? (med_dt <= 1.0 && abs(med_dt * sr_init - 1.0) < 0.25) :
+                    (med_dt < 0.1)
+                if is_seconds
+                    times .*= 1000.0
+                end
+            end
+        end
+        if sr_init <= 0.0
+            sr_init = _estimate_sample_rate_ms(times; fallback = 0.0)
         end
     end
     sr_final = sr_init > 0.0 ? sr_init : 1000.0

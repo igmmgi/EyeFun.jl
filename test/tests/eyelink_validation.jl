@@ -160,7 +160,6 @@ function compare_asc_files(ref_path::String, jul_path::String)
         n_ref_samples = length(ref_samples),
         n_jul_samples = length(jul_samples),
         sample_mismatches = sample_mismatches,
-        n_compared = n_compare,
         n_efix = n_efix,
         efix_value_matches = efix_value_matches,
         n_esacc = n_esacc,
@@ -172,9 +171,6 @@ function compare_asc_files(ref_path::String, jul_path::String)
         n_jul_msgs = length(jul_msgs),
     )
 end
-
-# Safely get count from Dict (for binocular blink tolerance)
-nrow_or(d::Dict, k::Symbol, default::Int) = get(d, k, default)
 
 @testset "ASC output: Julia vs edf2asc" begin
     for test_name in ("test1", "test2", "test3")

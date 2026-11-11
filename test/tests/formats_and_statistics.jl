@@ -503,7 +503,7 @@ using Random
         @test ed_pfe.df.paL[1] ≈ 1000.0f0 atol = 1e-4
         @test ed_pfe.df.paL[2] > 1050.0f0
 
-        # 3. MultiMatch scanpath similarity + >26 AOI Levenshtein support
+        # MultiMatch scanpath similarity + >26 AOI Levenshtein support
         ed_mm = EyeData(
             DataFrame(
                 trial = vcat(fill(1, 90), fill(2, 90), fill(3, 90)),
@@ -546,7 +546,7 @@ using Random
         @test lev30.similarity == 1.0
         @test lev30.seq1 isa Vector{String}
 
-        # 4. Binocular microsaccades (Engbert & Kliegl, 2003) + microsaccades(ed) accessor
+        # Binocular microsaccades (Engbert & Kliegl, 2003) + microsaccades(ed) accessor
         n_ms = 300
         gxL_ms = [500.0 + 0.05 * sin(0.4 * i) for i = 1:n_ms]
         gxR_ms = [500.0 + 0.05 * cos(0.4 * i) for i = 1:n_ms]
@@ -583,7 +583,7 @@ using Random
         @test 95.0 <= ms_tbl.sttime[1] <= 110.0
         @test ms_tbl.ampl[1] > 0.2
 
-        # 5. empirical_logit (Barr, 2008), cluster_permutation_test (Maris & Oostenveld, 2007), & plot_time_course
+        # empirical_logit (Barr, 2008), cluster_permutation_test (Maris & Oostenveld, 2007), & plot_time_course
         el_zero = empirical_logit(0, 50; weights = true)
         el_full = empirical_logit(50, 50; weights = true)
         @test isfinite(el_zero.elog) && isfinite(el_full.elog)
@@ -631,6 +631,265 @@ using Random
 
         fig_tc = plot_time_course(tc_df; group_col = :condition, clusters = clusters_paired, error = :ci95)
         @test fig_tc isa Figure
+    end
+
+    @testset "Missing-data sentinels, BIDS/Tobii timestamps, multi-trial seams, and NaN clusters" begin
+        mktempdir() do dir
+            # EyeLink binary FEVENT Int16(-32768) -> NaN32, ASC missing ESACC ampl, "." export, and 0-sample ASC
+            ev_cols = EyeFun._EDFEventCols(4)
+            fev_buf = zeros(UInt8, 60)
+            # Big-endian entime = 120 at pos+1..pos+4 (pos = 1 -> indices 2:5)
+            fev_buf[2:5] .= reinterpret(UInt8, [hton(UInt32(120))])
+            # Valid gstx/gsty = 5000 (500.0 px) at pos+11..pos+14 (indices 12:15)
+            fev_buf[12:13] .= reinterpret(UInt8, [hton(Int16(5000))])
+            fev_buf[14:15] .= reinterpret(UInt8, [hton(Int16(4000))])
+            # MISSING_DATA (-32768 = 0x8000) for genx/geny at pos+21..pos+24 (indices 22:25)
+            fev_buf[22:23] .= UInt8[0x80, 0x00]
+            fev_buf[24:25] .= UInt8[0x80, 0x00]
+            fev_buf[44:45] .= reinterpret(UInt8, [hton(Int16(380))])
+            fev_buf[46:47] .= reinterpret(UInt8, [hton(Int16(380))])
+            EyeFun._push_fevent_bytes!(ev_cols, fev_buf, 1, UInt32(100), Int(EyeFun.EVENT_ENDSACC), Int16(0))
+            @test ev_cols.gstx[1] ≈ 500.0f0
+            @test isnan(ev_cols.genx[1])
+            @test isnan(ev_cols.geny[1])
+            @test isnan(ev_cols.ampl[1])
+
+            asc_miss = joinpath(dir, "missing_ev.asc")
+            write(
+                asc_miss,
+                join(
+                    [
+                        "** EYELINK II 1",
+                        "MSG\t100 TRIALID 1",
+                        "MSG\t100 !V TRIAL_VAR_LABELS cond rt",
+                        "MSG\t100 !V TRIAL_VAR_DATA easy 420",
+                        "MSG\t100 !V TRIAL_VAR cond easy",
+                        "START\t100 \tLEFT\tSAMPLES\tEVENTS",
+                        "SAMPLES\tGAZE\tLEFT\tRATE\t1000.00\tTRACKING\tCR\tFILTER\t2",
+                        "100\t  500.0\t  400.0\t 1200.0\t...",
+                        "101\t    .\t    .\t    0.0\t...",
+                        "102\t    .\t    .\t    0.0\t...",
+                        "SSACC L\t100",
+                        "ESACC L\t100\t102\t3\t  500.0\t  400.0\t      .\t      .\t2500000.00\t    320",
+                        "END\t102 \tSAMPLES\tEVENTS\tRES\t  38.00\t  38.00",
+                    ],
+                    "\n",
+                ),
+            )
+            edf_m = EyeFun.read_eyelink(asc_miss)
+            sac_m = EyeFun.parse_saccades(edf_m.events)
+            @test nrow(sac_m) == 1
+            @test isnan(sac_m.genx[1]) && isnan(sac_m.ampl[1])
+            ed_m = create_eyefun_data(edf_m)
+            vdf_m = variables(ed_m)
+            @test hasproperty(vdf_m, :cond)
+            @test !hasproperty(vdf_m, Symbol("TRIAL_VAR_LABELS"))
+            @test !hasproperty(vdf_m, Symbol("TRIAL_VAR_DATA"))
+
+            asc_re = joinpath(dir, "reexported.asc")
+            write_et_ascii(edf_m, asc_re)
+            re_txt = read(asc_re, String)
+            @test !occursin("NaN", re_txt)
+            @test occursin("ESACC", re_txt)
+
+            zero_asc = joinpath(dir, "zero_samples.asc")
+            write(zero_asc, "** EYELINK II 1\nMSG\t50 HELLO\n")
+            edf_zero = redirect_stdout(devnull) do
+                EyeFun.read_eyelink(zero_asc; verbose = true)
+            end
+            @test edf_zero.samples isa DataFrame
+            @test nrow(edf_zero.samples) == 0
+
+            # BIDS / delimited seconds-to-ms auto-conversion, missing :trial round-trip, and .gz guard
+            bids_tsv2 = joinpath(dir, "sub-02_eyetrack.tsv")
+            bids_json2 = joinpath(dir, "sub-02_eyetrack.json")
+            write(bids_tsv2, "0.000\t100.0\t200.0\n0.002\t102.0\t201.0\n0.004\t104.0\t202.0\n")
+            write(
+                bids_json2,
+                """{"SamplingFrequency": 500.0, "Columns": ["timestamp", "x_coordinate", "y_coordinate"]}""",
+            )
+            ed_b2 = read_et_data(bids_tsv2)
+            @test ed_b2.df.time ≈ [0.0, 2.0, 4.0]
+
+            sec_tsv = joinpath(dir, "sec_header.tsv")
+            write(sec_tsv, "timestamp\tgx\tgy\n0.000\t300.0\t300.0\n0.002\t301.0\t300.0\n0.004\t302.0\t300.0\n")
+            ed_sec = read_et_delimited(sec_tsv)
+            @test ed_sec.df.time ≈ [0.0, 2.0, 4.0]
+            @test ed_sec.sample_rate ≈ 500.0
+
+            ed_miss_tr = EyeData(
+                DataFrame(
+                    time = [0.0, 2.0, 4.0, 6.0],
+                    trial = Union{Int,Missing}[missing, 1, 1, missing],
+                    gx = [100.0, 102.0, 104.0, 106.0],
+                    gy = [200.0, 202.0, 204.0, 206.0],
+                    msacc_dx = fill(NaN, 4),
+                    bino_msacc_dy = fill(NaN, 4),
+                );
+                sample_rate = 500.0,
+            )
+            miss_csv = joinpath(dir, "miss_tr.csv")
+            write_et_delimited(ed_miss_tr, miss_csv)
+            ed_miss_rt = read_et_delimited(miss_csv)
+            @test ismissing(ed_miss_rt.df.trial[1]) && ismissing(ed_miss_rt.df.trial[4])
+            @test ed_miss_rt.df.trial[2] == 1 && ed_miss_rt.df.trial[3] == 1
+            @test eltype(ed_miss_rt.df.msacc_dx) == Float64
+            @test eltype(ed_miss_rt.df.bino_msacc_dy) == Float64
+
+            gz_p = joinpath(dir, "bad.tsv.gz")
+            write(gz_p, UInt8[0x1f, 0x8b, 0x08, 0x00])
+            @test_throws ArgumentError read_et_delimited(gz_p)
+
+            # Tobii unitless "Recording timestamp" microsecond scaling -> 50 Hz
+            tob_u = joinpath(dir, "tobii_unitless.tsv")
+            write(
+                tob_u,
+                "Recording timestamp\tGaze point X\tGaze point Y\n0\t500\t400\n20000\t502\t401\n40000\t504\t402\n",
+            )
+            tob_parsed = read_tobii(tob_u)
+            @test tob_parsed.samples.time ≈ [0.0, 20.0, 40.0]
+            @test tob_parsed.sample_rate ≈ 50.0
+
+            # Coordinate-mode safety in outlier_filter! (:center_px) and average_eyes!
+            ed_cpx = EyeData(
+                DataFrame(
+                    time = [0.0, 1.0, 2.0],
+                    trial = [1, 1, 1],
+                    gx = [760.0, 960.0, -600.0],
+                    gy = [390.0, 540.0, 540.0],
+                );
+                sample_rate = 1000.0,
+                screen_res = (1920, 1080),
+            )
+            to_center_coords!(ed_cpx; units = :px)
+            outlier_filter!(ed_cpx; eye = :both)
+            # 760 -> -200 px, 390 -> -150 px (valid negative X/Y in :center_px); -600 -> -1560 px (out of bounds -> NaN)
+            @test ed_cpx.df.gx[1] ≈ -200.0
+            @test ed_cpx.df.gy[1] ≈ -150.0
+            @test isnan(ed_cpx.df.gx[3])
+
+            ed_mix = EyeData(
+                DataFrame(
+                    time = [0.0, 1.0],
+                    trial = [1, 1],
+                    gxL = [0.0, 1.0],
+                    gyL = [0.0, 1.0],
+                    gxR = [960.0, 980.0],
+                    gyR = [540.0, 550.0],
+                );
+                sample_rate = 1000.0,
+            )
+            DataFrames.colmetadata!(ed_mix.df, :gxL, "eyefun_coords", :deg; style = :note)
+            DataFrames.colmetadata!(ed_mix.df, :gyL, "eyefun_coords", :deg; style = :note)
+            @test_throws ArgumentError average_eyes!(ed_mix)
+
+            # Event splitting across pauses & separate trials, DynamicAOI strict bounds, unanchored fixation_metrics, and multi-trial group_by seams
+            ed_pause = EyeData(
+                DataFrame(
+                    time = [0.0, 2.0, 500.0, 502.0],
+                    trial = [1, 1, 1, 1],
+                    in_fix = [true, true, true, true],
+                    fix_dur = Int32[504, 504, 504, 504],
+                    fix_gavx = [400.0, 400.0, 400.0, 400.0],
+                    fix_gavy = [300.0, 300.0, 300.0, 300.0],
+                );
+                sample_rate = 500.0,
+            )
+            fp = fixations(ed_pause)
+            @test nrow(fp) == 2
+            @test fp.duration == Int32[4, 4]
+
+            ed_cat = EyeData(
+                DataFrame(
+                    time = [0.0, 2.0, 4.0, 6.0],
+                    trial = [1, 1, 2, 2],
+                    cond = ["A", "A", "A", "A"],
+                    gx = [200.0, 200.0, 800.0, 800.0],
+                    gy = [300.0, 300.0, 300.0, 300.0],
+                    in_fix = [true, true, true, true],
+                    fix_dur = Int32[4, 4, 4, 4],
+                    fix_gavx = [200.0, 200.0, 800.0, 800.0],
+                    fix_gavy = [300.0, 300.0, 300.0, 300.0],
+                    in_sacc = [true, true, true, true],
+                    sacc_dur = Int32[4, 4, 4, 4],
+                    sacc_gstx = [100.0, 100.0, 700.0, 700.0],
+                    sacc_gsty = [300.0, 300.0, 300.0, 300.0],
+                    sacc_genx = [200.0, 200.0, 800.0, 800.0],
+                    sacc_geny = [300.0, 300.0, 300.0, 300.0],
+                    sacc_ampl = [2.5, 2.5, 2.5, 2.5],
+                    sacc_pvel = [180.0, 180.0, 220.0, 220.0],
+                );
+                sample_rate = 500.0,
+            )
+            @test nrow(fixations(ed_cat)) == 2
+            @test nrow(saccades(ed_cat)) == 2
+
+            aoi_all = [RectAOI("Screen", 500.0, 300.0, 900.0, 500.0)]
+            am_cond = aoi_metrics(ed_cat, aoi_all; group_by = :cond)
+            @test am_cond.fixation_count[1] == 2
+            @test am_cond.entry_count[1] == 2
+            fm_cond = fixation_metrics(ed_cat, aoi_all; group_by = :cond)
+            @test fm_cond.fixation_count[1] == 2
+            sm_cond = saccade_metrics(ed_cat; group_by = :cond)
+            @test nrow(sm_cond) == 2
+            sp_cond = spatial_precision(ed_cat; group_by = :cond)
+            # Zero intra-trial jitter inside each stationary trial (600 px cross-trial jump excluded)
+            @test sp_cond.rms_s2s_deg[1] ≈ 0.0 atol = 1e-12
+
+            # Multi-trial velocity time_bin must not differentiate across trial 1 -> 2 jump
+            ed_vel_seam = EyeData(
+                DataFrame(
+                    time = vcat(collect(0.0:9.0), collect(0.0:9.0)),
+                    trial = vcat(fill(1, 10), fill(2, 10)),
+                    cond = fill("A", 20),
+                    gx = vcat(fill(200.0, 10), fill(900.0, 10)),
+                    gy = fill(300.0, 20),
+                );
+                sample_rate = 1000.0,
+            )
+            tb_v = time_bin(ed_vel_seam; bin_ms = 20, measure = :velocity, group_by = :cond)
+            @test tb_v.value[1] ≈ 0.0 atol = 1e-12
+
+            # Strict open-interval boundary in _in_dynamic_aoi_interval
+            daoi_late = DynamicAOI("Late", [(500.0, 1000.0, RectAOI("R", 300.0, 300.0, 100.0, 100.0))])
+            @test !EyeFun._in_dynamic_aoi_interval(daoi_late, 300.0, 300.0, 0.0, 500.0)
+            @test EyeFun._in_dynamic_aoi_interval(daoi_late, 300.0, 300.0, 499.0, 501.0)
+
+            # Unanchored NaN time_rel trial retained when time_window = nothing
+            ed_unanch = EyeData(
+                DataFrame(
+                    time = [0.0, 2.0, 100.0, 102.0],
+                    time_rel = [0.0, 2.0, NaN, NaN],
+                    trial = [1, 1, 2, 2],
+                    gx = [300.0, 300.0, 300.0, 300.0],
+                    gy = [300.0, 300.0, 300.0, 300.0],
+                    in_fix = [true, true, true, true],
+                    fix_dur = Int32[4, 4, 4, 4],
+                    fix_gavx = [300.0, 300.0, 300.0, 300.0],
+                    fix_gavy = [300.0, 300.0, 300.0, 300.0],
+                );
+                sample_rate = 500.0,
+            )
+            fm_un = fixation_metrics(ed_unanch, [RectAOI("Target", 300.0, 300.0, 100.0, 100.0)])
+            @test fm_un.fixation_count == [1, 1]
+
+            # cluster_permutation_test with all-NaN subject and partial-NaN bins
+            rng_cp = MersenneTwister(99)
+            cp_rows = NamedTuple[]
+            for s = 1:8
+                for cond in ("C1", "C2")
+                    for b in (0.0, 50.0, 100.0)
+                        val =
+                            s == 8 ? NaN :
+                            (b == 0.0 && s == 7 ? NaN : ((cond == "C2" ? 2.5 : 0.0) + 0.1 * randn(rng_cp)))
+                        push!(cp_rows, (participant = "P$s", condition = cond, time_bin = b, value = val))
+                    end
+                end
+            end
+            cp_res = cluster_permutation_test(DataFrame(cp_rows); n_permutations = 100, paired = true, rng = rng_cp)
+            @test nrow(cp_res) >= 1
+            @test cp_res.p_value[1] < 0.05
+        end
     end
 end
 

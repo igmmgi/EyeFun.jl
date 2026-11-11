@@ -431,6 +431,9 @@ end
 
     k = _next_event_slot!(ev)
     NaN32 = Float32(NaN)
+    if !(isfinite(gstx) && isfinite(gsty) && isfinite(genx) && isfinite(geny)) || abs(ampl) > 1000.0f0
+        ampl = NaN32
+    end
     @inbounds begin
         ev.time[k] = en
         ev.type[k] = Int16(EVENT_ENDSACC)

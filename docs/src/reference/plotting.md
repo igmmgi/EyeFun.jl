@@ -18,11 +18,13 @@ Pages = ["plotting.md"]
 Modules = [EyeFun]
 Private = false
 Order = [:function]
-Filter = t -> startswith(string(t), "plot_")
+Filter = t -> startswith(String(nameof(t)), "plot_")
 ```
 
-## Audio Functions
+## Stimulus & Audio Utilities
 
 ```@docs
+EyeFun.load_image
+EyeFun.image_size
 EyeFun.play_wav
 ```

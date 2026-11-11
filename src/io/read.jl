@@ -19,11 +19,7 @@ function detect_format(path::AbstractString)
     end
 end
 
-"""
-    read_et_data(T::Type{<:EyeFile}, path::String; kwargs...)
-
-Internal format-specific dispatchers returning `EyeData`.
-"""
+# Internal format-specific dispatchers returning `EyeData`.
 function read_et_data(
     ::Type{EDFFile},
     path::AbstractString;
@@ -36,7 +32,7 @@ function read_et_data(
     kwargs...,
 )
     return create_eyefun_data(
-        EyeFun.read_eyelink(String(path); kwargs...);
+        read_eyelink(String(path); kwargs...);
         include_variables = include_variables,
         trial_time_zero = trial_time_zero,
         screen_res = screen_res,
@@ -57,7 +53,7 @@ function read_et_data(
     kwargs...,
 )
     return create_eyefun_data(
-        EyeFun.read_smi(String(path); kwargs...);
+        read_smi(String(path); kwargs...);
         trial_time_zero = trial_time_zero,
         screen_res = screen_res,
         screen_width_cm = screen_width_cm,
@@ -98,7 +94,7 @@ function read_et_data(
             kwargs...,
         )
     end
-    raw = EyeFun.read_tobii(
+    raw = read_tobii(
         String(path);
         screen_res = something(screen_res, (1920, 1080)),
         screen_width_cm = something(screen_width_cm, 53.0),
@@ -178,6 +174,14 @@ function read_et_data(
     if length(rates) > 1
         @warn "Files have different sample rates: $(rates). Using $(eds[1].sample_rate) Hz from first file."
     end
+    res_set = unique(ed.screen_res for ed in eds)
+    if length(res_set) > 1
+        @warn "Files have different screen resolutions: $(res_set). Using $(eds[1].screen_res) from first file."
+    end
+    coords_set = unique(ed.coords for ed in eds)
+    if length(coords_set) > 1
+        @warn "Files have different coordinate systems: $(coords_set). Using $(eds[1].coords) from first file."
+    end
 
     combined = reduce(vcat, [ed.df for ed in eds]; cols = :union)
     return EyeData(
@@ -187,6 +191,7 @@ function read_et_data(
         screen_res = eds[1].screen_res,
         screen_width_cm = eds[1].screen_width_cm,
         viewing_distance_cm = eds[1].viewing_distance_cm,
+        coords = eds[1].coords,
     )
 end
 

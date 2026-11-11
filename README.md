@@ -30,6 +30,7 @@ Pkg.add(url="https://github.com/igmmgi/EyeFun.jl")
 
 ```julia
 using EyeFun
+using GLMakie
 
 # Read data from your eye tracker
 dat = read_et_data("path/to/your/eye_tracking_file/file.edf") # EyeLink (.edf or .asc)

@@ -14,7 +14,6 @@ function play_wav(
     path::AbstractString;
     audio_device::Union{Nothing,AbstractString} = nothing,
     cleanup::Bool = false,
-    kwargs...,
 )
     isfile(path) || throw(ArgumentError("WAV file not found: $path"))
     dev = isnothing(audio_device) || isempty(strip(audio_device)) ? nothing : String(audio_device)
@@ -83,10 +82,13 @@ function _write_pcm16_wav(path::AbstractString, samples::AbstractArray, fs::Real
     )
     (isfinite(fs) && fs > 0) ||
         throw(ArgumentError("Audio sample rate must be positive and finite, got $fs."))
+    sr_i64 = round(Int64, Float64(fs))
+    (1 <= sr_i64 <= Int64(typemax(UInt32))) ||
+        throw(ArgumentError("Audio sample rate must round to at least 1 Hz, got $fs."))
 
     n_frames = size(samples, 1)
     n_channels = ndims(samples) == 1 ? 1 : size(samples, 2)
-    sr = UInt32(round(Int, fs))
+    sr = UInt32(sr_i64)
     bytes_per_sample = UInt16(2)
     block_align = UInt16(n_channels * bytes_per_sample)
     byte_rate = sr * UInt32(block_align)
@@ -124,16 +126,14 @@ end
 
 function play_wav(audio::Tuple{AbstractArray,Real}; kwargs...)
     samples, fs = audio
-    ndims(samples) in (1, 2) || throw(
-        ArgumentError(
-            "Audio waveform must be a 1D vector or 2D (frames × channels) matrix, got $(ndims(samples))D array.",
-        ),
-    )
-    (isfinite(fs) && fs > 0) ||
-        throw(ArgumentError("Audio sample rate must be positive and finite, got $fs."))
     tmp_path = tempname() * ".wav"
-    _write_pcm16_wav(tmp_path, samples, fs)
-    return play_wav(tmp_path; cleanup = true, kwargs...)
+    try
+        _write_pcm16_wav(tmp_path, samples, fs)
+    catch
+        isfile(tmp_path) && rm(tmp_path; force = true)
+        rethrow()
+    end
+    return play_wav(tmp_path; kwargs..., cleanup = true)
 end
 
 play_wav(samples::AbstractArray, fs::Real; kwargs...) = play_wav((samples, fs); kwargs...)

@@ -722,7 +722,7 @@ function _aoi_index_sequence(
     return seq
 end
 
-"""Levenshtein edit distance between two integer or string sequences."""
+"""Levenshtein edit distance between two integer sequences."""
 function _levenshtein(s::AbstractVector{Int}, t::AbstractVector{Int})
     m, n = length(s), length(t)
     m == 0 && return n
@@ -744,32 +744,5 @@ function _levenshtein(s::AbstractVector{Int}, t::AbstractVector{Int})
         end
         prev, curr = curr, prev
     end
-    return prev[n+1]
-end
-
-function _levenshtein(s::AbstractString, t::AbstractString)
-    s_bytes = codeunits(s)
-    t_bytes = codeunits(t)
-    m, n = length(s_bytes), length(t_bytes)
-    m == 0 && return n
-    n == 0 && return m
-
-    prev = collect(0:n)
-    curr = similar(prev)
-
-    @inbounds for i = 1:m
-        curr[1] = i
-        si = s_bytes[i]
-        for j = 1:n
-            cost = si == t_bytes[j] ? 0 : 1
-            curr[j+1] = min(
-                prev[j+1] + 1,      # deletion
-                curr[j] + 1,        # insertion
-                prev[j] + cost,     # substitution
-            )
-        end
-        prev, curr = curr, prev
-    end
-
     return prev[n+1]
 end

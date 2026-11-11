@@ -1,5 +1,4 @@
 @testset "detect_events!" begin
-    edf = Main.TEST1_EDF
     df = Main.TEST1_DF
 
     # Count original EyeLink fixations for comparison
@@ -114,25 +113,7 @@
             trial = fill(1, n),
             gxL = gx,
             gyL = gy,
-            gxR = fill(NaN32, n),
-            gyR = fill(NaN32, n),
             paL = fill(Float32(1000.0), n),
-            paR = fill(NaN32, n),
-            in_fix = falses(n),
-            fix_gavx = fill(NaN32, n),
-            fix_gavy = fill(NaN32, n),
-            fix_ava = fill(NaN32, n),
-            fix_dur = fill(Int32(0), n),
-            in_sacc = falses(n),
-            sacc_gstx = fill(NaN32, n),
-            sacc_gsty = fill(NaN32, n),
-            sacc_genx = fill(NaN32, n),
-            sacc_geny = fill(NaN32, n),
-            sacc_dur = fill(Int32(0), n),
-            sacc_ampl = fill(NaN32, n),
-            sacc_pvel = fill(NaN32, n),
-            in_blink = falses(n),
-            blink_dur = fill(Int32(0), n),
             message = fill("", n),
         )
 

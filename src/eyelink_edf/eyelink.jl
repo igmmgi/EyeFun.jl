@@ -384,8 +384,8 @@ function _parse_asc_bytes!(
     if ev_cols.len > 0
         edf.events = _finalize_events_df!(ev_cols)
     end
-    if loadsamples && sam_cols.len > 0
-        edf.samples = _finalize_asc_samples!(sam_cols)
+    if loadsamples
+        edf.samples = sam_cols.len > 0 ? _finalize_asc_samples!(sam_cols) : DataFrame()
     end
     if !isempty(recording_rows)
         edf.recordings = recordings_to_dataframe(recording_rows)
@@ -394,7 +394,7 @@ function _parse_asc_bytes!(
 
     verbose &&
         @info "ASC read complete: $(nrow(edf.events)) events, " *
-              (loadsamples ? "$(nrow(edf.samples)) samples" : "samples not loaded")
+              (loadsamples ? "$(isnothing(edf.samples) ? 0 : nrow(edf.samples)) samples" : "samples not loaded")
 
     return edf
 end
@@ -415,8 +415,8 @@ Read an EDF ASCII (`.asc`) file produced by SR Research's `edf2asc` tool.
 - `end_marker`: MSG text that marks trial offset (prefix match)
 
 # Returns
-An `EDFFile` with `.fixations`, `.saccades`, `.blinks`, `.messages`, `.samples`, and
-`.recordings` DataFrames, identical in structure to `read_eyelink_edf`.
+An `EDFFile` with `.events`, `.samples`, `.recordings`, and `.preamble`, identical in
+structure to `read_eyelink_edf`.
 """
 function read_eyelink_asc(
     filename::String;

@@ -4,12 +4,12 @@
     aoi_regions =
         [RectAOI("Center", 640, 480, 400, 400), RectAOI("TopLeft", 160, 120, 320, 240)]
 
-    @testset "plot_gaze (DataFrame)" begin
+    @testset "plot_gaze" begin
         fig = plot_gaze(df; selection = (trial = 1,))
         @test fig isa Makie.Figure
     end
 
-    @testset "plot_scanpath (DataFrame)" begin
+    @testset "plot_scanpath" begin
         fig = plot_scanpath(df; selection = (trial = 1,))
         @test fig isa Makie.Figure
     end
@@ -19,7 +19,7 @@
         @test fig isa Makie.Figure
     end
 
-    @testset "plot_heatmap (DataFrame)" begin
+    @testset "plot_heatmap" begin
         fig = plot_heatmap(df; selection = (trial = 1,))
         @test fig isa Makie.Figure
     end
@@ -275,5 +275,53 @@
             @test length(disc) == 1
             @test disc[1] isa ImageMedia
         end
+    end
+
+    @testset "Heatmap y-axis orientation and binocular/coordinate-mode databrowser" begin
+        # plot_heatmap preserves ydir = :down (ax.yreversed == true) after ylims!
+        fig_hm = plot_heatmap(df; selection = (trial = 1,))
+        ax_hm = first(b for b in fig_hm.content if b isa Axis)
+        @test ax_hm.yreversed[] == true
+
+        fig_hm_sp = plot_heatmap(df; selection = (trial = [1, 2],), split_by = :trial)
+        axes_hm_sp = [b for b in fig_hm_sp.content if b isa Axis]
+        @test all(a -> a.yreversed[] == true, axes_hm_sp)
+
+        # plot_databrowser(eye = :both) does not mutate caller DataFrame and supports :center_px / :deg + polar angle == π
+        ed_bino = EyeData(
+            DataFrame(
+                time = collect(0.0:9.0),
+                trial = vcat(fill(1, 5), fill(2, 5)),
+                gxL = fill(900.0f0, 10),
+                gyL = fill(500.0f0, 10),
+                paL = fill(1000.0f0, 10),
+                gxR = fill(920.0f0, 10),
+                gyR = fill(510.0f0, 10),
+                paR = fill(1020.0f0, 10),
+                in_fix = Bool[true, true, false, false, false, true, true, false, false, false],
+                fix_gavx = [910.0, 910.0, NaN, NaN, NaN, 910.0, 910.0, NaN, NaN, NaN],
+                fix_gavy = [505.0, 505.0, NaN, NaN, NaN, 505.0, 505.0, NaN, NaN, NaN],
+                fix_dur = Int32[2, 2, 0, 0, 0, 2, 2, 0, 0, 0],
+                in_sacc = Bool[false, false, true, true, false, false, false, false, false, false],
+                sacc_gstx = [NaN, NaN, 910.0, 910.0, NaN, NaN, NaN, NaN, NaN, NaN],
+                sacc_gsty = [NaN, NaN, 400.0, 400.0, NaN, NaN, NaN, NaN, NaN, NaN],
+                sacc_genx = [NaN, NaN, 910.0, 910.0, NaN, NaN, NaN, NaN, NaN, NaN],
+                sacc_geny = [NaN, NaN, 600.0, 600.0, NaN, NaN, NaN, NaN, NaN, NaN],
+                sacc_dur = Int32[0, 0, 2, 2, 0, 0, 0, 0, 0, 0],
+            );
+            sample_rate = 1000.0,
+        )
+        # Note: saccade dx = 0, dy = -(600 - 400) = -200 -> atan(0.0, -200.0) == +π (purely downward)
+        fig_db, st_db = plot_databrowser(ed_bino; eye = :both, display_plot = false)
+        @test fig_db isa Figure
+        @test !hasproperty(ed_bino.df, :gx)
+        @test !hasproperty(ed_bino.df, :gy)
+        @test !hasproperty(ed_bino.df, :pa)
+        @test st_db.coord_mode == :px
+
+        ed_deg = EyeData(copy(ed_bino.df); sample_rate = 1000.0)
+        to_center_coords!(ed_deg; units = :deg)
+        _, st_deg = plot_databrowser(ed_deg; eye = :left, display_plot = false)
+        @test st_deg.coord_mode == :deg
     end
 end

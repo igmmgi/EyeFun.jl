@@ -33,8 +33,8 @@ function velocity_filter!(df::EyeData; eye::Symbol = :auto, threshold_deg_s::Rea
     eye = _resolve_eye(df, eye)
     _ensure_eye_cols!(df, eye)
     ecols = _eye_columns(eye)
-    gx = df.df[!, ecols.gx]
-    gy = df.df[!, ecols.gy]
+    gx = _ensure_float_col!(df.df, ecols.gx)
+    gy = _ensure_float_col!(df.df, ecols.gy)
 
     ppd = _eye_units_per_deg(df, eye)
     n = length(gx)
@@ -90,16 +90,23 @@ function outlier_filter!(
     eye = _resolve_eye(df, eye)
     _ensure_eye_cols!(df, eye)
     ecols = _eye_columns(eye)
+    gx = _ensure_float_col!(df.df, ecols.gx)
+    gy = _ensure_float_col!(df.df, ecols.gy)
 
     if isnothing(bounds)
         w, h = df.screen_res
-        if _is_col_deg(df.df, ecols.gx, df.coords)
+        mode = _col_coord_mode(df.df, ecols.gx, df.coords)
+        if mode === :deg
             ppd = pixels_per_degree(df)
             half_w = (w * 0.5) / ppd
             half_h = (h * 0.5) / ppd
             m_deg = Float64(margin) / ppd
             x_lo, x_hi = -(half_w + m_deg), (half_w + m_deg)
             y_lo, y_hi = -(half_h + m_deg), (half_h + m_deg)
+        elseif mode === :center_px
+            m_px = Float64(margin)
+            x_lo, x_hi = -(w * 0.5 + m_px), (w * 0.5 + m_px)
+            y_lo, y_hi = -(h * 0.5 + m_px), (h * 0.5 + m_px)
         else
             x_lo, x_hi = Float64(-margin), Float64(w + margin)
             y_lo, y_hi = Float64(-margin), Float64(h + margin)
@@ -111,14 +118,7 @@ function outlier_filter!(
         y_hi = Float64(bounds[4] + margin)
     end
 
-    return _outlier_filter_kernel!(
-        df.df[!, ecols.gx],
-        df.df[!, ecols.gy],
-        x_lo,
-        x_hi,
-        y_lo,
-        y_hi,
-    )
+    return _outlier_filter_kernel!(gx, gy, x_lo, x_hi, y_lo, y_hi)
 end
 
 function _interpolate_gaps_range!(
@@ -177,8 +177,8 @@ function interpolate_gaps!(df::EyeData; eye::Symbol = :auto, max_gap_ms::Real = 
     eye = _resolve_eye(df, eye)
     _ensure_eye_cols!(df, eye)
     ecols = _eye_columns(eye)
-    gx = df.df[!, ecols.gx]
-    gy = df.df[!, ecols.gy]
+    gx = _ensure_float_col!(df.df, ecols.gx)
+    gy = _ensure_float_col!(df.df, ecols.gy)
     max_gap_samples = round(Int, max_gap_ms * df.sample_rate / 1000.0)
     total_filled = Ref(0)
     _foreach_trial_segment(df.df) do lo, hi
@@ -315,6 +315,7 @@ function _savgol_smooth_col!(
     window_samples::Int,
     poly_order::Int,
 )
+    cm = DataFrames.colmetadata(df, col, "eyefun_coords", nothing)
     x = _as_float_vec(df[!, col])
     n = length(x)
     out = Vector{eltype(x)}(undef, n)
@@ -327,6 +328,7 @@ function _savgol_smooth_col!(
         _savgol_smooth_range!(out, x, lo, hi, half, poly_order, weights, G, rhs)
     end
     df[!, col] = out
+    !isnothing(cm) && DataFrames.colmetadata!(df, col, "eyefun_coords", cm; style = :note)
     return nothing
 end
 

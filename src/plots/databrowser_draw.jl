@@ -28,6 +28,24 @@ Base.@kwdef mutable struct EyeViewerMediaState
     bg_stimulus::Any = nothing
     segment_views::Vector{AbstractDataFrame}
     prefix::Union{Nothing,Symbol} = nothing
+    coord_mode::Symbol = :px
+    ppd::Float64 = 40.0
+end
+
+function _db_spatial_domain(state)
+    sx, sy = state.screen_res
+    if state.coord_mode === :deg
+        ppd = state.ppd > 0.0 ? state.ppd : 40.0
+        hw = (sx * 0.5) / ppd
+        hh = (sy * 0.5) / ppd
+        return (-hw, hw, -hh, hh, 50.0 / ppd)
+    elseif state.coord_mode === :center_px
+        hw = sx * 0.5
+        hh = sy * 0.5
+        return (-hw, hw, -hh, hh, 50.0)
+    else
+        return (0.0, Float64(sx), 0.0, Float64(sy), 50.0)
+    end
 end
 
 """Point-to-line-segment distance."""
@@ -228,7 +246,7 @@ function _db_draw_spatial!(
     fixations::Vector{FixationInfo};
     reset_zoom::Bool = false,
 )
-    # Save current interactive zoom before clearing (always read live finallimits when non-reset)
+    # Save current interactive zoom before clearing
     if reset_zoom
         state.spatial_zoom = nothing
     elseif !isempty(ax.scene.plots)
@@ -246,10 +264,13 @@ function _db_draw_spatial!(
     empty!(ax)
 
     sx, sy = state.screen_res
+    x0, x1, y0, y1, pad = _db_spatial_domain(state)
+    cx = 0.5 * (x0 + x1)
+    cy = 0.5 * (y0 + y1)
 
-    lines!(ax, [0, sx, sx, 0, 0], [0, 0, sy, sy, 0]; color = :grey70, linewidth = 1)
-    lines!(ax, [sx / 2, sx / 2], [0, sy]; color = :grey85, linewidth = 0.5)
-    lines!(ax, [0, sx], [sy / 2, sy / 2]; color = :grey85, linewidth = 0.5)
+    lines!(ax, [x0, x1, x1, x0, x0], [y0, y0, y1, y1, y0]; color = :grey70, linewidth = 1)
+    lines!(ax, [cx, cx], [y0, y1]; color = :grey85, linewidth = 0.5)
+    lines!(ax, [x0, x1], [cy, cy]; color = :grey85, linewidth = 0.5)
 
     if !isnothing(state.bg_stimulus)
         try
@@ -271,7 +292,7 @@ function _db_draw_spatial!(
             px = gx[valid]
             py = gy[valid]
             x_c, y_c, counts =
-                _bin_samples(px, py, (0.0, Float64(sx)), (0.0, Float64(sy)), (50, 50))
+                _bin_samples(px, py, (x0, x1), (y0, y1), (50, 50))
             vals = _gaussian_smooth(counts, 2.0)
             Makie.heatmap!(ax, x_c, y_c, vals; colormap = :inferno, interpolate = true)
         elseif state.show_samples[]
@@ -347,8 +368,8 @@ function _db_draw_spatial!(
     state.show_aois[] && !isnothing(state.aois) && _draw_aois!(ax, state.aois)
 
     if reset_zoom || isnothing(state.spatial_zoom)
-        xlims!(ax, -50, sx + 50)
-        ylims!(ax, sy + 50, -50)   # reversed: high at top → 0,0 at top-left
+        xlims!(ax, x0 - pad, x1 + pad)
+        ylims!(ax, y1 + pad, y0 - pad)   # reversed: high at top → top-left origin
         state.spatial_zoom = nothing
     else
         xl, xh, yl, yh = state.spatial_zoom
@@ -388,7 +409,7 @@ function _db_draw_xy_trace!(
     lines!(ax, t, gx; color = :dodgerblue, linewidth = 1)
     lines!(ax, t, gy; color = :darkorange, linewidth = 1)
 
-    # Inline labels at start of each trace (replaces legend to avoid redraw accumulation)
+    # Inline labels at the first valid sample of each trace
     first_valid = findfirst(i -> !isnan(gx[i]) && !isnan(t[i]), eachindex(gx))
     if !isnothing(first_valid)
         text!(
@@ -418,9 +439,13 @@ function _db_draw_xy_trace!(
         )
     end
 
-    sx, sy = state.screen_res
-    hlines!(ax, [sx / 2.0]; color = :grey70, linewidth = 0.5, linestyle = :dash)
-    hlines!(ax, [sy / 2.0]; color = :grey80, linewidth = 0.5, linestyle = :dash)
+    if state.coord_mode === :deg || state.coord_mode === :center_px
+        hlines!(ax, [0.0]; color = :grey70, linewidth = 0.5, linestyle = :dash)
+    else
+        sx, sy = state.screen_res
+        hlines!(ax, [sx / 2.0]; color = :grey70, linewidth = 0.5, linestyle = :dash)
+        hlines!(ax, [sy / 2.0]; color = :grey80, linewidth = 0.5, linestyle = :dash)
+    end
 
     # Bar height = 5% of visible axis extent
     autolimits!(ax)
@@ -510,23 +535,50 @@ function _db_draw_pupil!(
     !isnan(t[1]) && !isnan(t[end]) && t[1] < t[end] && xlims!(ax, t[1], t[end])
 end
 
-"""Get time vector for a trial sub-DataFrame (uses time_rel if available, else time from 0)."""
-function _trial_time(g::AbstractDataFrame)
-    if hasproperty(g, :time_rel) && !all(ismissing, g.time_rel)
-        t = Float64[ismissing(v) ? NaN : Float64(v) for v in g.time_rel]
-        # Check if time is monotonically increasing (single trial)
-        # If not (merged trials), use raw sample indices in ms
-        if length(t) > 1 &&
-           !all(i -> isnan(t[i]) || isnan(t[i-1]) || t[i] >= t[i-1], 2:length(t))
-            # Non-monotonic → use raw timestamps offset from first
-            t_raw = Float64.(g.time)
-            return t_raw .- t_raw[1]
+"""Get monotonic segment time vector (reusing `_trial_relative_time`, or raw sample offsets across multi-trial views)."""
+function _db_segment_time(g::AbstractDataFrame)
+    t = _trial_relative_time(g; has_active_trel = false)
+    prev = -Inf
+    @inbounds for ti in t
+        isnan(ti) && continue
+        if ti < prev
+            return _extract_rel_time_from_raw(g[!, :time])
         end
-        return t
-    else
-        t_raw = Float64.(g.time)
-        return t_raw .- t_raw[1]
+        prev = ti
     end
+    return t
+end
+
+function _db_extract_eye_series(g::AbstractDataFrame, state)
+    n = nrow(g)
+    if state.eye === :both
+        gx = if hasproperty(g, :gx)
+            Float64.(_as_float_vec(g[!, :gx]))
+        elseif hasproperty(g, :gxL) || hasproperty(g, :gxR)
+            Float64.(_cyclopean_col(g, :gxL, :gxR))
+        else
+            fill(NaN, n)
+        end
+        gy = if hasproperty(g, :gy)
+            Float64.(_as_float_vec(g[!, :gy]))
+        elseif hasproperty(g, :gyL) || hasproperty(g, :gyR)
+            Float64.(_cyclopean_col(g, :gyL, :gyR))
+        else
+            fill(NaN, n)
+        end
+        pa = if hasproperty(g, :pa)
+            Float64.(_as_float_vec(g[!, :pa]))
+        elseif hasproperty(g, :paL) || hasproperty(g, :paR)
+            Float64.(_cyclopean_col(g, :paL, :paR))
+        else
+            fill(NaN, n)
+        end
+        return gx, gy, pa
+    end
+    gx = hasproperty(g, state.gx_col) ? Float64.(_as_float_vec(g[!, state.gx_col])) : fill(NaN, n)
+    gy = hasproperty(g, state.gy_col) ? Float64.(_as_float_vec(g[!, state.gy_col])) : fill(NaN, n)
+    pa = hasproperty(g, state.pa_col) ? Float64.(_as_float_vec(g[!, state.pa_col])) : fill(NaN, n)
+    return gx, gy, pa
 end
 
 """Draw a polar rose plot of saccade directions for the current trial."""
@@ -554,8 +606,9 @@ function _db_draw_saccade_polar!(
     bin_edges = range(-π, π; length = n_bins + 1)
     counts = zeros(n_bins)
     for a in angles
+        a_w = a >= π ? a - 2π : (a < -π ? mod2pi(a + π) - π : a)
         for b = 1:n_bins
-            if bin_edges[b] <= a < bin_edges[b+1]
+            if bin_edges[b] <= a_w < bin_edges[b+1]
                 counts[b] += 1
                 break
             end
@@ -595,15 +648,23 @@ function _db_draw_all!(
     # Extract events from full data (cached for _db_redraw_window!)
     saccades_full = _extract_saccades(g_full; prefix = state.prefix)
     fixations_full = _extract_fixations(g_full; prefix = state.prefix)
-    t_full = _trial_time(g_full)
+    t_full = _db_segment_time(g_full)
 
-    # Compute velocity for cursor tracking
-    gx = hasproperty(g_full, state.gx_col) ? Float64.(g_full[!, state.gx_col]) : fill(NaN, n_full)
-    gy = hasproperty(g_full, state.gy_col) ? Float64.(g_full[!, state.gy_col]) : fill(NaN, n_full)
-    ppd = Float64(pixels_per_degree(df))
-    spd = _compute_velocity_deg(gx, gy, ppd, df.sample_rate)
+    # Compute velocity per contiguous trial segment without mutating df.df
+    gx, gy, pa = _db_extract_eye_series(g_full, state)
+    units_per_deg = _eye_units_per_deg(df, state.eye)
+    spd = fill(NaN, n_full)
+    if n_full >= 5 && units_per_deg > 0.0 && df.sample_rate > 0.0
+        vel_scale = Float64(df.sample_rate) / (6.0 * units_per_deg)
+        _foreach_trial_segment(g_full) do lo, hi
+            _compute_velocity_deg!(spd, gx, gy, lo, hi, vel_scale)
+        end
+    end
 
     cache[:g] = g_full
+    cache[:gx_full] = gx
+    cache[:gy_full] = gy
+    cache[:pa_full] = pa
     cache[:saccades] = saccades_full
     cache[:fixations] = fixations_full
     cache[:t_full] = t_full
@@ -627,6 +688,7 @@ function _db_redraw_window!(
     reset_zoom::Bool = false,
     window_start::Int = 1,
 )
+    haskey(cache, :g) || return
     g_full = cache[:g]::AbstractDataFrame
     n_full = cache[:n_full]::Int
     saccades_full = cache[:saccades]
@@ -644,10 +706,12 @@ function _db_redraw_window!(
     cache[:window_start] = w_start
     cache[:window_end] = w_end
 
-    n_win = nrow(g)
-    gx = hasproperty(g, state.gx_col) ? Float64.(g[!, state.gx_col]) : fill(NaN, n_win)
-    gy = hasproperty(g, state.gy_col) ? Float64.(g[!, state.gy_col]) : fill(NaN, n_win)
-    pa = hasproperty(g, state.pa_col) ? Float64.(g[!, state.pa_col]) : fill(NaN, n_win)
+    gx_full = cache[:gx_full]::Vector{Float64}
+    gy_full = cache[:gy_full]::Vector{Float64}
+    pa_full = cache[:pa_full]::Vector{Float64}
+    gx = gx_full[w_start:w_end]
+    gy = gy_full[w_start:w_end]
+    pa = pa_full[w_start:w_end]
 
     t_full = cache[:t_full]::Vector{Float64}
     t = t_full[w_start:w_end]
@@ -772,11 +836,13 @@ function _db_update_cursor!(cursor_obs, cache::Dict{Symbol,Any}, state)
     nrow(g) == 0 && return
     f = clamp(state.frame[], 1, nrow(g))
 
-    gx = hasproperty(g, state.gx_col) ? Float64(g[f, state.gx_col]) : NaN
-    gy = hasproperty(g, state.gy_col) ? Float64(g[f, state.gy_col]) : NaN
-    pa = hasproperty(g, state.pa_col) ? Float64(g[f, state.pa_col]) : NaN
+    gx_full = cache[:gx_full]::Vector{Float64}
+    gy_full = cache[:gy_full]::Vector{Float64}
+    pa_full = cache[:pa_full]::Vector{Float64}
+    gx = gx_full[f]
+    gy = gy_full[f]
+    pa = pa_full[f]
 
-    # Use cached windowed time for cursor position (matches axes)
     t_win = get(cache, :t_win, Float64[])::Vector{Float64}
     w_start = get(cache, :window_start, 1)
     f_local = clamp(f - w_start + 1, 1, length(t_win))

@@ -39,6 +39,7 @@ function _time_bin_flat!(
     has_tw = !isnothing(time_window)
     is_vel = !isnothing(gx_vel)
     half_bin = bin_ms / 2.0
+    tr_col, pt_col = _group_seam_cols(parent_df)
 
     t_buf = Float64[]
     v_buf = Float64[]
@@ -52,22 +53,24 @@ function _time_bin_flat!(
         m = length(rows)
         m == 0 && continue
         first_r = rows[1]
-        _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, rows)
+        _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, rows, tr_col, pt_col)
         t_start, t_end =
             has_tw ? _resolve_time_window_rows(parent_df, first_r, time_window) : (0.0, 0.0)
         origin, clamp_right, right_bin = _time_bin_params(has_tw, t_start, t_end, bin_ms)
 
         if is_vel
-            length(gx_buf) < m && resize!(gx_buf, m)
-            length(gy_buf) < m && resize!(gy_buf, m)
-            length(v_buf) < m && resize!(v_buf, m)
-            for k = 1:m
-                rk = rows[k]
-                gx_buf[k] = Float64(gx_vel[rk])
-                gy_buf[k] = Float64(gy_vel[rk])
-                v_buf[k] = NaN
-            end
-            _compute_velocity_deg!(v_buf, gx_buf, gy_buf, 1, m, vel_scale)
+            _compute_group_velocity_deg!(
+                v_buf,
+                gx_buf,
+                gy_buf,
+                gx_vel,
+                gy_vel,
+                rows,
+                m,
+                tr_col,
+                pt_col,
+                vel_scale,
+            )
         end
 
         b_min = typemax(Int)
@@ -209,19 +212,8 @@ function time_bin(
     return DataFrame(pairs_out; copycols = false)
 end
 
-function _accum_aoi_bin_hits_concrete!(
-    hit_counts::Vector{Int},
-    any_hit_mask::Vector{UInt8},
-    aoi_off::Int,
-    aoi::A,
-    gx::AbstractVector{<:Real},
-    gy::AbstractVector{<:Real},
-    t_buf::Vector{Float64},
-    sample_bin::Vector{Int},
-    rows::AbstractVector{Int},
-    m::Int,
-    b_min::Int,
-) where {A<:AOI}
+function _accum_aoi_bin_hits_concrete!(aoi::A, ctx::Tuple) where {A<:AOI}
+    hit_counts, any_hit_mask, aoi_off, gx, gy, t_buf, sample_bin, rows, m, b_min = ctx
     @inbounds for k = 1:m
         b_raw = sample_bin[k]
         b_raw == typemin(Int) && continue
@@ -238,7 +230,7 @@ function _accum_aoi_bin_hits_concrete!(
     return nothing
 end
 
-function _accum_aoi_bin_hits!(
+@inline function _accum_aoi_bin_hits!(
     hit_counts::Vector{Int},
     any_hit_mask::Vector{UInt8},
     aoi_off::Int,
@@ -251,25 +243,8 @@ function _accum_aoi_bin_hits!(
     m::Int,
     b_min::Int,
 )
-    if aoi isa RectAOI
-        _accum_aoi_bin_hits_concrete!(hit_counts, any_hit_mask, aoi_off, aoi, gx, gy, t_buf, sample_bin, rows, m, b_min)
-    elseif aoi isa CircleAOI
-        _accum_aoi_bin_hits_concrete!(hit_counts, any_hit_mask, aoi_off, aoi, gx, gy, t_buf, sample_bin, rows, m, b_min)
-    elseif aoi isa EllipseAOI
-        _accum_aoi_bin_hits_concrete!(hit_counts, any_hit_mask, aoi_off, aoi, gx, gy, t_buf, sample_bin, rows, m, b_min)
-    elseif aoi isa PolygonAOI
-        _accum_aoi_bin_hits_concrete!(hit_counts, any_hit_mask, aoi_off, aoi, gx, gy, t_buf, sample_bin, rows, m, b_min)
-    elseif aoi isa DynamicAOI{RectAOI}
-        _accum_aoi_bin_hits_concrete!(hit_counts, any_hit_mask, aoi_off, aoi, gx, gy, t_buf, sample_bin, rows, m, b_min)
-    elseif aoi isa DynamicAOI{CircleAOI}
-        _accum_aoi_bin_hits_concrete!(hit_counts, any_hit_mask, aoi_off, aoi, gx, gy, t_buf, sample_bin, rows, m, b_min)
-    elseif aoi isa DynamicAOI{EllipseAOI}
-        _accum_aoi_bin_hits_concrete!(hit_counts, any_hit_mask, aoi_off, aoi, gx, gy, t_buf, sample_bin, rows, m, b_min)
-    elseif aoi isa DynamicAOI{PolygonAOI}
-        _accum_aoi_bin_hits_concrete!(hit_counts, any_hit_mask, aoi_off, aoi, gx, gy, t_buf, sample_bin, rows, m, b_min)
-    else
-        _accum_aoi_bin_hits_concrete!(hit_counts, any_hit_mask, aoi_off, aoi, gx, gy, t_buf, sample_bin, rows, m, b_min)
-    end
+    ctx = (hit_counts, any_hit_mask, aoi_off, gx, gy, t_buf, sample_bin, rows, m, b_min)
+    _with_concrete_aoi(_accum_aoi_bin_hits_concrete!, aoi, ctx)
     return nothing
 end
 
@@ -295,6 +270,7 @@ function _proportion_of_looks_flat!(
     n_slots = n_aois + 1
     has_tw = !isnothing(time_window)
     half_bin = bin_ms / 2.0
+    tr_col, pt_col = _group_seam_cols(parent_df)
 
     t_buf = Float64[]
     sample_bin = Int[]
@@ -307,7 +283,7 @@ function _proportion_of_looks_flat!(
         m = length(rows)
         m == 0 && continue
         first_r = rows[1]
-        _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, rows)
+        _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, rows, tr_col, pt_col)
         length(sample_bin) < m && resize!(sample_bin, m)
         length(any_hit_mask) < m && resize!(any_hit_mask, m)
         t_start, t_end =

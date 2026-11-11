@@ -2,7 +2,7 @@
 
 ```julia
 using EyeFun
-using CairoMakie
+using GLMakie
 
 stim = read_stimuli("experiment_dir/")
 fig = plot_stimuli(stim)

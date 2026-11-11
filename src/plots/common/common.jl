@@ -1,5 +1,4 @@
-"""Select gaze columns based on eye keyword and data availability.
-Thin wrapper around `_resolve_eye` + `_get_gaze_vecs` for convenience in plot code."""
+"""Select gaze columns and display label for `eye`."""
 function _select_eye(samples::AbstractDataFrame, eye::Symbol)
     resolved = _resolve_eye(samples, eye)
     gx, gy = _get_gaze_vecs(samples, resolved)

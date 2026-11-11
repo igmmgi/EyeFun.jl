@@ -18,5 +18,5 @@ Pages = ["analysis.md"]
 Modules = [EyeFun]
 Private = false
 Order = [:function, :macro]
-Filter = t -> !startswith(string(t), "_") && !startswith(string(t), "plot_") && t !== EyeFun.play_wav
+Filter = t -> !startswith(String(nameof(t)), "_") && !startswith(String(nameof(t)), "plot_") && !(t in (EyeFun.play_wav, EyeFun.load_image, EyeFun.image_size))
 ```

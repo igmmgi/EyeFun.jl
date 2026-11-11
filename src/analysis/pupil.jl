@@ -120,7 +120,7 @@ function _interpolate_blinks_range!(
 end
 
 """
-    interpolate_blinks!(df::EyeData; eye=:auto, margin_ms=50, method=:linear)
+    interpolate_blinks!(df::EyeData; eye=:auto, margin_ms=50, method=:linear, prefix=nothing)
 
 Replace pupil values during blinks (plus a margin before/after) with
 interpolated values within each `(participant, trial)` segment. Modifies the DataFrame in-place.
@@ -247,11 +247,7 @@ function baseline_correct_pupil!(
     eye = _resolve_eye(df, eye; cols = :pupil)
     _ensure_eye_cols!(df, eye; cols = :pupil)
     pa_col = _eye_columns(eye).pa
-    pa_vec = df.df[!, pa_col]
-    if !(eltype(pa_vec) <: AbstractFloat)
-        pa_vec = Float64[ismissing(v) ? NaN : Float64(v) for v in pa_vec]
-        df.df[!, pa_col] = pa_vec
-    end
+    pa_vec = _ensure_float_col!(df.df, pa_col)
 
     d = df.df
     has_trel = _has_active_time_rel(d)
@@ -260,12 +256,13 @@ function baseline_correct_pupil!(
 
     group_cols = _resolve_group_cols(df, group_by)
     grouped = groupby(d, group_cols; skipmissing = true)
+    tr_col, pt_col = _group_seam_cols(d)
 
     t_buf = Float64[]
     for g in grouped
         idxs = parentindices(g)[1]
         isempty(idxs) && continue
-        m = _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, idxs)
+        m = _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, idxs, tr_col, pt_col)
         w_lo, w_hi = _resolve_time_window_rows(d, idxs[1], window)
         _baseline_correct_group!(pa_vec, t_buf, idxs, m, w_lo, w_hi, method)
     end
@@ -456,10 +453,11 @@ function pupil_peak_metrics(
     ttp_v = Vector{Float64}(undef, ng)
     t_buf = Float64[]
 
+    tr_col, pt_col = _group_seam_cols(d)
     @inbounds for gi = 1:ng
         rows = parentindices(grouped[gi])[1]
         row_first_idx[gi] = rows[1]
-        m = _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, rows)
+        m = _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, rows, tr_col, pt_col)
         tw_s, tw_e = has_tw ? _resolve_time_window_rows(d, rows[1], time_window) : (0.0, 0.0)
         pk = _pupil_peak_kernel(t_buf, pa_all, rows, m, has_tw, tw_s, tw_e)
         mean_v[gi] = pk.mean_pupil

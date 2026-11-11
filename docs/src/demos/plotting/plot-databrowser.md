@@ -2,8 +2,8 @@
 
 ```julia
 using EyeFun
-using CairoMakie
+using GLMakie
 
 dat = read_et_data("experiment.edf")
-fig = plot_databrowser(dat; split_by=:trial)
+fig, state = plot_databrowser(dat; split_by=:trial)
 ```

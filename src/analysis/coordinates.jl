@@ -41,9 +41,29 @@ end
 const _EVENT_COORD_X_SUFFIXES = ("_fix_gavx", "_sacc_gstx", "_sacc_genx")
 const _EVENT_COORD_Y_SUFFIXES = ("_fix_gavy", "_sacc_gsty", "_sacc_geny")
 
+@inline function _col_coord_mode(
+    df::AbstractDataFrame,
+    col::Symbol,
+    fallback_coords::Symbol,
+)::Symbol
+    hasproperty(df, col) &&
+        return DataFrames.colmetadata(df, col, "eyefun_coords", fallback_coords)
+    if col === :gx
+        hasproperty(df, :gxL) &&
+            return DataFrames.colmetadata(df, :gxL, "eyefun_coords", fallback_coords)
+        hasproperty(df, :gxR) &&
+            return DataFrames.colmetadata(df, :gxR, "eyefun_coords", fallback_coords)
+    elseif col === :gy
+        hasproperty(df, :gyL) &&
+            return DataFrames.colmetadata(df, :gyL, "eyefun_coords", fallback_coords)
+        hasproperty(df, :gyR) &&
+            return DataFrames.colmetadata(df, :gyR, "eyefun_coords", fallback_coords)
+    end
+    return fallback_coords
+end
+
 @inline function _is_col_deg(df::AbstractDataFrame, col::Symbol, fallback_coords::Symbol)::Bool
-    hasproperty(df, col) || return fallback_coords === :deg
-    return DataFrames.colmetadata(df, col, "eyefun_coords", fallback_coords) === :deg
+    return _col_coord_mode(df, col, fallback_coords) === :deg
 end
 
 @inline function _is_col_centered(
@@ -51,8 +71,7 @@ end
     col::Symbol,
     fallback_coords::Symbol,
 )::Bool
-    hasproperty(df, col) || return fallback_coords in (:deg, :center_px)
-    c = DataFrames.colmetadata(df, col, "eyefun_coords", fallback_coords)
+    c = _col_coord_mode(df, col, fallback_coords)
     return c === :deg || c === :center_px
 end
 
@@ -173,7 +192,7 @@ function to_center_coords!(ed::EyeData; eye::Symbol = :auto, units::Symbol = :de
     for gc in (:gx, :gy, :gxL, :gyL, :gxR, :gyR)
         if hasproperty(d, gc)
             any_gaze = true
-            if DataFrames.colmetadata(d, gc, "eyefun_coords", :px) !== target_mode
+            if DataFrames.colmetadata(d, gc, "eyefun_coords", fb) !== target_mode
                 all_conv = false
                 break
             end

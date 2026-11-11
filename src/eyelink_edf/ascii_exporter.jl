@@ -1,9 +1,5 @@
 # EyeLink ASCII (.asc) exporter matching SR Research edf2asc output.
 
-using DataFrames
-using Dates
-using Printf
-
 """Write a UInt32 as decimal ASCII digits into buf at pos. Returns new pos."""
 @inline function _buf_uint32!(buf::Vector{UInt8}, pos::Int, v::UInt32)
     if v == UInt32(0)
@@ -116,8 +112,18 @@ end
     return _buf_uint64_known!(buf, pos, u, nd)
 end
 
+@inline function _buf_dot_field!(buf::Vector{UInt8}, pos::Int, width::Int)
+    @inbounds for _ = 1:(width-1)
+        buf[pos] = UInt8(' ')
+        pos += 1
+    end
+    @inbounds buf[pos] = UInt8('.')
+    return pos + 1
+end
+
 @inline function _buf_f64_0dp_field!(buf::Vector{UInt8}, pos::Int, v::Float64, width::Int)
-    if !(isfinite(v) && -1.0e15 <= v <= 1.0e15)
+    !isfinite(v) && return _buf_dot_field!(buf, pos, width)
+    if !(-1.0e15 <= v <= 1.0e15)
         s = @sprintf("%6.0f", v)
         GC.@preserve buf s unsafe_copyto!(pointer(buf, pos), pointer(s), sizeof(s))
         return pos + sizeof(s)
@@ -139,7 +145,8 @@ end
 end
 
 @inline function _buf_f64_1dp_field!(buf::Vector{UInt8}, pos::Int, v::Float64, width::Int)
-    if !(isfinite(v) && -1.0e14 <= v <= 1.0e14)
+    !isfinite(v) && return _buf_dot_field!(buf, pos, width)
+    if !(-1.0e14 <= v <= 1.0e14)
         s = @sprintf("%6.1f", v)
         GC.@preserve buf s unsafe_copyto!(pointer(buf, pos), pointer(s), sizeof(s))
         return pos + sizeof(s)
@@ -166,7 +173,8 @@ end
 end
 
 @inline function _buf_f64_2dp_field!(buf::Vector{UInt8}, pos::Int, v::Float64, width::Int)
-    if !(isfinite(v) && -1.0e13 <= v <= 1.0e13)
+    !isfinite(v) && return _buf_dot_field!(buf, pos, width)
+    if !(-1.0e13 <= v <= 1.0e13)
         s = @sprintf("%6.2f", v)
         GC.@preserve buf s unsafe_copyto!(pointer(buf, pos), pointer(s), sizeof(s))
         return pos + sizeof(s)
@@ -404,6 +412,7 @@ function write_et_ascii(
     include_samples::Bool = true,
     include_events::Bool = true,
     include_messages::Bool = true,
+    verbose::Bool = false,
 )
     if !isempty(edf.filename) && abspath(output_file) == abspath(edf.filename)
         error("Refusing to overwrite source file in-place: $output_file")
@@ -420,6 +429,7 @@ function write_et_ascii(
             )
         end
     end
+    verbose && @info "EDF ASC: wrote $(output_file)"
     return nothing
 end
 
@@ -567,7 +577,7 @@ end
         b = codeunit(s, i)
         if (0x20 <= b <= 0x7e) || b == 0x09
             continue
-        elseif b == 0x0a || b == 0x00 || b >= 0x80
+        elseif b == 0x0a || b == 0x0d || b == 0x00 || b >= 0x80
             return 0
         else
             return -1
@@ -629,7 +639,9 @@ function _append_raw_event_lines!(
                 end
                 _arena_commit!(arena, t, UInt32(0), start_p, p)
             elseif st_code == 0
-                clean = occursin('\0', raw_m) ? replace(raw_m, '\0' => "") : raw_m
+                clean =
+                    (occursin('\0', raw_m) || occursin('\r', raw_m)) ?
+                    replace(replace(raw_m, '\0' => ""), '\r' => "") : raw_m
                 if all(c -> isprint(c) || c == '\n' || c == '\t', clean)
                     if !occursin('\n', clean)
                         nb = sizeof(clean)
@@ -718,19 +730,26 @@ function _append_sacc_lines!(
     @inbounds for idx in eachindex(s_st)
         st_i = UInt32(s_st[idx])
         en_i = UInt32(s_en[idx])
-        (st_i >= min_rec_time && en_i <= max_valid_ts) || continue
+        (en_i >= st_i && st_i >= min_rec_time && en_i <= max_valid_ts) || continue
         eb = has_s_eye ? _eye_byte(s_eye[idx]) : UInt8('L')
         dur = en_i - st_i + UInt32(1)
-        gstx = round(!isempty(s_gstx) ? Float64(s_gstx[idx]) : 0.0, digits = 1)
-        gsty = round(!isempty(s_gsty) ? Float64(s_gsty[idx]) : 0.0, digits = 1)
-        genx = round(!isempty(s_genx) ? Float64(s_genx[idx]) : 0.0, digits = 1)
-        geny = round(!isempty(s_geny) ? Float64(s_geny[idx]) : 0.0, digits = 1)
-        stored_ampl = !isempty(s_ampl) ? Float64(s_ampl[idx]) : 0.0
-        stored_pvel = !isempty(s_pvel) ? Float64(s_pvel[idx]) : 0.0
+        raw_gstx = !isempty(s_gstx) ? Float64(s_gstx[idx]) : NaN
+        raw_gsty = !isempty(s_gsty) ? Float64(s_gsty[idx]) : NaN
+        raw_genx = !isempty(s_genx) ? Float64(s_genx[idx]) : NaN
+        raw_geny = !isempty(s_geny) ? Float64(s_geny[idx]) : NaN
+        gstx = isfinite(raw_gstx) ? round(raw_gstx, digits = 1) : NaN
+        gsty = isfinite(raw_gsty) ? round(raw_gsty, digits = 1) : NaN
+        genx = isfinite(raw_genx) ? round(raw_genx, digits = 1) : NaN
+        geny = isfinite(raw_geny) ? round(raw_geny, digits = 1) : NaN
+        stored_ampl = !isempty(s_ampl) ? Float64(s_ampl[idx]) : NaN
+        stored_pvel = !isempty(s_pvel) ? Float64(s_pvel[idx]) : NaN
         ampl =
-            stored_ampl != 0.0 ? stored_ampl :
-            round(sqrt((genx - gstx)^2 + (geny - gsty)^2) / 10.0, digits = 2)
-        pvel = round(stored_pvel, digits = 0)
+            (isfinite(stored_ampl) && stored_ampl != 0.0) ? stored_ampl :
+            (
+                isfinite(gstx) && isfinite(gsty) && isfinite(genx) && isfinite(geny) ?
+                round(sqrt((genx - gstx)^2 + (geny - gsty)^2) / 10.0, digits = 2) : NaN
+            )
+        pvel = isfinite(stored_pvel) ? round(stored_pvel, digits = 0) : NaN
 
         start_p = _arena_reserve!(arena, 128)
         buf = arena.buf
@@ -775,11 +794,13 @@ function _append_fix_lines!(
     @inbounds for idx in eachindex(f_st)
         st_i = UInt32(f_st[idx])
         en_i = UInt32(f_en[idx])
-        (st_i >= min_rec_time && en_i <= max_valid_ts) || continue
+        (en_i >= st_i && st_i >= min_rec_time && en_i <= max_valid_ts) || continue
         eb = has_f_eye ? _eye_byte(f_eye[idx]) : UInt8('L')
         dur = en_i - st_i + UInt32(1)
-        gavx = round(!isempty(f_gavx) ? Float64(f_gavx[idx]) : 0.0, digits = 1)
-        gavy = round(!isempty(f_gavy) ? Float64(f_gavy[idx]) : 0.0, digits = 1)
+        raw_gavx = !isempty(f_gavx) ? Float64(f_gavx[idx]) : NaN
+        raw_gavy = !isempty(f_gavy) ? Float64(f_gavy[idx]) : NaN
+        gavx = isfinite(raw_gavx) ? round(raw_gavx, digits = 1) : NaN
+        gavy = isfinite(raw_gavy) ? round(raw_gavy, digits = 1) : NaN
         ava = !isempty(f_ava) && isfinite(f_ava[idx]) ? round(Int, Float64(f_ava[idx])) : 0
 
         start_p = _arena_reserve!(arena, 96)
@@ -817,7 +838,7 @@ function _append_blink_lines!(
     @inbounds for idx in eachindex(b_st)
         st_i = UInt32(b_st[idx])
         en_i = UInt32(b_en[idx])
-        (st_i >= min_rec_time && en_i <= max_valid_ts) || continue
+        (en_i >= st_i && st_i >= min_rec_time && en_i <= max_valid_ts) || continue
         eb = has_b_eye ? _eye_byte(b_eye[idx]) : UInt8('L')
         dur = en_i - st_i + UInt32(1)
 
@@ -984,15 +1005,15 @@ function write_chronological_data(
 
         gx1 = use_left ? gxL_v : (use_right ? gxR_v : empty_f32)
         gy1 =
-            use_left ? _coerce_f32_vec(sam[!, :gyL]) :
-            (use_right ? _coerce_f32_vec(sam[!, :gyR]) : empty_f32)
+            (use_left && hasproperty(sam, :gyL)) ? _coerce_f32_vec(sam[!, :gyL]) :
+            ((use_right && hasproperty(sam, :gyR)) ? _coerce_f32_vec(sam[!, :gyR]) : empty_f32)
         pa1 =
-            use_left ? _coerce_f32_vec(sam[!, :paL]) :
-            (use_right ? _coerce_f32_vec(sam[!, :paR]) : empty_f32)
+            (use_left && hasproperty(sam, :paL)) ? _coerce_f32_vec(sam[!, :paL]) :
+            ((use_right && hasproperty(sam, :paR)) ? _coerce_f32_vec(sam[!, :paR]) : empty_f32)
 
         gx2 = is_binocular ? gxR_v : empty_f32
-        gy2 = is_binocular ? _coerce_f32_vec(sam[!, :gyR]) : empty_f32
-        pa2 = is_binocular ? _coerce_f32_vec(sam[!, :paR]) : empty_f32
+        gy2 = (is_binocular && hasproperty(sam, :gyR)) ? _coerce_f32_vec(sam[!, :gyR]) : empty_f32
+        pa2 = (is_binocular && hasproperty(sam, :paR)) ? _coerce_f32_vec(sam[!, :paR]) : empty_f32
 
         valid_idx = Vector{Int}(undef, n_sam)
         n_valid = 0

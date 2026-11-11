@@ -16,6 +16,8 @@ function write_et_ascii(
     isfile(path) || isdir(path) || error("Path not found: $path")
 
     if isdir(path)
+        !isnothing(out_path) &&
+            throw(ArgumentError("out_path cannot be specified when path is a directory."))
         return _write_et_ascii_dir(
             path;
             include_samples = include_samples,
@@ -29,15 +31,13 @@ function write_et_ascii(
     fmt = detect_format(path)
 
     raw = if fmt == EDFFile
-        EyeFun.read_eyelink(String(path); verbose = verbose, kwargs...)
+        read_eyelink(String(path); verbose = verbose, kwargs...)
     elseif fmt == SMIFile
-        EyeFun.read_smi(String(path); verbose = verbose, kwargs...)
-    elseif fmt == TobiiFile
+        read_smi(String(path); verbose = verbose, kwargs...)
+    else
         error(
             "ASCII export is not supported for Tobii (.tsv) files (already tab-delimited text).",
         )
-    else
-        error("Formatting to ASCII for $fmt is not supported")
     end
 
     if fmt == EDFFile
@@ -47,6 +47,7 @@ function write_et_ascii(
                 include_samples = include_samples,
                 include_events = include_events,
                 include_messages = include_messages,
+                verbose = verbose,
             )
         else
             write_et_ascii(
@@ -55,6 +56,7 @@ function write_et_ascii(
                 include_samples = include_samples,
                 include_events = include_events,
                 include_messages = include_messages,
+                verbose = verbose,
             )
         end
     else
@@ -119,7 +121,11 @@ function _write_et_ascii_dir(
     end
 
     sort!(files)
-    isempty(files) && @warn "No eye-tracking binary (.edf / .idf) files found in $dir"
+    if isempty(files)
+        label = isnothing(ext) ? "(.edf / .idf)" : "($ext)"
+        @warn "No eye-tracking $label files found in $dir"
+        return nothing
+    end
 
     write_et_ascii(files; kwargs...)
     return nothing

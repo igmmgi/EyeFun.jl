@@ -41,23 +41,36 @@ function _compute_velocity_deg!(
     return vel
 end
 
-"""
-    _compute_velocity_deg(gx, gy, ppd, sample_rate) -> Vector{Float64}
-
-Compute gaze velocity in °/s using 5-point central difference.
-Returns NaN for invalid samples and boundary samples.
-"""
-function _compute_velocity_deg(
-    gx::AbstractVector{<:AbstractFloat},
-    gy::AbstractVector{<:AbstractFloat},
-    ppd::Real,
-    sample_rate::Real,
+function _compute_group_velocity_deg!(
+    v_buf::Vector{Float64},
+    gx_buf::Vector{Float64},
+    gy_buf::Vector{Float64},
+    gx_src::AbstractVector{<:Real},
+    gy_src::AbstractVector{<:Real},
+    rows::AbstractVector{Int},
+    m::Int,
+    tr_col::Union{Nothing,AbstractVector},
+    pt_col::Union{Nothing,AbstractVector},
+    vel_scale::Float64,
 )
-    n = length(gx)
-    vel = fill(NaN, n)
-    n < 5 && return vel
-    scale = Float64(sample_rate) / (6.0 * Float64(ppd))
-    return _compute_velocity_deg!(vel, gx, gy, 1, n, scale)
+    length(gx_buf) < m && resize!(gx_buf, m)
+    length(gy_buf) < m && resize!(gy_buf, m)
+    length(v_buf) < m && resize!(v_buf, m)
+    @inbounds for k = 1:m
+        rk = rows[k]
+        gx_buf[k] = Float64(gx_src[rk])
+        gy_buf[k] = Float64(gy_src[rk])
+        v_buf[k] = NaN
+    end
+    seg_lo = 1
+    @inbounds for k = 2:m
+        if !_is_group_row_contig(rows[k-1], rows[k], tr_col, pt_col)
+            _compute_velocity_deg!(v_buf, gx_buf, gy_buf, seg_lo, k - 1, vel_scale)
+            seg_lo = k
+        end
+    end
+    m >= seg_lo && _compute_velocity_deg!(v_buf, gx_buf, gy_buf, seg_lo, m, vel_scale)
+    return nothing
 end
 
 function _subthreshold_vel_stats(
@@ -163,7 +176,6 @@ function _refine_saccades_and_pso_u8!(
     lo::Int,
     hi::Int,
     onset_thresh::Float64,
-    pt_thresh::Float64,
     min_fix_samples::Int,
     do_refine::Bool,
     do_pso::Bool,
@@ -236,7 +248,6 @@ function _refine_saccades_and_pso_u8!(
                 if has_osc
                     pso_end = 0
                     peaked = false
-                    prev_v = Float64(vel[s_hi])
                     for k = p_lo:p_hi
                         labels[k] == _LBL_SACC && break
                         vk = Float64(vel[k])
@@ -247,7 +258,6 @@ function _refine_saccades_and_pso_u8!(
                         elseif peaked
                             break
                         end
-                        prev_v = vk
                     end
                     if pso_end >= p_lo
                         for k = p_lo:pso_end
@@ -352,21 +362,6 @@ function _ivt_classify_u8!(
     end
 
     return labels
-end
-
-"""
-Classify samples using I-VT (velocity threshold identification).
-Returns a per-sample UInt8 label vector (`_LBL_NOISE`, `_LBL_FIX`, `_LBL_SACC`).
-"""
-function _ivt_classify_u8(
-    vel::AbstractVector{<:AbstractFloat},
-    threshold::Float64,
-    min_fix_samples::Int,
-    min_sacc_samples::Int,
-)
-    n = length(vel)
-    labels = fill(_LBL_NOISE, n)
-    return _ivt_classify_u8!(labels, vel, 1, n, threshold, min_fix_samples, min_sacc_samples)
 end
 
 function _idt_classify_u8!(
@@ -479,61 +474,6 @@ function _idt_classify_u8!(
     end
 
     return labels
-end
-
-"""
-Classify samples using I-DT (dispersion threshold identification).
-Dispersion = (max_x - min_x) + (max_y - min_y) in degrees.
-Returns a per-sample UInt8 label vector (`_LBL_NOISE`, `_LBL_FIX`, `_LBL_SACC`).
-"""
-function _idt_classify_u8(
-    gx::AbstractVector{<:AbstractFloat},
-    gy::AbstractVector{<:AbstractFloat},
-    ppd::Float64,
-    disp_threshold::Float64,
-    min_fix_samples::Int,
-    min_sacc_samples::Int,
-)
-    n = length(gx)
-    labels = fill(_LBL_NOISE, n)
-    return _idt_classify_u8!(
-        labels,
-        gx,
-        gy,
-        1,
-        n,
-        ppd,
-        disp_threshold,
-        min_fix_samples,
-        min_sacc_samples,
-    )
-end
-
-"""
-    _find_contiguous_runs(predicate::Function, vec::AbstractVector, min_len::Int=1)
-
-Find all contiguous runs where `predicate(val)` is `true` in `vec` that are
-at least `min_len` samples long. Returns a vector of `(start_idx, end_idx)` tuples.
-"""
-function _find_contiguous_runs(predicate::F, vec::AbstractVector, min_len::Int = 1) where {F}
-    runs = Tuple{Int,Int}[]
-    n = length(vec)
-    i = 1
-    @inbounds while i <= n
-        if predicate(vec[i])
-            j = i + 1
-            while j <= n && predicate(vec[j])
-                j += 1
-            end
-            if (j - i) >= min_len
-                push!(runs, (i, j - 1))
-            end
-            i = j
-        else
-            i += 1
-        end
-    end
-    return runs
 end
 
 """Write detected events into DataFrame columns using the standard schema."""
@@ -710,9 +650,6 @@ function _write_event_columns_u8!(
     return nothing
 end
 
-@inline _as_float_vec(v::AbstractVector{<:AbstractFloat}) = v
-@inline _as_float_vec(v::AbstractVector) = Float64[ismissing(x) ? NaN : Float64(x) for x in v]
-
 """
     detect_events!(df::EyeData; method=:ivt, eye=:auto, ...)
 
@@ -754,7 +691,6 @@ function detect_events!(
     detect_pso::Bool = false,
     max_pso_ms::Int = 40,
     pixels_per_degree::Union{Nothing,Real} = nothing,
-    pixels_per_degree_override::Union{Nothing,Real} = pixels_per_degree,
     prefix::Union{Nothing,Symbol} = nothing,
 )
 
@@ -779,7 +715,7 @@ function detect_events!(
     gx_col, gy_col, pa_col = ecols.gx, ecols.gy, ecols.pa
 
     # Coordinate units per degree (1.0 when already converted to visual degrees)
-    ppd = Float64(something(pixels_per_degree_override, _eye_units_per_deg(df, eye)))
+    ppd = Float64(something(pixels_per_degree, _eye_units_per_deg(df, eye)))
     sample_rate = df.sample_rate
 
     samples_per_ms = sample_rate / 1000.0
@@ -821,7 +757,6 @@ function detect_events!(
                     lo,
                     hi,
                     onset_thresh,
-                    seg_v_thresh,
                     min_fix_samples,
                     do_refine,
                     do_pso,
@@ -1020,9 +955,8 @@ end
 
 """Extract unique fixations from a DataFrame using contiguous run encoding."""
 function _extract_fixations(
-    g::AbstractDataFrame,
-    pos_prefix::Union{Nothing,Symbol} = nothing;
-    prefix::Union{Nothing,Symbol} = pos_prefix,
+    g::AbstractDataFrame;
+    prefix::Union{Nothing,Symbol} = nothing,
 )
     c_in = _prefixed_sym(prefix, :in_fix)
     c_x = _prefixed_sym(prefix, :fix_gavx)
@@ -1075,9 +1009,8 @@ end
 
 """Extract unique saccades from a DataFrame using contiguous run encoding."""
 function _extract_saccades(
-    g::AbstractDataFrame,
-    pos_prefix::Union{Nothing,Symbol} = nothing;
-    prefix::Union{Nothing,Symbol} = pos_prefix,
+    g::AbstractDataFrame;
+    prefix::Union{Nothing,Symbol} = nothing,
 )
     c_in = _prefixed_sym(prefix, :in_sacc)
     c_stx = _prefixed_sym(prefix, :sacc_gstx)

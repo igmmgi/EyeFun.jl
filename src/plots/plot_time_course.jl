@@ -207,6 +207,12 @@ function plot_time_course(
 
     if !isnothing(clusters) && nrow(clusters) > 0 &&
        hasproperty(clusters, :t_start) && hasproperty(clusters, :t_end)
+        u_bins = sort(
+            Float64[
+                Float64(t) for t in unique(skipmissing(df[!, time_col])) if isfinite(Float64(t))
+            ],
+        )
+        half_dt = length(u_bins) >= 2 ? 0.5 * minimum(diff(u_bins)) : 0.5
         clo = Float64[]
         chi = Float64[]
         has_p = hasproperty(clusters, :p_value)
@@ -214,8 +220,8 @@ function plot_time_course(
             (!has_p || Float64(clusters.p_value[r]) <= Float64(alpha)) || continue
             lo = Float64(clusters.t_start[r])
             hi = Float64(clusters.t_end[r])
-            push!(clo, lo)
-            push!(chi, max(lo + 1.0, hi))
+            push!(clo, lo - half_dt)
+            push!(chi, max(lo + half_dt, hi + half_dt))
         end
         !isempty(clo) && Makie.vspan!(ax, clo, chi; color = (:gold, 0.25))
     end

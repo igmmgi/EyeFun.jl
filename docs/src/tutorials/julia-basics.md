@@ -55,8 +55,9 @@ julia> Δt = 1 / 1000
 0.001
 ```
 
-> [!TIP]
-> In the REPL or VS Code, type the LaTeX name and press `Tab` to insert Unicode symbols: `\mu` → `μ`, `\sigma` → `σ`, `\Delta` → `Δ`.
+:::tip
+In the REPL or VS Code, type the LaTeX name and press `Tab` to insert Unicode symbols: `\mu` → `μ`, `\sigma` → `σ`, `\Delta` → `Δ`.
+:::
 
 To see all variables defined in your current session (similar to MATLAB's `whos`), use `varinfo()`:
 

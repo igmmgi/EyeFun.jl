@@ -23,7 +23,7 @@ with recording metadata (sample rate, screen geometry, coordinate system).
 
 # Fields
 - `df::DataFrame`: sample-level data (gaze, pupil, events, trial metadata)
-- `source::Symbol`: data source (`:eyelink`, `:smi`, `:tobii`, `:pupil_labs`, `:generic`)
+- `source::Symbol`: data source (`:eyelink`, `:smi`, `:tobii`, `:delimited`, `:generic`)
 - `sample_rate::Float64`: sampling frequency in Hz
 - `screen_res::Tuple{Int,Int}`: screen resolution `(width, height)` in pixels
 - `screen_width_cm::Float64`: physical screen width in cm
@@ -374,7 +374,7 @@ struct PolygonAOI <: AOI
 end
 PolygonAOI(name, vertices; color = nothing) = PolygonAOI(name, vertices, color)
 
-"""Point-in-polygon using the ray casting algorithm."""
+# Point-in-polygon using the ray casting algorithm.
 function in_aoi(aoi::PolygonAOI, x::Real, y::Real)
     verts = aoi.vertices
     n = length(verts)
@@ -486,8 +486,10 @@ function _in_dynamic_aoi_interval(
     isnan(t0) && return false
     hi = isnan(t1) ? t0 : max(t0, t1)
     @inbounds for w in aoi.windows
-        if w[2] >= t0 && w[1] <= hi
-            t_probe = clamp(t0, w[1], w[2])
+        overlaps = hi > t0 ? (w[2] > t0 && w[1] < hi) : (w[1] <= t0 <= w[2])
+        if overlaps
+            t_mid = 0.5 * (max(t0, w[1]) + min(hi, w[2]))
+            t_probe = clamp(t_mid, w[1], w[2])
             in_aoi(w[3], x, y, t_probe) && return true
         end
     end
@@ -506,24 +508,10 @@ Base.show(io::IO, a::DynamicAOI) =
     print(io, "DynamicAOI(\"$(a.name)\", $(length(a.windows)) windows)")
 
 
-@inline function _same_event_run(
-    times::AbstractVector{<:Real},
-    part_col::Union{Nothing,AbstractVector},
-    i::Int,
-    j::Int,
-)::Bool
-    Float64(@inbounds times[j]) < Float64(@inbounds times[j-1]) && return false
-    if !isnothing(part_col)
-        pi = @inbounds part_col[i]
-        pj = @inbounds part_col[j]
-        (pj === pi || isequal(pj, pi)) || return false
-    end
-    return true
-end
-
 @inline function _is_clean_event_run(
     times::AbstractVector{<:Real},
     part_col::Union{Nothing,AbstractVector},
+    trial_col::Union{Nothing,AbstractVector},
     i::Int,
     j_end::Int,
     sample_period_ms::Float64,
@@ -533,6 +521,11 @@ end
         pe = @inbounds part_col[j_end]
         (pe === pi || isequal(pe, pi)) || return false
     end
+    if !isnothing(trial_col)
+        ti = @inbounds trial_col[i]
+        te = @inbounds trial_col[j_end]
+        (!ismissing(ti) && !ismissing(te) && (te === ti || isequal(te, ti))) || return false
+    end
     i == j_end && return true
     dt = Float64(@inbounds times[j_end]) - Float64(@inbounds times[i])
     exp_dt = (j_end - i) * sample_period_ms
@@ -540,17 +533,52 @@ end
 end
 
 @inline function _next_event_run_end(
-    mask::AbstractVector{Bool},
     times::AbstractVector{<:Real},
     part_col::Union{Nothing,AbstractVector},
+    trial_col::Union{Nothing,AbstractVector},
+    dur_col::Union{Nothing,AbstractVector{<:Real}},
     sample_period_ms::Float64,
     i::Int,
     j_raw::Int,
 )::Int
     j_end = j_raw - 1
-    _is_clean_event_run(times, part_col, i, j_end, sample_period_ms) && return j_raw
+    _is_clean_event_run(times, part_col, trial_col, i, j_end, sample_period_ms) && return j_raw
+    max_step = sample_period_ms > 0.0 ? max(20.0, 4.0 * sample_period_ms) : Inf
+    cur_tr = isnothing(trial_col) ? nothing : @inbounds(trial_col[i])
     j = i + 1
-    @inbounds while j < j_raw && _same_event_run(times, part_col, i, j)
+    @inbounds while j < j_raw
+        dt_step = Float64(times[j]) - Float64(times[j-1])
+        (dt_step < 0.0 || dt_step > max_step) && break
+        if !isnothing(part_col)
+            pi = part_col[i]
+            pj = part_col[j]
+            (pj === pi || isequal(pj, pi)) || break
+        end
+        if !isnothing(trial_col)
+            tj = trial_col[j]
+            if !ismissing(tj)
+                if ismissing(cur_tr)
+                    cur_tr = tj
+                elseif !(tj === cur_tr || isequal(tj, cur_tr))
+                    same_hw_evt = false
+                    if sample_period_ms > 0.0 &&
+                       abs(dt_step - sample_period_ms) <= 0.5 * sample_period_ms + 1e-6 &&
+                       !isnothing(dur_col)
+                        di = Float64(dur_col[i])
+                        dj = Float64(dur_col[j])
+                        same_hw_evt =
+                            di > 0.0 &&
+                            di == dj &&
+                            di > (j - i + 0.5) * sample_period_ms
+                    end
+                    if same_hw_evt
+                        cur_tr = tj
+                    else
+                        break
+                    end
+                end
+            end
+        end
         j += 1
     end
     return j
@@ -560,6 +588,8 @@ function _count_event_runs(
     mask::AbstractVector{Bool},
     times::AbstractVector{<:Real},
     part_col::Union{Nothing,AbstractVector},
+    trial_col::Union{Nothing,AbstractVector},
+    dur_col::Union{Nothing,AbstractVector{<:Real}},
     sample_period_ms::Float64,
 )::Int
     n = length(mask)
@@ -572,7 +602,15 @@ function _count_event_runs(
                 j_raw += 1
             end
             while i < j_raw
-                i = _next_event_run_end(mask, times, part_col, sample_period_ms, i, j_raw)
+                i = _next_event_run_end(
+                    times,
+                    part_col,
+                    trial_col,
+                    dur_col,
+                    sample_period_ms,
+                    i,
+                    j_raw,
+                )
                 cnt += 1
             end
         else
@@ -613,7 +651,7 @@ function _extract_fixations_kernel(
     include_groups::Bool = false,
 )
     n = length(mask)
-    m = _count_event_runs(mask, times, part_col, sample_period_ms)
+    m = _count_event_runs(mask, times, part_col, trial_col, dur_col, sample_period_ms)
     sttime = Vector{Float64}(undef, m)
     entime = Vector{Float64}(undef, m)
     dur = Vector{Int32}(undef, m)
@@ -631,14 +669,30 @@ function _extract_fixations_kernel(
             while j_raw <= n && mask[j_raw]
                 j_raw += 1
             end
+            i_start = i
             while i < j_raw
-                j = _next_event_run_end(mask, times, part_col, sample_period_ms, i, j_raw)
+                j = _next_event_run_end(
+                    times,
+                    part_col,
+                    trial_col,
+                    dur_col,
+                    sample_period_ms,
+                    i,
+                    j_raw,
+                )
+                was_split = (i > i_start || j < j_raw)
                 k += 1
                 t_start = Float64(times[i])
                 t_end = Float64(times[j-1])
                 sttime[k] = t_start
                 entime[k] = t_end
-                dur[k] = _safe_event_dur(dur_col, i, t_start, t_end, sample_period_ms)
+                dur[k] = _safe_event_dur(
+                    was_split ? nothing : dur_col,
+                    i,
+                    t_start,
+                    t_end,
+                    sample_period_ms,
+                )
                 !isnothing(gavx) && (gavx[k] = Float64(gavx_col[i]))
                 !isnothing(gavy) && (gavy[k] = Float64(gavy_col[i]))
                 !isnothing(ava) && (ava[k] = Float64(ava_col[i]))
@@ -716,7 +770,7 @@ function _extract_saccades_kernel(
     include_groups::Bool = false,
 )
     n = length(mask)
-    m = _count_event_runs(mask, times, part_col, sample_period_ms)
+    m = _count_event_runs(mask, times, part_col, trial_col, dur_col, sample_period_ms)
     sttime = Vector{Float64}(undef, m)
     entime = Vector{Float64}(undef, m)
     dur = Vector{Int32}(undef, m)
@@ -737,14 +791,30 @@ function _extract_saccades_kernel(
             while j_raw <= n && mask[j_raw]
                 j_raw += 1
             end
+            i_start = i
             while i < j_raw
-                j = _next_event_run_end(mask, times, part_col, sample_period_ms, i, j_raw)
+                j = _next_event_run_end(
+                    times,
+                    part_col,
+                    trial_col,
+                    dur_col,
+                    sample_period_ms,
+                    i,
+                    j_raw,
+                )
+                was_split = (i > i_start || j < j_raw)
                 k += 1
                 t_start = Float64(times[i])
                 t_end = Float64(times[j-1])
                 sttime[k] = t_start
                 entime[k] = t_end
-                dur[k] = _safe_event_dur(dur_col, i, t_start, t_end, sample_period_ms)
+                dur[k] = _safe_event_dur(
+                    was_split ? nothing : dur_col,
+                    i,
+                    t_start,
+                    t_end,
+                    sample_period_ms,
+                )
                 !isnothing(gstx) && (gstx[k] = Float64(gstx_col[i]))
                 !isnothing(gsty) && (gsty[k] = Float64(gsty_col[i]))
                 !isnothing(genx) && (genx[k] = Float64(genx_col[i]))
@@ -827,7 +897,7 @@ function _extract_blinks_kernel(
     include_groups::Bool = false,
 )
     n = length(mask)
-    m = _count_event_runs(mask, times, part_col, sample_period_ms)
+    m = _count_event_runs(mask, times, part_col, trial_col, dur_col, sample_period_ms)
     sttime = Vector{Float64}(undef, m)
     entime = Vector{Float64}(undef, m)
     dur = Vector{Int32}(undef, m)
@@ -842,14 +912,30 @@ function _extract_blinks_kernel(
             while j_raw <= n && mask[j_raw]
                 j_raw += 1
             end
+            i_start = i
             while i < j_raw
-                j = _next_event_run_end(mask, times, part_col, sample_period_ms, i, j_raw)
+                j = _next_event_run_end(
+                    times,
+                    part_col,
+                    trial_col,
+                    dur_col,
+                    sample_period_ms,
+                    i,
+                    j_raw,
+                )
+                was_split = (i > i_start || j < j_raw)
                 k += 1
                 t_start = Float64(times[i])
                 t_end = Float64(times[j-1])
                 sttime[k] = t_start
                 entime[k] = t_end
-                dur[k] = _safe_event_dur(dur_col, i, t_start, t_end, sample_period_ms)
+                dur[k] = _safe_event_dur(
+                    was_split ? nothing : dur_col,
+                    i,
+                    t_start,
+                    t_end,
+                    sample_period_ms,
+                )
                 !isnothing(p_out) && (p_out[k] = part_col[i])
                 !isnothing(tr_out) && (tr_out[k] = trial_col[i])
                 i = j
@@ -944,8 +1030,6 @@ function messages(ed::EyeData; summary::Bool = false, selection = nothing)
     isempty(result_msg) && return DataFrame()
     msg = DataFrame(time = result_time, message = result_msg; copycols = false)
     !summary && return msg
-
-    nrow(msg) == 0 && return DataFrame(message = String[], count = Int[])
 
     msg_counts = Dict{String,Int}()
     for m in msg.message
@@ -1090,7 +1174,7 @@ function _has_multiple_participants(df::AbstractDataFrame)::Bool
     return _has_multiple_participants_vec(df[!, :participant])
 end
 
-function _gather_first_col(src::AbstractVector, first_rows::Vector{Int})
+function _gather_group_col(src::AbstractVector, first_rows::Vector{Int})
     m = length(first_rows)
     out = similar(src, m)
     @inbounds for i = 1:m
@@ -1124,7 +1208,7 @@ function variables(ed::EyeData)
     @inbounds for i = 1:ng
         first_rows[i] = parentindices(gd[i])[1][1]
     end
-    pairs_out = Pair{Symbol,Any}[c => _gather_first_col(df[!, c], first_rows) for c in keep_cols]
+    pairs_out = Pair{Symbol,Any}[c => _gather_group_col(df[!, c], first_rows) for c in keep_cols]
     return DataFrame(pairs_out; copycols = false)
 end
 
@@ -1186,3 +1270,24 @@ const SaccadeInfo = @NamedTuple{
 
 const FixationInfo =
     @NamedTuple{x::Float64, y::Float64, dur::Float64, time_start::Int, time_end::Int}
+
+function _estimate_sample_rate_ms(
+    times::AbstractVector{<:Real};
+    fallback::Float64 = 0.0,
+    max_samples::Int = 2000,
+)::Float64
+    n = min(length(times), max_samples)
+    n <= 1 && return fallback
+    diffs = Float64[]
+    sizehint!(diffs, n)
+    @inbounds for i = 2:n
+        dt = Float64(times[i]) - Float64(times[i-1])
+        dt > 0.0 && isfinite(dt) && push!(diffs, dt)
+    end
+    isempty(diffs) && return fallback
+    med_dt = Statistics.median!(diffs)
+    med_dt > 0.0 || return fallback
+    raw_hz = 1000.0 / med_dt
+    rounded = round(raw_hz)
+    return abs(raw_hz - rounded) < 0.05 ? rounded : round(raw_hz; digits = 2)
+end

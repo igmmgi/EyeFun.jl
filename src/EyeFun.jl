@@ -9,6 +9,7 @@ analysis, and interactive Makie visualisation across EyeLink, SMI, and Tobii for
 EyeFun
 
 using DataFrames
+using Dates
 using LinearAlgebra
 using Makie
 using PrecompileTools: @setup_workload, @compile_workload

@@ -1,7 +1,5 @@
 # SR Research EyeLink binary (.edf) reader.
 
-const EYE_FLAG_RIGHT = 0x40
-const EYE_FLAG_LEFT = 0x80
 const TYPE_MASK = 0x3F
 const HEADER_MARKER = 0x21  # Constant byte in record headers
 
@@ -389,7 +387,6 @@ end
     ts::UInt32,
     et::Int,
     eye_val::Int16;
-    msg::String = "",
     input_val::UInt16 = UInt16(0),
     btn_val::UInt16 = UInt16(0),
 )
@@ -402,18 +399,6 @@ end
         ev.eye[k] = eye_val
         input_val != UInt16(0) && (ev.input[k] = input_val)
         btn_val != UInt16(0) && (ev.buttons[k] = btn_val)
-    end
-    if !isempty(msg)
-        nb = sizeof(msg)
-        used = ev.msg_used
-        need = used + nb + 1
-        need > length(ev.msg_arena) && _grow_msg_arena!(ev, need)
-        start_off = used + 1
-        GC.@preserve ev msg unsafe_copyto!(pointer(ev.msg_arena, start_off), pointer(msg), nb)
-        @inbounds ev.msg_arena[start_off+nb] = 0x00
-        ev.msg_used = start_off + nb
-        @inbounds ev.msg_off[k] = UInt32(start_off)
-        @inbounds ev.msg_len[k] = UInt32(nb)
     end
     return nothing
 end
@@ -462,21 +447,33 @@ end
     pl = min(pos + payload_size - 1, n)
     entime = pl >= pos + 4 ? read_be_uint32(data, pos + 1) : UInt32(0)
     @inbounds ev.entime[k] = entime
+    NaN32 = Float32(NaN)
+    @inline function _fev_div10(off::Int)::Float32
+        pl >= off + 1 || return NaN32
+        v = read_be_int16(data, off)
+        return v == typemin(Int16) ? NaN32 : Float32(v) / 10.0f0
+    end
+    @inline function _fev_raw(off::Int)::Float32
+        pl >= off + 1 || return NaN32
+        v = read_be_int16(data, off)
+        return v == typemin(Int16) ? NaN32 : Float32(v)
+    end
     if et == EVENT_ENDSACC
-        hstx = pl >= pos + 6 ? Float32(read_be_int16(data, pos + 5)) / 10.0f0 : 0.0f0
-        hsty = pl >= pos + 8 ? Float32(read_be_int16(data, pos + 7)) / 10.0f0 : 0.0f0
-        gstx = pl >= pos + 12 ? Float32(read_be_int16(data, pos + 11)) / 10.0f0 : 0.0f0
-        gsty = pl >= pos + 14 ? Float32(read_be_int16(data, pos + 13)) / 10.0f0 : 0.0f0
-        henx = pl >= pos + 18 ? Float32(read_be_int16(data, pos + 17)) / 10.0f0 : 0.0f0
-        heny = pl >= pos + 20 ? Float32(read_be_int16(data, pos + 19)) / 10.0f0 : 0.0f0
-        genx = pl >= pos + 22 ? Float32(read_be_int16(data, pos + 21)) / 10.0f0 : 0.0f0
-        geny = pl >= pos + 24 ? Float32(read_be_int16(data, pos + 23)) / 10.0f0 : 0.0f0
-        pvel = pl >= pos + 36 ? Float32(read_be_int16(data, pos + 35)) / 10.0f0 : 0.0f0
-        ppd_x = pl >= pos + 44 ? Float32(read_be_int16(data, pos + 43)) / 10.0f0 : 0.0f0
-        ppd_y = pl >= pos + 46 ? Float32(read_be_int16(data, pos + 45)) / 10.0f0 : 0.0f0
-        ppd_mean = (ppd_x + ppd_y) / 2.0f0
-        pixel_dist = sqrt((genx - gstx)^2 + (geny - gsty)^2)
-        ampl = ppd_mean > 0.0f0 ? pixel_dist / ppd_mean : 0.0f0
+        hstx = _fev_div10(pos + 5)
+        hsty = _fev_div10(pos + 7)
+        gstx = _fev_div10(pos + 11)
+        gsty = _fev_div10(pos + 13)
+        henx = _fev_div10(pos + 17)
+        heny = _fev_div10(pos + 19)
+        genx = _fev_div10(pos + 21)
+        geny = _fev_div10(pos + 23)
+        pvel = _fev_div10(pos + 35)
+        ppd_x = _fev_div10(pos + 43)
+        ppd_y = _fev_div10(pos + 45)
+        ppd_mean = (isfinite(ppd_x) && isfinite(ppd_y)) ? (ppd_x + ppd_y) / 2.0f0 : 0.0f0
+        ampl =
+            (isfinite(gstx) && isfinite(gsty) && isfinite(genx) && isfinite(geny) && ppd_mean > 0.0f0) ?
+            sqrt((genx - gstx)^2 + (geny - gsty)^2) / ppd_mean : NaN32
         @inbounds begin
             ev.hstx[k] = hstx
             ev.hsty[k] = hsty
@@ -498,11 +495,11 @@ end
             ev.eupd_y[k] = ppd_y
         end
     else
-        hstx = pl >= pos + 6 ? Float32(read_be_int16(data, pos + 5)) / 10.0f0 : 0.0f0
-        hsty = pl >= pos + 8 ? Float32(read_be_int16(data, pos + 7)) / 10.0f0 : 0.0f0
-        gavx = pl >= pos + 12 ? Float32(read_be_int16(data, pos + 11)) / 10.0f0 : 0.0f0
-        gavy = pl >= pos + 14 ? Float32(read_be_int16(data, pos + 13)) / 10.0f0 : 0.0f0
-        ava = pl >= pos + 37 ? Float32(read_be_int16(data, pos + 36)) : 0.0f0
+        hstx = _fev_div10(pos + 5)
+        hsty = _fev_div10(pos + 7)
+        gavx = _fev_div10(pos + 11)
+        gavy = _fev_div10(pos + 13)
+        ava = _fev_raw(pos + 36)
         @inbounds begin
             ev.hstx[k] = hstx
             ev.hsty[k] = hsty

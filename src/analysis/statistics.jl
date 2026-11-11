@@ -70,23 +70,26 @@ function prepare_analysis_data(
     gx_buf = Float64[]
     gy_buf = Float64[]
 
+    tr_col, pt_col = _group_seam_cols(d)
     @inbounds for gi = 1:length(grouped)
         rows = parentindices(grouped[gi])[1]
         m = length(rows)
         m == 0 && continue
-        _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, rows)
+        _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, rows, tr_col, pt_col)
 
         if needs_vel
-            length(gx_buf) < m && resize!(gx_buf, m)
-            length(gy_buf) < m && resize!(gy_buf, m)
-            length(v_buf) < m && resize!(v_buf, m)
-            for k = 1:m
-                rk = rows[k]
-                gx_buf[k] = Float64(gx_all[rk])
-                gy_buf[k] = Float64(gy_all[rk])
-                v_buf[k] = NaN
-            end
-            _compute_velocity_deg!(v_buf, gx_buf, gy_buf, 1, m, vel_scale)
+            _compute_group_velocity_deg!(
+                v_buf,
+                gx_buf,
+                gy_buf,
+                gx_all,
+                gy_all,
+                rows,
+                m,
+                tr_col,
+                pt_col,
+                vel_scale,
+            )
         end
 
         for k = 1:m
@@ -491,19 +494,23 @@ function _unpaired_t_across_bins!(
     return t_out
 end
 
-function _max_abs_cluster_mass(t_vec::Vector{Float64}, t_crit::Float64)::Float64
+function _max_abs_cluster_mass(
+    t_vec::Vector{Float64},
+    t_crit_vec::Vector{Float64},
+)::Float64
     max_m = 0.0
     cur_pos = 0.0
     cur_neg = 0.0
-    @inbounds for b in eachindex(t_vec)
+    @inbounds for b in eachindex(t_vec, t_crit_vec)
         tb = t_vec[b]
-        if tb > t_crit
+        tc = t_crit_vec[b]
+        if tb > tc
             cur_pos += tb
             if cur_neg > max_m
                 max_m = cur_neg
             end
             cur_neg = 0.0
-        elseif tb < -t_crit
+        elseif tb < -tc
             cur_neg += -tb
             if cur_pos > max_m
                 max_m = cur_pos
@@ -574,20 +581,20 @@ function cluster_permutation_test(
     time_idx = Dict{Float64,Int}(time_bins[b] => b for b = 1:n_bins)
 
     subjects = sort(collect(Set(skipmissing(df[!, subject_col]))))
-    n_subj = length(subjects)
-    subj_idx = Dict{Any,Int}(subjects[i] => i for i = 1:n_subj)
+    n_subj_raw = length(subjects)
+    subj_idx = Dict{Any,Int}(subjects[i] => i for i = 1:n_subj_raw)
 
     rng_local = isnothing(rng) ? Random.default_rng() : rng
     t_obs = Vector{Float64}(undef, n_bins)
     t_perm = Vector{Float64}(undef, n_bins)
+    t_crit_vec = Vector{Float64}(undef, n_bins)
     null_max = Vector{Float64}(undef, n_permutations)
 
     if paired
-        n_subj >= 2 || throw(ArgumentError("Paired cluster_permutation_test requires at least 2 subjects (got $n_subj)."))
-        sum1 = zeros(Float64, n_subj, n_bins)
-        cnt1 = zeros(Int, n_subj, n_bins)
-        sum2 = zeros(Float64, n_subj, n_bins)
-        cnt2 = zeros(Int, n_subj, n_bins)
+        sum1 = zeros(Float64, n_subj_raw, n_bins)
+        cnt1 = zeros(Int, n_subj_raw, n_bins)
+        sum2 = zeros(Float64, n_subj_raw, n_bins)
+        cnt2 = zeros(Int, n_subj_raw, n_bins)
 
         s_col = df[!, subject_col]
         c_col = df[!, condition_col]
@@ -614,16 +621,38 @@ function cluster_permutation_test(
             end
         end
 
-        diff_mat = fill(NaN, n_subj, n_bins)
-        @inbounds for b = 1:n_bins, i = 1:n_subj
+        diff_mat_raw = fill(NaN, n_subj_raw, n_bins)
+        @inbounds for b = 1:n_bins, i = 1:n_subj_raw
             if cnt1[i, b] > 0 && cnt2[i, b] > 0
-                diff_mat[i, b] = (sum1[i, b] / cnt1[i, b]) - (sum2[i, b] / cnt2[i, b])
+                diff_mat_raw[i, b] = (sum1[i, b] / cnt1[i, b]) - (sum2[i, b] / cnt2[i, b])
             end
         end
 
-        t_crit = isnothing(threshold_t) ?
-            _student_t_crit_two_tailed(Float64(threshold_p), Float64(n_subj - 1)) :
-            Float64(threshold_t)
+        valid_subjs = Int[i for i = 1:n_subj_raw if any(b -> !isnan(diff_mat_raw[i, b]), 1:n_bins)]
+        n_subj = length(valid_subjs)
+        n_subj >= 2 || throw(
+            ArgumentError(
+                "Paired cluster_permutation_test requires at least 2 subjects with valid observations in both conditions (got $n_subj).",
+            ),
+        )
+        diff_mat =
+            n_subj == n_subj_raw ? diff_mat_raw : diff_mat_raw[valid_subjs, :]
+
+        if !isnothing(threshold_t)
+            fill!(t_crit_vec, Float64(threshold_t))
+        else
+            t_by_df = Float64[
+                _student_t_crit_two_tailed(Float64(threshold_p), Float64(df_k)) for
+                df_k = 1:(n_subj-1)
+            ]
+            @inbounds for b = 1:n_bins
+                nv = 0
+                for i = 1:n_subj
+                    !isnan(diff_mat[i, b]) && (nv += 1)
+                end
+                t_crit_vec[b] = nv >= 2 ? t_by_df[nv-1] : Inf
+            end
+        end
 
         _paired_t_across_bins!(t_obs, diff_mat, nothing)
 
@@ -633,10 +662,10 @@ function cluster_permutation_test(
                 signs[i] = rand(rng_local, Bool) ? 1.0 : -1.0
             end
             _paired_t_across_bins!(t_perm, diff_mat, signs)
-            null_max[p] = _max_abs_cluster_mass(t_perm, t_crit)
+            null_max[p] = _max_abs_cluster_mass(t_perm, t_crit_vec)
         end
     else
-        # Unpaired: each (subject, condition) pair is an independent unit
+        # Unpaired: each (subject, condition) pair with >= 1 valid bin is an independent unit
         unit_keys = Tuple{Any,Bool}[]
         unit_map = Dict{Tuple{Any,Bool},Int}()
         s_col = df[!, subject_col]
@@ -657,16 +686,9 @@ function cluster_permutation_test(
             end
         end
 
-        n_units = length(unit_keys)
-        labels_orig = Bool[uk[2] for uk in unit_keys]
-        n1_tot = count(labels_orig)
-        n2_tot = n_units - n1_tot
-        (n1_tot >= 2 && n2_tot >= 2) || throw(
-            ArgumentError("Unpaired cluster_permutation_test requires >= 2 subjects per condition."),
-        )
-
-        usum = zeros(Float64, n_units, n_bins)
-        ucnt = zeros(Int, n_units, n_bins)
+        n_units_raw = length(unit_keys)
+        usum = zeros(Float64, n_units_raw, n_bins)
+        ucnt = zeros(Int, n_units_raw, n_bins)
         @inbounds for r = 1:nrow(df)
             sv = s_col[r]
             cv = c_col[r]
@@ -685,14 +707,35 @@ function cluster_permutation_test(
             ucnt[ui, bi] += 1
         end
 
+        valid_units = Int[u for u = 1:n_units_raw if any(b -> ucnt[u, b] > 0, 1:n_bins)]
+        n_units = length(valid_units)
+        labels_orig = Bool[unit_keys[u][2] for u in valid_units]
+        n1_tot = count(labels_orig)
+        n2_tot = n_units - n1_tot
+        (n1_tot >= 2 && n2_tot >= 2) || throw(
+            ArgumentError("Unpaired cluster_permutation_test requires >= 2 subjects per condition."),
+        )
+
         val_mat = fill(NaN, n_units, n_bins)
-        @inbounds for b = 1:n_bins, u = 1:n_units
-            ucnt[u, b] > 0 && (val_mat[u, b] = usum[u, b] / ucnt[u, b])
+        @inbounds for b = 1:n_bins, (idx_u, u) in enumerate(valid_units)
+            ucnt[u, b] > 0 && (val_mat[idx_u, b] = usum[u, b] / ucnt[u, b])
         end
 
-        t_crit = isnothing(threshold_t) ?
-            _student_t_crit_two_tailed(Float64(threshold_p), Float64(n_units - 2)) :
-            Float64(threshold_t)
+        if !isnothing(threshold_t)
+            fill!(t_crit_vec, Float64(threshold_t))
+        else
+            t_by_df = Float64[
+                _student_t_crit_two_tailed(Float64(threshold_p), Float64(df_k)) for
+                df_k = 1:max(1, n_units - 2)
+            ]
+            @inbounds for b = 1:n_bins
+                nv = 0
+                for u = 1:n_units
+                    !isnan(val_mat[u, b]) && (nv += 1)
+                end
+                t_crit_vec[b] = nv >= 3 ? t_by_df[nv-2] : Inf
+            end
+        end
 
         _unpaired_t_across_bins!(t_obs, val_mat, labels_orig)
 
@@ -700,7 +743,7 @@ function cluster_permutation_test(
         @inbounds for p = 1:n_permutations
             Random.shuffle!(rng_local, labels_perm)
             _unpaired_t_across_bins!(t_perm, val_mat, labels_perm)
-            null_max[p] = _max_abs_cluster_mass(t_perm, t_crit)
+            null_max[p] = _max_abs_cluster_mass(t_perm, t_crit_vec)
         end
     end
 
@@ -717,12 +760,13 @@ function cluster_permutation_test(
     cid = 0
     @inbounds while b <= n_bins
         tb = t_obs[b]
-        if abs(tb) > t_crit
+        if abs(tb) > t_crit_vec[b]
             is_pos = tb > 0.0
             b_end = b + 1
             mass = tb
             peak_t = tb
-            while b_end <= n_bins && (is_pos ? (t_obs[b_end] > t_crit) : (t_obs[b_end] < -t_crit))
+            while b_end <= n_bins &&
+                      (is_pos ? (t_obs[b_end] > t_crit_vec[b_end]) : (t_obs[b_end] < -t_crit_vec[b_end]))
                 tv_cur = t_obs[b_end]
                 mass += tv_cur
                 if abs(tv_cur) > abs(peak_t)

@@ -1,11 +1,8 @@
 using Documenter
-using DocumenterTools
 using DocumenterVitepress
 using JuliaFormatter
-using LiveServer
 using Logging
 using Pkg
-using Printf
 
 push!(LOAD_PATH, dirname(@__DIR__))
 using EyeFun
@@ -17,15 +14,19 @@ Documentation Manager for EyeFun.jl
 - Documentation coverage analysis
 - Code formatting with JuliaFormatter
 - Cleanup and maintenance tasks
+- Local preview server via LiveServer
 - Interactive menu system
 
 Usage:
-    julia --project=docs docs/doc_manager.jl [command] [options]
+    julia --project=docs docs/doc_manager.jl [command]
 
 Commands:
     build                    - Build documentation
     coverage                 - Check documentation coverage
-    clean                    - Clean build artifacts
+    format                   - Format Julia source and test files
+    format-check             - Format files and run syntax check
+    clean                    - Clean build and coverage artifacts
+    view                     - Serve built documentation locally
     interactive              - Show interactive menu
     all                      - Run complete documentation workflow
 
@@ -49,6 +50,38 @@ function get_project_root()
     return dirname(@__DIR__)
 end
 
+function _preceding_docstring_chars(lines::AbstractVector{<:AbstractString}, fn_line::Int)::Tuple{Bool,Int}
+    j = fn_line - 1
+    while j >= 1
+        s = strip(lines[j])
+        if isempty(s) || (startswith(s, "@") && !startswith(s, "@doc"))
+            j -= 1
+            continue
+        end
+        if endswith(s, "\"\"\"")
+            if length(s) >= 6 && startswith(s, "\"\"\"")
+                return (true, length(s))
+            end
+            doc_end = j
+            doc_start = 0
+            for k = (j-1):-1:1
+                if startswith(strip(lines[k]), "\"\"\"")
+                    doc_start = k
+                    break
+                end
+            end
+            if doc_start > 0
+                chars = sum(length(strip(lines[k])) for k = doc_start:doc_end)
+                return (true, chars)
+            end
+        elseif length(s) >= 2 && startswith(s, "\"") && endswith(s, "\"")
+            return (true, length(s))
+        end
+        break
+    end
+    return (false, 0)
+end
+
 function build_documentation(project_root::String)
     try
         build_jl_path = joinpath(project_root, "docs", "make.jl")
@@ -56,7 +89,7 @@ function build_documentation(project_root::String)
 
         old_logger = global_logger()
         try
-            logger = ConsoleLogger(stderr, Logging.Error)
+            logger = ConsoleLogger(stderr, Logging.Warn)
             global_logger(logger)
             include(build_jl_path)
         finally
@@ -73,18 +106,15 @@ function build_documentation(project_root::String)
     return true
 end
 
-function check_doc_coverage(project_root::String; skip_build_check::Bool=false)
+function check_doc_coverage(project_root::String)
     print_colored(YELLOW, "Checking documentation coverage...")
 
     try
-        doc_files = [joinpath(project_root, "docs", "src", "index.md"), joinpath(project_root, "docs", "make.jl")]
-        missing_files = []
-
-        for file in doc_files
-            if !isfile(file)
-                push!(missing_files, file)
-            end
-        end
+        doc_files = [
+            joinpath(project_root, "docs", "src", "index.md"),
+            joinpath(project_root, "docs", "make.jl"),
+        ]
+        missing_files = filter(!isfile, doc_files)
 
         if !isempty(missing_files)
             print_colored(RED, "Missing documentation files:")
@@ -94,19 +124,11 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool=false)
             return false
         end
 
-        if !skip_build_check
-            build_dir = joinpath(project_root, "docs", "build")
-            if !isdir(build_dir)
-                print_colored(YELLOW, "Documentation not built yet. Run 'Build documentation' first.")
-                return true
-            end
-        end
-
         println("\nSource Code Documentation Analysis:")
 
         src_dir = joinpath(project_root, "src")
         source_files = String[]
-        for (root, dirs, files) in walkdir(src_dir)
+        for (root, _, files) in walkdir(src_dir)
             for file in files
                 if endswith(file, ".jl")
                     push!(source_files, joinpath(root, file))
@@ -126,75 +148,43 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool=false)
                 content = read(file, String)
                 lines = split(content, '\n')
 
-                # Track functions by name: name => (has_docstring, doc_chars)
                 file_func_names = Dict{String,@NamedTuple{has_doc::Bool, doc_chars::Int}}()
 
-                i = 1
-                while i <= length(lines)
+                for i in eachindex(lines)
                     line = strip(lines[i])
 
-                    # Extract function name from definitions
-                    fname_match = match(r"^function\s+(\w+)", line)
+                    fname_match = match(r"^(?:@inline\s+)?function\s+([\w!]+)", line)
                     if isnothing(fname_match)
-                        fname_match = match(r"^(\w+)\(.*\)\s*=", line)
+                        fname_match = match(r"^(?:@inline\s+)?([\w!]+)\([^=]*\)(?:::[\w{}]+)?(?:\s+where\s+\{.*\})?\s*=(?!=)", line)
                     end
 
                     if !isnothing(fname_match)
                         fname = fname_match.captures[1]
+                        docstring_found, this_doc_chars = _preceding_docstring_chars(lines, i)
 
-                        # Check if there's a docstring above (look back up to 3 lines)
-                        this_doc_chars = 0
-                        docstring_found = false
-                        for j = max(1, i - 3):i-1
-                            if j <= length(lines)
-                                prev_line = strip(lines[j])
-                                if startswith(prev_line, "\"\"\"") || (startswith(prev_line, "\"") && !endswith(prev_line, "\""))
-                                    docstring_found = true
-
-                                    # Count docstring characters
-                                    if startswith(prev_line, "\"\"\"")
-                                        doc_start = j
-                                        doc_end = j
-                                        for k = j+1:length(lines)
-                                            if endswith(strip(lines[k]), "\"\"\"")
-                                                doc_end = k
-                                                break
-                                            end
-                                        end
-                                        for k = doc_start:doc_end
-                                            this_doc_chars += length(strip(lines[k]))
-                                        end
-                                    else
-                                        this_doc_chars += length(prev_line)
-                                    end
-                                    break
-                                end
-                            end
-                        end
-
-                        # Update: a function is documented if ANY method has a docstring
                         if haskey(file_func_names, fname)
                             prev = file_func_names[fname]
                             file_func_names[fname] = (
-                                has_doc=prev.has_doc || docstring_found,
-                                doc_chars=prev.doc_chars + this_doc_chars,
+                                has_doc = prev.has_doc || docstring_found,
+                                doc_chars = prev.doc_chars + this_doc_chars,
                             )
                         else
-                            file_func_names[fname] = (has_doc=docstring_found, doc_chars=this_doc_chars)
+                            file_func_names[fname] = (has_doc = docstring_found, doc_chars = this_doc_chars)
                         end
                     end
-                    i += 1
                 end
 
                 file_functions = length(file_func_names)
                 file_documented = count(v -> v.has_doc, values(file_func_names))
-                file_doc_chars = sum(v -> v.doc_chars, values(file_func_names); init=0)
+                file_doc_chars = sum(v -> v.doc_chars, values(file_func_names); init = 0)
 
                 total_functions += file_functions
                 documented_functions += file_documented
 
                 if file_functions > 0
-                    files_with_docs += 1
+                    if file_documented > 0
+                        files_with_docs += 1
+                    end
                     total_docstring_chars += file_doc_chars
                     println("  $(basename(file)): $file_documented/$file_functions functions documented")
                 end
@@ -204,13 +194,15 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool=false)
             end
         end
 
-        coverage_percent = total_functions > 0 ? round((documented_functions / total_functions) * 100, digits=1) : 0
+        coverage_percent =
+            total_functions > 0 ? round((documented_functions / total_functions) * 100, digits = 1) : 0.0
+        undoc_exports = Base.Docs.undocumented_names(EyeFun)
 
         println("\nDocumentation Coverage Summary:")
-        println("  Total functions: $total_functions")
-        println("  Documented functions: $documented_functions")
-        println("  Coverage: $coverage_percent%")
-        println("  Files with documentation: $files_with_docs/$(length(source_files))")
+        println("  Total functions (incl. internal): $total_functions")
+        println("  Documented functions: $documented_functions ($coverage_percent%)")
+        println("  Undocumented exported symbols: $(length(undoc_exports))")
+        println("  Files with docstrings: $files_with_docs/$(length(source_files))")
         println("  Total docstring characters: $total_docstring_chars")
 
         print_colored(GREEN, "\nDocumentation coverage analysis completed")
@@ -229,7 +221,7 @@ function clean_docs(project_root::String)
 
     build_dir = joinpath(project_root, "docs", "build")
     if isdir(build_dir)
-        rm(build_dir, recursive=true)
+        rm(build_dir, recursive = true)
         print_colored(GREEN, "Removed docs/build directory")
     else
         print_colored(YELLOW, "No build directory found")
@@ -239,7 +231,7 @@ function clean_docs(project_root::String)
     for artifact in artifacts
         artifact_path = joinpath(project_root, "docs", artifact)
         if isdir(artifact_path) || isfile(artifact_path)
-            rm(artifact_path, recursive=true)
+            rm(artifact_path, recursive = true)
             print_colored(GREEN, "Removed docs/$artifact")
         end
     end
@@ -249,11 +241,10 @@ function clean_docs(project_root::String)
     for dir in ["src", "test"]
         dir_path = joinpath(project_root, dir)
         if isdir(dir_path)
-            for (root, dirs, files) in walkdir(dir_path)
+            for (root, _, files) in walkdir(dir_path)
                 for file in files
                     if endswith(file, ".cov")
-                        file_path = joinpath(root, file)
-                        rm(file_path)
+                        rm(joinpath(root, file))
                         cov_count += 1
                     end
                 end
@@ -274,7 +265,7 @@ function format_source_files(project_root::String)
     try
         src_dir = joinpath(project_root, "src")
         julia_files = String[]
-        for (root, dirs, files) in walkdir(src_dir)
+        for (root, _, files) in walkdir(src_dir)
             for file in files
                 if endswith(file, ".jl")
                     push!(julia_files, joinpath(root, file))
@@ -306,9 +297,9 @@ function format_source_files(project_root::String)
 
         test_dir = joinpath(project_root, "test")
         test_files = String[]
-        for (root, dirs, files) in walkdir(test_dir)
+        for (root, _, files) in walkdir(test_dir)
             for file in files
-                if endswith(file, ".jl") && !endswith(file, ".cov")
+                if endswith(file, ".jl")
                     push!(test_files, joinpath(root, file))
                 end
             end
@@ -358,14 +349,16 @@ end
 function view_documentation(project_root::String)
     print_colored(YELLOW, "Starting documentation server in background...")
 
-    build_dir = joinpath(project_root, "docs", "build", "1")
+    docs_proj = joinpath(project_root, "docs")
+    build_dir = joinpath(docs_proj, "build", "1")
     if !isdir(build_dir)
         print_colored(RED, "Documentation not built yet. Run 'Build documentation' first.")
         return false
     end
 
-    cmd = `julia --project=docs -e "using LiveServer; serve(dir=\"docs/build/1\", launch_browser=true)"`
-    run(cmd, wait=false)
+    serve_expr = "using LiveServer; serve(dir=$(repr(build_dir)), launch_browser=true)"
+    cmd = `julia --project=$docs_proj -e $serve_expr`
+    run(cmd, wait = false)
 
     print_colored(GREEN, "Server started at http://localhost:8000")
     print_colored(CYAN, "(Server running in background - close browser tab when done)")
@@ -446,6 +439,8 @@ function main()
         format_and_check(project_root)
     elseif command == "clean"
         clean_docs(project_root)
+    elseif command == "view"
+        view_documentation(project_root)
     elseif command == "all"
         run_all_docs(project_root)
     elseif command == "interactive"
@@ -457,16 +452,19 @@ function main()
         println("Commands:")
         println("  build                    - Build documentation")
         println("  coverage                 - Check documentation coverage")
-        println("  format                   - Format Julia source files")
+        println("  format                   - Format Julia source and test files")
         println("  format-check             - Format files and run syntax check")
-        println("  clean                    - Clean build artifacts")
+        println("  clean                    - Clean build and coverage artifacts")
+        println("  view                     - Serve built documentation locally")
         println("  interactive              - Show interactive menu")
         println("  all                      - Run complete documentation workflow")
         println()
         println("Examples:")
         println("  julia --project=docs docs/doc_manager.jl build")
+        println("  julia --project=docs docs/doc_manager.jl coverage")
         println("  julia --project=docs docs/doc_manager.jl format")
         println("  julia --project=docs docs/doc_manager.jl clean")
+        println("  julia --project=docs docs/doc_manager.jl view")
         println("  julia --project=docs docs/doc_manager.jl interactive")
     end
 end

@@ -1,10 +1,14 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-DocumenterTools = "35a29f4d-8980-5a13-9543-d66fff28ecb8"
 DocumenterVitepress = "4710194d-e776-4893-9690-8d956a29c365"
 EyeFun = "fbdcb25a-f3f3-4a67-bdd8-a73b8531a536"
 JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 LiveServer = "16fef848-5104-11e9-1b77-fb7a48bbb589"
 
 [sources]
-EyeFun = {path = "/home/ian/Documents/Julia/EyeFun.jl"}
+EyeFun = {path = ".."}
+
+[compat]
+Documenter = "1"
+DocumenterVitepress = "0.3"
+julia = "1.11"

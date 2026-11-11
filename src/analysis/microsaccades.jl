@@ -488,24 +488,7 @@ function _extract_microsaccades_kernel(
     include_groups::Bool,
 )
     n = length(mask)
-    # Split across participant, trial, and backward timestamp jumps
-    m = 0
-    i = 1
-    @inbounds while i <= n
-        if mask[i]
-            j = i + 1
-            while j <= n &&
-                      mask[j] &&
-                      _same_event_run(times, part_col, i, j) &&
-                      (isnothing(trial_col) || isequal(trial_col[j], trial_col[i]))
-                j += 1
-            end
-            m += 1
-            i = j
-        else
-            i += 1
-        end
-    end
+    m = _count_event_runs(mask, times, part_col, trial_col, nothing, sample_period_ms)
 
     sttime = Vector{Float64}(undef, m)
     entime = Vector{Float64}(undef, m)
@@ -522,29 +505,37 @@ function _extract_microsaccades_kernel(
     i = 1
     @inbounds while i <= n
         if mask[i]
-            j = i + 1
-            while j <= n &&
-                      mask[j] &&
-                      _same_event_run(times, part_col, i, j) &&
-                      (isnothing(trial_col) || isequal(trial_col[j], trial_col[i]))
-                j += 1
+            j_raw = i + 1
+            while j_raw <= n && mask[j_raw]
+                j_raw += 1
             end
-            k += 1
-            t_s = Float64(times[i])
-            t_e = Float64(times[j-1])
-            sttime[k] = t_s
-            entime[k] = t_e
-            dur[k] = _safe_event_dur(nothing, i, t_s, t_e, sample_period_ms)
-            dxi = isnothing(dx_col) ? NaN : Float64(dx_col[i])
-            dyi = isnothing(dy_col) ? NaN : Float64(dy_col[i])
-            dx[k] = dxi
-            dy[k] = dyi
-            ampl[k] = isnothing(ampl_col) ? NaN : Float64(ampl_col[i])
-            pvel[k] = isnothing(pvel_col) ? NaN : Float64(pvel_col[i])
-            angle[k] = (!isnan(dxi) && !isnan(dyi)) ? atan(dyi, dxi) : NaN
-            !isnothing(p_out) && (p_out[k] = part_col[i])
-            !isnothing(tr_out) && (tr_out[k] = trial_col[i])
-            i = j
+            while i < j_raw
+                j = _next_event_run_end(
+                    times,
+                    part_col,
+                    trial_col,
+                    nothing,
+                    sample_period_ms,
+                    i,
+                    j_raw,
+                )
+                k += 1
+                t_s = Float64(times[i])
+                t_e = Float64(times[j-1])
+                sttime[k] = t_s
+                entime[k] = t_e
+                dur[k] = _safe_event_dur(nothing, i, t_s, t_e, sample_period_ms)
+                dxi = isnothing(dx_col) ? NaN : Float64(dx_col[i])
+                dyi = isnothing(dy_col) ? NaN : Float64(dy_col[i])
+                dx[k] = dxi
+                dy[k] = dyi
+                ampl[k] = isnothing(ampl_col) ? NaN : Float64(ampl_col[i])
+                pvel[k] = isnothing(pvel_col) ? NaN : Float64(pvel_col[i])
+                angle[k] = (!isnan(dxi) && !isnan(dyi)) ? atan(dyi, dxi) : NaN
+                !isnothing(p_out) && (p_out[k] = part_col[i])
+                !isnothing(tr_out) && (tr_out[k] = trial_col[i])
+                i = j
+            end
         else
             i += 1
         end

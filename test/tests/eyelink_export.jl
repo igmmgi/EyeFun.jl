@@ -1,6 +1,5 @@
 @testset "write_et_ascii" begin
-    edf_path = joinpath(DATA_DIR_EYELINK, "test1.edf")
-    edf = EyeFun.read_eyelink(edf_path)
+    edf = Main.TEST1_EDF
 
     @testset "Output is non-empty and parseable" begin
         out_path = tempname() * ".asc"

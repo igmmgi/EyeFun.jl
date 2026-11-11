@@ -1,17 +1,3 @@
-function _estimate_sample_rate_typed(times::AbstractVector{<:Real})
-    n = min(length(times), 1000)
-    n <= 1 && return 1000.0
-    valid_diffs = Float64[]
-    sizehint!(valid_diffs, n)
-    @inbounds for i = 2:n
-        dt = Float64(times[i]) - Float64(times[i-1])
-        dt > 0.0 && push!(valid_diffs, dt)
-    end
-    isempty(valid_diffs) && return 1000.0
-    median_dt_ms = Statistics.median!(valid_diffs)
-    return round(1000.0 / median_dt_ms)
-end
-
 """
     _estimate_sample_rate(df::DataFrame) -> Float64
 
@@ -20,8 +6,11 @@ Used as a fallback when recording metadata does not contain sample rate.
 """
 function _estimate_sample_rate(df::DataFrame)
     nrow(df) <= 1 && return 1000.0
-    return _estimate_sample_rate_typed(df[!, :time])
+    return _estimate_sample_rate_ms(df[!, :time]; fallback = 1000.0)
 end
+
+@inline _safe_event_dur_u32(st::UInt32, en::UInt32)::UInt32 =
+    en >= st ? (en - st + UInt32(1)) : UInt32(0)
 
 function _extract_edf_screen_res_typed(
     msgs::AbstractVector{<:AbstractString},
@@ -136,7 +125,7 @@ function parse_saccades(events::DataFrame)
 
     st = events.sttime[idx]
     en = events.entime[idx]
-    dur = en .- st .+ UInt32(1)
+    dur = _safe_event_dur_u32.(st, en)
 
     out = DataFrame(sttime = st, entime = en, duration = dur; copycols = false)
     for c in (
@@ -177,7 +166,7 @@ function parse_fixations(events::DataFrame)
 
     st = events.sttime[idx]
     en = events.entime[idx]
-    dur = en .- st .+ UInt32(1)
+    dur = _safe_event_dur_u32.(st, en)
 
     out = DataFrame(sttime = st, entime = en, duration = dur; copycols = false)
     for c in (
@@ -488,7 +477,7 @@ function _parse_blinks_typed(
     return DataFrame(
         sttime = final_st,
         entime = final_en,
-        duration = final_en .- final_st .+ UInt32(1),
+        duration = _safe_event_dur_u32.(final_st, final_en),
         eye = final_eye;
         copycols = false,
     )
@@ -549,23 +538,35 @@ function _parse_variables_typed(
         msg = msgs[i]
         occursin("TRIAL_VAR", msg) || continue
 
-        push!(out_st, UInt32(sttimes[i]))
         s = lstrip(msg)
         if startswith(s, "!V")
+            n_cu = ncodeunits(s)
+            (n_cu == 2 || isspace(s[nextind(s, 2)])) || continue
             s = lstrip(SubString(s, 3))
         end
-        if startswith(s, "TRIAL_VAR")
-            s = strip(SubString(s, 10))
+        startswith(s, "TRIAL_VAR") || continue
+        n_cu = ncodeunits(s)
+        if n_cu > 9
+            c10 = s[10]
+            (c10 == ' ' || c10 == '\t') || continue
+            rest = strip(SubString(s, 10))
         else
-            s = strip(replace(msg, r"^\s*!V\s*TRIAL_VAR\s*" => ""))
+            rest = SubString(s, 1, 0)
         end
-        parts = split(s, ' ', limit = 2)
-        if length(parts) >= 1
-            push!(var_names, String(parts[1]))
-            push!(var_values, length(parts) >= 2 ? String(parts[2]) : "")
-        else
+
+        push!(out_st, UInt32(sttimes[i]))
+        if isempty(rest)
             push!(var_names, "")
             push!(var_values, "")
+        else
+            sp = findfirst(c -> c == ' ' || c == '\t', rest)
+            if isnothing(sp)
+                push!(var_names, String(rest))
+                push!(var_values, "")
+            else
+                push!(var_names, String(SubString(rest, 1, prevind(rest, sp))))
+                push!(var_values, String(lstrip(SubString(rest, sp))))
+            end
         end
     end
 
@@ -605,8 +606,8 @@ one-row-per-trial DataFrame where each unique variable name becomes a column.
 # Example
 ```julia
 edf = read_eyelink("recording.edf")
-conditions = variables(edf.variables)                        # auto-detect
-conditions = variables(edf.variables; trial_marker="trial")  # explicit
+raw_vars = EyeFun.parse_variables(edf.events)
+conditions = variables(raw_vars; trial_marker="trial")
 ```
 """
 function variables(variables::DataFrame; trial_marker::Union{String,Nothing} = nothing)
@@ -1017,10 +1018,11 @@ function _stamp_blinks!(
     blink_dur::Vector{Int32},
 )
     @inbounds for k in eachindex(st)
+        en[k] >= st[k] || continue
         lo = searchsortedfirst(times, st[k])
         hi = searchsortedlast(times, en[k])
         if lo <= hi
-            d_k = Int32(dur[k])
+            d_k = Int32(min(dur[k], UInt32(typemax(Int32))))
             for j = lo:hi
                 in_blink[j] = true
                 blink_dur[j] = d_k

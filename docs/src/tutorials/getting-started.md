@@ -58,8 +58,9 @@ df = create_eyefun_data(edf; trial_time_zero="Stimulus On")
 - **`edf.events`**: parsed events (fixations, saccades, blinks, messages)
 - **`edf.recordings`**: recording block metadata (sample rate, tracked eye, filter mode)
 
-> [!TIP]
-> **`trial_time_zero`:** Aligns the `time_rel` column so that $t=0$ ms occurs when the given pattern (e.g., `"Stimulus On"`) appears in a trial's messages, such as stimulus onset in pupillometry or visual-world paradigms.
+:::tip
+**`trial_time_zero`:** Aligns the `time_rel` column so that $t=0$ ms occurs when the given pattern (e.g., `"Stimulus On"`) appears in a trial's messages, such as stimulus onset in pupillometry or visual-world paradigms.
+:::
 
 `read_et_data` / `create_eyefun_data` returns an `EyeData` object with columns like `time`, `trial`, `time_rel`, `gxL`, `gyL`, `paL`, `in_fix`, `fix_gavx`, `in_sacc`, `sacc_ampl`, `in_blink`, `message`, etc.
 
@@ -78,6 +79,8 @@ msg = messages(df)    # time, message
 Plotting functions operate on the full dataset by default. To plot a subset (such as a single trial or trial range), pass a `NamedTuple` to the `selection` keyword:
 
 ```julia
+using GLMakie
+
 # Launch the interactive data viewer
 plot_databrowser(df)                  # view as one continuous stream
 plot_databrowser(df; split_by=:trial) # scrub trial-by-trial
@@ -106,10 +109,10 @@ write_et_ascii("recording.edf")  # → recording_exported.asc
 
 | Resource | Link |
 | --- | --- |
-| Julia Basics | [julia-basics.md](julia-basics.md) |
-| Data Structures | [explanations/data-structures.md](../explanations/data-structures.md) |
-| Reading EDF Files | [reading-edf.md](reading-edf.md) |
-| Event Analysis | [event-analysis.md](event-analysis.md) |
+| Julia Basics | [Julia Basics](julia-basics.md) |
+| Data Structures | [Eye-Tracking Data Structures](../explanations/data-structures.md) |
+| Reading EDF Files | [Reading EDF Files](reading-edf.md) |
+| Event Analysis | [Event Analysis](event-analysis.md) |
 | Complete API | [API Reference](../reference/index.md) |
 | EyeFun.jl GitHub | [github.com/igmmgi/EyeFun.jl](https://github.com/igmmgi/EyeFun.jl) |
 | Julia learning resources | [julialang.org/learning](https://julialang.org/learning/) |

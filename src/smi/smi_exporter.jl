@@ -24,6 +24,7 @@ write_et_ascii(raw, "session_julia.txt")  # write equivalent TXT
 ```
 """
 function write_et_ascii(smi::SMIFile; verbose::Bool = false)
+    isempty(smi.filename) && error("path must be specified when smi.filename is empty.")
     path = replace(smi.filename, r"\.(idf|txt)$"i => "_exported.txt")
     if path == smi.filename
         path = path * "_exported.txt"
@@ -39,9 +40,13 @@ function write_et_ascii(smi::SMIFile, path::String; verbose::Bool = false)
     nrow(df) > 0 || error("SMIFile has no sample data to write.")
 
     has_left = hasproperty(df, :gxL) && any(!isnan, df.gxL)
+    has_gyL = hasproperty(df, :gyL) && any(!isnan, df.gyL)
     has_right = hasproperty(df, :gxR) && any(!isnan, df.gxR)
+    has_gyR = hasproperty(df, :gyR) && any(!isnan, df.gyR)
     has_pupxL = hasproperty(df, :pupxL) && any(!isnan, df.pupxL)
+    has_pupyL = hasproperty(df, :pupyL) && any(!isnan, df.pupyL)
     has_pupxR = hasproperty(df, :pupxR) && any(!isnan, df.pupxR)
+    has_pupyR = hasproperty(df, :pupyR) && any(!isnan, df.pupyR)
     has_paL = hasproperty(df, :paL) && any(!isnan, df.paL)
     has_paR = hasproperty(df, :paR) && any(!isnan, df.paR)
     has_diaxL = hasproperty(df, :diaxL) && any(!isnan, df.diaxL)
@@ -67,14 +72,14 @@ function write_et_ascii(smi::SMIFile, path::String; verbose::Bool = false)
         w_px, h_px = smi.screen_res
         w_mm = round(Int, smi.screen_width_cm * 10)
         # Approximate height from aspect ratio if not explicitly stored
-        h_mm = round(Int, smi.screen_width_cm * 10 * h_px / w_px)
+        h_mm = w_px > 0 ? round(Int, smi.screen_width_cm * 10 * h_px / w_px) : 0
         d_mm = round(Int, smi.viewing_distance_cm * 10)
 
         subject = isempty(smi.subject) ? splitext(basename(smi.filename))[1] : smi.subject
 
         println(
             io,
-            "## [BeGaze TXT Export — recreated by EyeFun.jl from $(basename(smi.filename))]",
+            "## [BeGaze TXT Export - recreated by EyeFun.jl from $(basename(smi.filename))]",
         )
         println(io, "## ")
         println(io, "## Subject:\t$(subject)")
@@ -157,13 +162,13 @@ function write_et_ascii(smi::SMIFile, path::String; verbose::Bool = false)
 
             if write_left
                 px = has_pupxL ? _px(df.pupxL[i]) : 0.0
-                py = has_pupxL ? _px(df.pupyL[i]) : 0.0
+                py = has_pupyL ? _px(df.pupyL[i]) : 0.0
                 dx = has_diaxL ? _px(df.diaxL[i]) : (has_paL ? _px(df.paL[i]) : 0.0)
                 dy = has_diayL ? _px(df.diayL[i]) : (has_paL ? _px(df.paL[i]) : 0.0)
                 cx = has_crxL ? _px(df.crxL[i]) : 0.0
                 cy = has_cryL ? _px(df.cryL[i]) : 0.0
                 gx = has_left ? _px(df.gxL[i]) : 0.0
-                gy = has_left ? _px(df.gyL[i]) : 0.0
+                gy = has_gyL ? _px(df.gyL[i]) : 0.0
                 @printf(
                     io,
                     "\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f",
@@ -180,13 +185,13 @@ function write_et_ascii(smi::SMIFile, path::String; verbose::Bool = false)
 
             if write_right
                 px = has_pupxR ? _px(df.pupxR[i]) : 0.0
-                py = has_pupxR ? _px(df.pupyR[i]) : 0.0
+                py = has_pupyR ? _px(df.pupyR[i]) : 0.0
                 dx = has_diaxR ? _px(df.diaxR[i]) : (has_paR ? _px(df.paR[i]) : 0.0)
                 dy = has_diayR ? _px(df.diayR[i]) : (has_paR ? _px(df.paR[i]) : 0.0)
                 cx = has_crxR ? _px(df.crxR[i]) : 0.0
                 cy = has_cryR ? _px(df.cryR[i]) : 0.0
                 gx = has_right ? _px(df.gxR[i]) : 0.0
-                gy = has_right ? _px(df.gyR[i]) : 0.0
+                gy = has_gyR ? _px(df.gyR[i]) : 0.0
                 @printf(
                     io,
                     "\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f",

@@ -1,83 +1,62 @@
-"""Point-in-AOI test with explicit subtype dispatch for `AOI` containers."""
-@inline function _in_aoi_fast(@nospecialize(aoi::AOI), x::Float64, y::Float64)::Bool
+"""Dispatch `f(aoi, ctx)` across concrete `AOI` subtypes."""
+@inline function _with_concrete_aoi(f::F, @nospecialize(aoi::AOI), ctx::C) where {F,C}
     if aoi isa RectAOI
-        return in_aoi(aoi, x, y)
+        return f(aoi, ctx)
     elseif aoi isa CircleAOI
-        return in_aoi(aoi, x, y)
+        return f(aoi, ctx)
     elseif aoi isa EllipseAOI
-        return in_aoi(aoi, x, y)
+        return f(aoi, ctx)
     elseif aoi isa PolygonAOI
-        return in_aoi(aoi, x, y)
+        return f(aoi, ctx)
     elseif aoi isa DynamicAOI{RectAOI}
-        return in_aoi(aoi, x, y)
+        return f(aoi, ctx)
     elseif aoi isa DynamicAOI{CircleAOI}
-        return in_aoi(aoi, x, y)
+        return f(aoi, ctx)
     elseif aoi isa DynamicAOI{EllipseAOI}
-        return in_aoi(aoi, x, y)
+        return f(aoi, ctx)
     elseif aoi isa DynamicAOI{PolygonAOI}
-        return in_aoi(aoi, x, y)
-    elseif aoi isa DynamicAOI
-        return in_aoi(aoi, x, y)::Bool
+        return f(aoi, ctx)
+    elseif aoi isa DynamicAOI{AOI}
+        return f(aoi, ctx)
     else
-        return in_aoi(aoi, x, y)::Bool
+        return f(aoi, ctx)
     end
 end
 
-@inline function _in_aoi_fast(@nospecialize(aoi::AOI), x::Float64, y::Float64, t::Float64)::Bool
-    if aoi isa RectAOI
-        return in_aoi(aoi, x, y)
-    elseif aoi isa CircleAOI
-        return in_aoi(aoi, x, y)
-    elseif aoi isa EllipseAOI
-        return in_aoi(aoi, x, y)
-    elseif aoi isa PolygonAOI
-        return in_aoi(aoi, x, y)
-    elseif aoi isa DynamicAOI{RectAOI}
-        return in_aoi(aoi, x, y, t)
-    elseif aoi isa DynamicAOI{CircleAOI}
-        return in_aoi(aoi, x, y, t)
-    elseif aoi isa DynamicAOI{EllipseAOI}
-        return in_aoi(aoi, x, y, t)
-    elseif aoi isa DynamicAOI{PolygonAOI}
-        return in_aoi(aoi, x, y, t)
-    elseif aoi isa DynamicAOI
-        return in_aoi(aoi, x, y, t)::Bool
-    else
-        return in_aoi(aoi, x, y, t)::Bool
-    end
-end
+@inline _in_aoi_interval(aoi::AOI, x::Float64, y::Float64, ::Float64, ::Float64)::Bool =
+    in_aoi(aoi, x, y)::Bool
+@inline _in_aoi_interval(
+    aoi::DynamicAOI,
+    x::Float64,
+    y::Float64,
+    t0::Float64,
+    t1::Float64,
+)::Bool = _in_dynamic_aoi_interval(aoi, x, y, t0, t1)
 
-@inline function _in_aoi_interval_fast(
+@inline _call_in_aoi_2(aoi::AOI, xy::Tuple{Float64,Float64})::Bool =
+    in_aoi(aoi, xy[1], xy[2])::Bool
+@inline _call_in_aoi_3(aoi::AOI, xyt::Tuple{Float64,Float64,Float64})::Bool =
+    in_aoi(aoi, xyt[1], xyt[2], xyt[3])::Bool
+@inline _call_in_aoi_interval(
+    aoi::AOI,
+    p::Tuple{Float64,Float64,Float64,Float64},
+)::Bool = _in_aoi_interval(aoi, p[1], p[2], p[3], p[4])::Bool
+
+@inline _in_aoi_fast(@nospecialize(aoi::AOI), x::Float64, y::Float64)::Bool =
+    _with_concrete_aoi(_call_in_aoi_2, aoi, (x, y))::Bool
+
+@inline _in_aoi_fast(@nospecialize(aoi::AOI), x::Float64, y::Float64, t::Float64)::Bool =
+    _with_concrete_aoi(_call_in_aoi_3, aoi, (x, y, t))::Bool
+
+@inline _in_aoi_interval_fast(
     @nospecialize(aoi::AOI),
     x::Float64,
     y::Float64,
     t0::Float64,
     t1::Float64,
-)::Bool
-    if aoi isa RectAOI
-        return in_aoi(aoi, x, y)
-    elseif aoi isa CircleAOI
-        return in_aoi(aoi, x, y)
-    elseif aoi isa EllipseAOI
-        return in_aoi(aoi, x, y)
-    elseif aoi isa PolygonAOI
-        return in_aoi(aoi, x, y)
-    elseif aoi isa DynamicAOI{RectAOI}
-        return _in_dynamic_aoi_interval(aoi, x, y, t0, t1)
-    elseif aoi isa DynamicAOI{CircleAOI}
-        return _in_dynamic_aoi_interval(aoi, x, y, t0, t1)
-    elseif aoi isa DynamicAOI{EllipseAOI}
-        return _in_dynamic_aoi_interval(aoi, x, y, t0, t1)
-    elseif aoi isa DynamicAOI{PolygonAOI}
-        return _in_dynamic_aoi_interval(aoi, x, y, t0, t1)
-    elseif aoi isa DynamicAOI
-        return _in_dynamic_aoi_interval(aoi, x, y, t0, t1)::Bool
-    else
-        return in_aoi(aoi, x, y, t0)::Bool
-    end
-end
+)::Bool = _with_concrete_aoi(_call_in_aoi_interval, aoi, (x, y, t0, t1))::Bool
 
-function _extract_aoi_fix_onsets_rows!(
+function _extract_group_fixations_rows!(
     fx::Vector{Float64},
     fy::Vector{Float64},
     fd::Vector{Float64},
@@ -89,6 +68,8 @@ function _extract_aoi_fix_onsets_rows!(
     t_buf::Vector{Float64},
     rows::AbstractVector{Int},
     m::Int,
+    tr_col::Union{Nothing,AbstractVector},
+    pt_col::Union{Nothing,AbstractVector},
     has_tw::Bool,
     t_start::Float64,
     t_end::Float64,
@@ -98,8 +79,12 @@ function _extract_aoi_fix_onsets_rows!(
     empty!(fd)
     empty!(ft)
     prev = false
+    r_prev = -1
     @inbounds for k = 1:m
         r = rows[k]
+        if k > 1 && !_is_group_row_contig(r_prev, r, tr_col, pt_col)
+            prev = false
+        end
         cur = in_fix[r]
         if cur & !prev
             x = Float64(fix_gavx[r])
@@ -108,20 +93,22 @@ function _extract_aoi_fix_onsets_rows!(
                 onset = t_buf[k]
                 dur = Float64(fix_dur[r])
                 if has_tw
-                    f_end = onset + dur
-                    if f_end > t_start && onset < t_end
-                        if onset < t_start
-                            dur -= (t_start - onset)
-                            onset = t_start
-                        end
-                        if onset + dur > t_end
-                            dur -= (onset + dur - t_end)
-                        end
-                        if dur > 0
-                            push!(fx, x)
-                            push!(fy, y)
-                            push!(fd, dur)
-                            push!(ft, onset)
+                    if !isnan(onset)
+                        f_end = onset + dur
+                        if f_end > t_start && onset < t_end
+                            if onset < t_start
+                                dur -= (t_start - onset)
+                                onset = t_start
+                            end
+                            if onset + dur > t_end
+                                dur -= (onset + dur - t_end)
+                            end
+                            if dur > 0.0
+                                push!(fx, x)
+                                push!(fy, y)
+                                push!(fd, dur)
+                                push!(ft, onset)
+                            end
                         end
                     end
                 else
@@ -133,32 +120,27 @@ function _extract_aoi_fix_onsets_rows!(
             end
         end
         prev = cur
+        r_prev = r
     end
     return nothing
 end
 
-function _aoi_sample_stats_concrete(
-    aoi::A,
-    gx::AbstractVector{<:Real},
-    gy::AbstractVector{<:Real},
-    t_buf::Vector{Float64},
-    rows::AbstractVector{Int},
-    m::Int,
-    has_tw::Bool,
-    t_start::Float64,
-    t_end::Float64,
-) where {A<:AOI}
+function _aoi_sample_stats_concrete(aoi::A, ctx::Tuple) where {A<:AOI}
+    gx, gy, t_buf, rows, m, tr_col, pt_col, has_tw, t_start, t_end = ctx
     dwell_samples = 0
     entries = 0
     prev_in = false
     first_sample_t = NaN
 
     @inbounds for k = 1:m
+        r = rows[k]
+        if k > 1 && !_is_group_row_contig(rows[k-1], r, tr_col, pt_col)
+            prev_in = false
+        end
         ti = t_buf[k]
         if has_tw && (isnan(ti) || ti < t_start || ti > t_end)
             continue
         end
-        r = rows[k]
         xi = Float64(gx[r])
         yi = Float64(gy[r])
         if isnan(xi) || isnan(yi)
@@ -180,36 +162,8 @@ function _aoi_sample_stats_concrete(
     return dwell_samples, entries, first_sample_t
 end
 
-function _aoi_sample_stats_rows(
-    @nospecialize(aoi::AOI),
-    gx::AbstractVector{<:Real},
-    gy::AbstractVector{<:Real},
-    t_buf::Vector{Float64},
-    rows::AbstractVector{Int},
-    m::Int,
-    has_tw::Bool,
-    t_start::Float64,
-    t_end::Float64,
-)
-    if aoi isa RectAOI
-        return _aoi_sample_stats_concrete(aoi, gx, gy, t_buf, rows, m, has_tw, t_start, t_end)
-    elseif aoi isa CircleAOI
-        return _aoi_sample_stats_concrete(aoi, gx, gy, t_buf, rows, m, has_tw, t_start, t_end)
-    elseif aoi isa EllipseAOI
-        return _aoi_sample_stats_concrete(aoi, gx, gy, t_buf, rows, m, has_tw, t_start, t_end)
-    elseif aoi isa PolygonAOI
-        return _aoi_sample_stats_concrete(aoi, gx, gy, t_buf, rows, m, has_tw, t_start, t_end)
-    elseif aoi isa DynamicAOI{RectAOI}
-        return _aoi_sample_stats_concrete(aoi, gx, gy, t_buf, rows, m, has_tw, t_start, t_end)
-    elseif aoi isa DynamicAOI{CircleAOI}
-        return _aoi_sample_stats_concrete(aoi, gx, gy, t_buf, rows, m, has_tw, t_start, t_end)
-    elseif aoi isa DynamicAOI{EllipseAOI}
-        return _aoi_sample_stats_concrete(aoi, gx, gy, t_buf, rows, m, has_tw, t_start, t_end)
-    elseif aoi isa DynamicAOI{PolygonAOI}
-        return _aoi_sample_stats_concrete(aoi, gx, gy, t_buf, rows, m, has_tw, t_start, t_end)
-    else
-        return _aoi_sample_stats_concrete(aoi, gx, gy, t_buf, rows, m, has_tw, t_start, t_end)::Tuple{Int,Int,Float64}
-    end
+@inline function _aoi_sample_stats_rows(@nospecialize(aoi::AOI), ctx::Tuple)::Tuple{Int,Int,Float64}
+    return _with_concrete_aoi(_aoi_sample_stats_concrete, aoi, ctx)::Tuple{Int,Int,Float64}
 end
 
 function _aoi_metrics_flat!(
@@ -239,6 +193,7 @@ function _aoi_metrics_flat!(
     n_groups = length(grouped)
     n_aois = length(aois)
     has_tw = !isnothing(time_window)
+    tr_col, pt_col = _group_seam_cols(parent_df)
 
     t_buf = Float64[]
     fx = Float64[]
@@ -251,12 +206,12 @@ function _aoi_metrics_flat!(
         rows = parentindices(grouped[g_idx])[1]
         m = length(rows)
         first_r = rows[1]
-        _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, rows)
+        _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, rows, tr_col, pt_col)
         t_start, t_end =
             has_tw ? _resolve_time_window_rows(parent_df, first_r, time_window) : (0.0, 0.0)
 
         if has_fix
-            _extract_aoi_fix_onsets_rows!(
+            _extract_group_fixations_rows!(
                 fx,
                 fy,
                 fd,
@@ -268,25 +223,18 @@ function _aoi_metrics_flat!(
                 t_buf,
                 rows,
                 m,
+                tr_col,
+                pt_col,
                 has_tw,
                 t_start,
                 t_end,
             )
         end
 
+        sample_ctx = (gx, gy, t_buf, rows, m, tr_col, pt_col, has_tw, t_start, t_end)
         for idx = 1:n_aois
             aoi = aois[idx]
-            dwell_samples, entries, first_sample_t = _aoi_sample_stats_rows(
-                aoi,
-                gx,
-                gy,
-                t_buf,
-                rows,
-                m,
-                has_tw,
-                t_start,
-                t_end,
-            )
+            dwell_samples, entries, first_sample_t = _aoi_sample_stats_rows(aoi, sample_ctx)
             dwell = round(dwell_samples * inv_sr_ms; digits = 1)
 
             first_fix_time = NaN

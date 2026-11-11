@@ -1,4 +1,4 @@
-# EyeTracking Data Structures
+# Eye-Tracking Data Structures
 
 Overview of `EyeFun.jl`'s core types and how multiple dispatch connects raw file readers, continuous sample tables, and analysis functions.
 
@@ -38,12 +38,16 @@ Any
 │   ├── SMIFile
 │   └── TobiiFile
 ├── EyeData - Continuous sample table and recording metadata
-└── AOI (abstract) - Spatial and spatiotemporal Areas of Interest
-    ├── RectAOI
-    ├── CircleAOI
-    ├── EllipseAOI
-    ├── PolygonAOI
-    └── DynamicAOI
+├── AOI (abstract) - Spatial and spatiotemporal Areas of Interest
+│   ├── RectAOI
+│   ├── CircleAOI
+│   ├── EllipseAOI
+│   ├── PolygonAOI
+│   └── DynamicAOI
+└── AbstractEyeFunMedia (abstract) - Stimulus media descriptors
+    ├── ImageMedia
+    ├── AudioMedia
+    └── TextMedia
 ```
 
 See the [Types Reference](../reference/types.md) for full field-by-field documentation of each type.
@@ -59,11 +63,12 @@ The `EyeFile` subtypes (`EDFFile`, `SMIFile`, `TobiiFile`) store format-specific
 | Field | Type | Description |
 |-------|------|-------------|
 | `df` | `DataFrame` | Continuous sample table (time × variables) |
-| `source` | `Symbol` | Tracker source (`:eyelink`, `:smi`, `:tobii`, `:generic`) |
+| `source` | `Symbol` | Tracker source (`:eyelink`, `:smi`, `:tobii`, `:delimited`, `:generic`) |
 | `sample_rate` | `Float64` | Sampling frequency in Hz |
 | `screen_res` | `Tuple{Int, Int}` | Display resolution `(width, height)` in pixels |
 | `screen_width_cm` | `Float64` | Physical monitor width in cm |
 | `viewing_distance_cm` | `Float64` | Distance from participant to screen in cm |
+| `coords` | `Symbol` | Gaze coordinate space (`:px`, `:center_px`, `:deg`) |
 
 ### Continuous DataFrame (`df`) columns
 

@@ -1,7 +1,6 @@
 @testset "Analysis functions" begin
     edf = Main.TEST1_EDF
     df = Main.TEST1_DF
-    edf_path = Main.TEST1_EDF_PATH
 
     aoi_regions =
         [RectAOI("Center", 640, 480, 400, 400), RectAOI("TopLeft", 160, 120, 320, 240)]
@@ -15,7 +14,6 @@
         @test hasproperty(dq, :blink_count)
         @test hasproperty(dq, :mean_pupil)
         @test hasproperty(dq, :duration_ms)
-        # tracking_loss_pct should be between 0 and 100
         @test all(0 .<= dq.tracking_loss_pct .<= 100)
     end
 
@@ -25,7 +23,6 @@
         nan_before = count(isnan, df2.df[!, pa_col])
         interpolate_blinks!(df2)
         nan_after = count(isnan, df2.df[!, pa_col])
-        # Should reduce NaN count (blinks replaced with interpolated values)
         @test nan_after <= nan_before
     end
 
@@ -35,7 +32,6 @@
         raw = Float64.(df2.df[!, pa_col])
         smooth_pupil!(df2; window_ms = 20)
         smoothed = Float64.(df2.df[!, pa_col])
-        # Smoothed signal should differ from raw
         @test raw != smoothed
         # Smoothed mean should be similar to raw mean (for non-NaN)
         raw_valid = filter(!isnan, raw)
@@ -48,7 +44,6 @@
     @testset "drift_correct!" begin
         df2 = deepcopy(df)
         drift_correct!(df2; target = (640, 480))
-        # Should still have valid gaze data
         gx_col = hasproperty(df2.df, :gxL) && !all(isnan, df2.df.gxL) ? :gxL : :gxR
         @test any(!isnan, df2.df[!, gx_col])
     end
@@ -62,10 +57,8 @@
         @test hasproperty(am, :dwell_time_ms)
         @test hasproperty(am, :fixation_count)
         @test hasproperty(am, :entry_count)
-        # Should have one row per AOI per trial
         @test nrow(am) == length(aoi_regions)
 
-        # Test with CircleAOI
         circle_aois = [CircleAOI("Center", 640, 480, 200)]
         am2 = aoi_metrics(df, circle_aois; selection = (trial = 1,))
         @test am2 isa DataFrame
@@ -157,7 +150,6 @@
         @test result.seq1 isa String
         @test result.seq2 isa String
 
-        # Same trial should have similarity 1.0
         same = scanpath_similarity(
             df,
             aoi_regions;
@@ -182,7 +174,6 @@
         @test nrow(pol) > 0
         @test hasproperty(pol, :time_bin)
         @test hasproperty(pol, :outside)
-        # Should have columns for each AOI name
         for aoi in aoi_regions
             @test hasproperty(pol, Symbol(aoi.name))
         end
@@ -229,7 +220,6 @@
         @test hasproperty(df2.df, :msacc_pvel)
         @test hasproperty(df2.df, :msacc_dx)
         @test hasproperty(df2.df, :msacc_dy)
-        # in_msacc should be a Bool vector
         @test eltype(df2.df.in_msacc) == Bool
     end
 
@@ -255,7 +245,6 @@
         @test hasproperty(gcd, :ot1)
         @test hasproperty(gcd, :ot2)
         @test hasproperty(gcd, :ot3)
-        # ot columns should be normalized (mean ≈ 0)
         @test abs(mean(gcd.ot1)) < 0.1
     end
 

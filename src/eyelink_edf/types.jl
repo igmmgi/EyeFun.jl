@@ -21,12 +21,12 @@ end
 """
     EDFFile
 
-Raw container returned by `read_eyelink_edf` and `read_eyelink_asc`.
+Raw container returned by `read_eyelink`, `read_eyelink_edf`, and `read_eyelink_asc`.
 
-Holds the parsed binary or ASCII data before conversion to `EyeData`.
-Use `create_eyefun_data(edf)` (or `read_et_data`) to construct an `EyeData`
-with event annotations, then access events via `fixations`, `saccades`, `blinks`,
-`messages`, and `variables`.
+Holds the parsed binary or ASCII data (`.events`, `.samples`, `.recordings`, `.preamble`)
+before conversion to `EyeData`. Use `create_eyefun_data(edf)` (or `read_et_data`) to
+construct an `EyeData` with event annotations, then access events via `fixations`,
+`saccades`, `blinks`, `messages`, and `variables`.
 """
 mutable struct EDFFile <: EyeFile
     filename::String

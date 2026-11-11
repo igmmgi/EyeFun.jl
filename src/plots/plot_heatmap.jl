@@ -92,7 +92,7 @@ end
     plot_heatmap(df::EyeData; selection=nothing, eye=:auto,
                  xlims=(0,df.screen_res[1]), ylims=(0,df.screen_res[2]), ydir=:down,
                  bins=(50,50), colormap=:inferno, metric=:samples, sigma=2.0,
-                 background=nothing, split_by=nothing, aois=nothing)
+                 background=nothing, split_by=nothing, aois=nothing, prefix=nothing)
 
 Plot a 2D gaze density heatmap from a wide DataFrame.
 """
@@ -159,9 +159,9 @@ function plot_heatmap(
                 title = pd.label,
                 aspect = DataAspect(),
             )
-            ax.yreversed = (ydir == :down)
             Makie.xlims!(ax, xlims...)
             Makie.ylims!(ax, ylims...)
+            ax.yreversed = (ydir == :down)
 
             if !isnothing(bg_img_oriented)
                 Makie.image!(ax, xlims[1]..xlims[2], ylims[1]..ylims[2], bg_img_oriented)
@@ -201,9 +201,9 @@ function plot_heatmap(
         title = title,
         aspect = DataAspect(),
     )
-    ax.yreversed = (ydir == :down)
     Makie.xlims!(ax, xlims...)
     Makie.ylims!(ax, ylims...)
+    ax.yreversed = (ydir == :down)
 
     if !isnothing(bg_img_oriented)
         Makie.image!(ax, xlims[1]..xlims[2], ylims[1]..ylims[2], bg_img_oriented)

@@ -86,7 +86,7 @@ function plot_sequence(
         g = grouped[gi]
         nsamp = nrow(g)
         nsamp == 0 && continue
-        t_vec = _trial_time(g)
+        t_vec = _trial_relative_time(g; has_active_trel = false)
 
         t_lo = NaN
         t_hi = NaN

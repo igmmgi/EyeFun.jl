@@ -1,6 +1,6 @@
 """
     plot_transitions(df::EyeData, aois::Vector{<:AOI};
-                     selection=nothing, eye=:auto, normalize=true)
+                     selection=nothing, eye=:auto, normalize=true, prefix=nothing)
 
 Plot an AOI transition probability (or count) heatmap.
 Rows (`From AOI`) are plotted along the Y-axis and columns (`To AOI`) along the X-axis.

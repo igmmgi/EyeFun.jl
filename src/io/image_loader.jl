@@ -38,6 +38,7 @@ function image_size(path::AbstractString)
 end
 
 function _image_size_from_disk(path::String)
+    isfile(path) || error("File not found: $path")
     fsize = filesize(path)
     fsize < 4 && error("Image file too small (< 4 bytes): $path")
     open(path, "r") do io

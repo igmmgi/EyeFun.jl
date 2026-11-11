@@ -27,15 +27,6 @@ If no command is provided, shows interactive menu.
 Run from root directory with: julia --project=. test/test_manager.jl
 """
 
-using Printf
-using Pkg
-# activate temp env and add packages needed for coverage
-Pkg.activate(; temp = true)
-Pkg.add(["Coverage", "CoverageTools"])
-using Coverage
-using CoverageTools
-
-# Colours for output
 const RED = :red
 const GREEN = :green
 const YELLOW = :yellow
@@ -48,8 +39,68 @@ function print_header()
     println()
 end
 
+function print_help()
+    print_header()
+    println("Usage: julia --project=. test/test_manager.jl [command] [options]")
+    println()
+    println("Commands:")
+    println("  test                    - Run tests with coverage")
+    println("  summary                 - Show coverage summary")
+    println("  detailed                - Show detailed analysis")
+    println("  file FILENAME           - Analyze specific file")
+    println("  missed FILENAME         - Show missed code branches")
+    println("  html                    - Generate HTML report")
+    println("  clean                   - Remove all .cov files")
+    println("  all                     - Run complete workflow (test + summary + html)")
+    println("  interactive             - Show interactive menu")
+    println("  help                    - Show this help message")
+    println()
+    println("Output files are saved in the test/ directory:")
+    println("  - test/coverage.lcov     - LCOV coverage data")
+    println("  - test/coverage_html/    - HTML coverage report")
+    println()
+    println("Examples:")
+    println("  julia --project=. test/test_manager.jl")
+    println("  julia --project=. test/test_manager.jl summary")
+    println("  julia --project=. test/test_manager.jl file eyelink_edf/ascii_exporter.jl")
+    println("  julia --project=. test/test_manager.jl clean")
+end
+
+const _VALID_COMMANDS = (
+    "test",
+    "summary",
+    "detailed",
+    "file",
+    "missed",
+    "html",
+    "clean",
+    "all",
+    "interactive",
+)
+
+let cmd = isempty(ARGS) ? "interactive" : ARGS[1]
+    if cmd in ("help", "-h", "--help")
+        print_help()
+        exit(0)
+    elseif !(cmd in _VALID_COMMANDS)
+        print_colored(RED, "Unknown command: $cmd")
+        println("Use 'help' to see available commands.")
+        exit(1)
+    elseif cmd in ("file", "missed") && length(ARGS) < 2
+        print_colored(RED, "Error: Please specify a filename")
+        println("Usage: julia --project=. test/test_manager.jl $cmd eyelink_edf/ascii_exporter.jl")
+        exit(1)
+    end
+end
+
+using Pkg
+Pkg.activate(; temp = true)
+Pkg.add(["Coverage", "CoverageTools"])
+using Coverage
+using CoverageTools
+
 function run_tests_with_coverage()
-    clean_coverage_files() # ensure fresh coverage data
+    clean_coverage_files()
     print_colored(YELLOW, "Running tests with coverage...")
     try
         run(`julia --project=. -e "using Pkg; Pkg.test(coverage=true)"`)
@@ -80,7 +131,7 @@ function get_coverage_stats(c)
 end
 
 function print_file_analysis(c, stats, max_uncovered = 50)
-    filename = replace(c.filename, "src/" => "")
+    filename = relpath(c.filename, "src")
     println("\n$filename:")
     println("Total lines: $(stats.total_lines)")
     println("Covered lines: $(stats.covered)")
@@ -112,7 +163,7 @@ function show_coverage_summary()
         for c in coverage
             stats = get_coverage_stats(c)
             if stats.covered + stats.uncovered > 0
-                filename = replace(c.filename, "src/" => "")
+                filename = relpath(c.filename, "src")
                 println(
                     "$filename: $(stats.percentage)% ($(stats.covered)/$(stats.covered + stats.uncovered) lines)",
                 )
@@ -192,7 +243,6 @@ function show_missed_branches(target_file::String)
             println("File: $(c.filename)")
             println("Total lines: $(length(c.coverage))")
 
-            # Show uncovered lines with context
             uncovered_count = 0
             for (i, cov) in enumerate(c.coverage)
                 if !isnothing(cov) && cov == 0 && uncovered_count < 30
@@ -234,13 +284,12 @@ function generate_html_report()
         CoverageTools.LCOV.writefile(lcov_file, coverage)
         print_colored(GREEN, "LCOV file generated: $lcov_file")
 
-        try
-            run(`which genhtml`)
+        if !isnothing(Sys.which("genhtml"))
             run(`genhtml test/coverage.lcov -o test/coverage_html`)
             print_colored(GREEN, "HTML report generated: test/coverage_html/index.html")
             open_cmd = Sys.isapple() ? "open" : (Sys.islinux() ? "xdg-open" : "start")
             println("Open with: $open_cmd test/coverage_html/index.html")
-        catch
+        else
             print_colored(YELLOW, "genhtml not found. Install lcov")
             println("Then run: genhtml test/coverage.lcov -o test/coverage_html")
         end
@@ -328,7 +377,6 @@ function show_interactive_menu()
     end
 end
 
-
 function main()
     command = isempty(ARGS) ? "interactive" : ARGS[1]
     filename = length(ARGS) >= 2 ? ARGS[2] : ""
@@ -340,23 +388,9 @@ function main()
     elseif command == "detailed"
         show_detailed_analysis()
     elseif command == "file"
-        if isempty(filename)
-            print_colored(RED, "Error: Please specify a filename")
-            println(
-                "Usage: julia --project=. test/test_manager.jl file eyelink_edf/ascii_exporter.jl",
-            )
-        else
-            analyze_specific_file(filename)
-        end
+        analyze_specific_file(filename)
     elseif command == "missed"
-        if isempty(filename)
-            print_colored(RED, "Error: Please specify a filename")
-            println(
-                "Usage: julia --project=. test/test_manager.jl missed eyelink_edf/ascii_exporter.jl",
-            )
-        else
-            show_missed_branches(filename)
-        end
+        show_missed_branches(filename)
     elseif command == "html"
         generate_html_report()
     elseif command == "clean"
@@ -365,36 +399,6 @@ function main()
         run_all_analyses()
     elseif command == "interactive"
         show_interactive_menu()
-    elseif command == "help" || command == "-h" || command == "--help"
-        print_header()
-        println("Usage: julia --project=. test/test_manager.jl [command] [options]")
-        println()
-        println("Commands:")
-        println("  test                    - Run tests with coverage")
-        println("  summary                 - Show coverage summary")
-        println("  detailed                - Show detailed analysis")
-        println("  file FILENAME           - Analyze specific file")
-        println("  missed FILENAME         - Show missed code branches")
-        println("  html                    - Generate HTML report")
-        println("  clean                   - Remove all .cov files")
-        println("  all                     - Run complete workflow (test + summary + html)")
-        println("  interactive             - Show interactive menu")
-        println("  help                    - Show this help message")
-        println()
-        println("Output files are saved in the test/ directory:")
-        println("  - test/coverage.lcov     - LCOV coverage data")
-        println("  - test/coverage_html/    - HTML coverage report")
-        println()
-        println("Examples:")
-        println("  julia --project=. test/test_manager.jl")
-        println("  julia --project=. test/test_manager.jl summary")
-        println(
-            "  julia --project=. test/test_manager.jl file eyelink_edf/ascii_exporter.jl",
-        )
-        println("  julia --project=. test/test_manager.jl clean")
-    else
-        print_colored(RED, "Unknown command: $command")
-        println("Use 'help' to see available commands.")
     end
 end
 

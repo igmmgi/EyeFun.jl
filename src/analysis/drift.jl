@@ -43,6 +43,8 @@ function _window_time_offset(
     times::AbstractVector{<:Real},
     trel::Union{Nothing,AbstractVector},
     idxs::AbstractVector{Int},
+    tr_col::Union{Nothing,AbstractVector},
+    pt_col::Union{Nothing,AbstractVector},
     t_lo::Float64,
     t_hi::Float64,
     tx::Float64,
@@ -51,14 +53,21 @@ function _window_time_offset(
     isempty(idxs) && return 0.0, 0.0
     t0_grp = Float64(@inbounds times[idxs[1]])
     sx, sy, c = 0.0, 0.0, 0
+    r_prev = @inbounds idxs[1]
     @inbounds for j in eachindex(idxs)
         k = idxs[j]
         tr = if !isnothing(trel)
             tv = trel[k]
             ismissing(tv) ? NaN : Float64(tv)
         else
-            Float64(times[k]) - t0_grp
+            tk = Float64(times[k])
+            if j > firstindex(idxs) &&
+               (!_is_group_row_contig(r_prev, k, tr_col, pt_col) || tk < Float64(times[r_prev]))
+                t0_grp = tk
+            end
+            tk - t0_grp
         end
+        r_prev = k
         if t_lo <= tr <= t_hi
             xv, yv = Float64(gx[k]), Float64(gy[k])
             if !isnan(xv) && !isnan(yv)
@@ -133,8 +142,8 @@ function drift_correct!(
     eye = _resolve_eye(df, eye)
     _ensure_eye_cols!(df, eye)
     ecols = _eye_columns(eye)
-    gx_vec = d[!, ecols.gx]
-    gy_vec = d[!, ecols.gy]
+    gx_vec = _ensure_float_col!(d, ecols.gx)
+    gy_vec = _ensure_float_col!(d, ecols.gy)
     in_cent = _is_col_centered(d, ecols.gx, df.coords)
 
     c_infix = _prefixed_sym(prefix, :in_fix)
@@ -147,18 +156,19 @@ function drift_correct!(
 
     has_fix = hasproperty(d, c_infix) && hasproperty(d, c_fgx) && hasproperty(d, c_fgy)
     in_fix_vec = has_fix ? d[!, c_infix] : nothing
-    fix_x_vec = hasproperty(d, c_fgx) ? d[!, c_fgx] : nothing
-    fix_y_vec = hasproperty(d, c_fgy) ? d[!, c_fgy] : nothing
-    sacc_sx_vec = hasproperty(d, c_ssx) ? d[!, c_ssx] : nothing
-    sacc_sy_vec = hasproperty(d, c_ssy) ? d[!, c_ssy] : nothing
-    sacc_ex_vec = hasproperty(d, c_sex) ? d[!, c_sex] : nothing
-    sacc_ey_vec = hasproperty(d, c_sey) ? d[!, c_sey] : nothing
+    fix_x_vec = hasproperty(d, c_fgx) ? _ensure_float_col!(d, c_fgx) : nothing
+    fix_y_vec = hasproperty(d, c_fgy) ? _ensure_float_col!(d, c_fgy) : nothing
+    sacc_sx_vec = hasproperty(d, c_ssx) ? _ensure_float_col!(d, c_ssx) : nothing
+    sacc_sy_vec = hasproperty(d, c_ssy) ? _ensure_float_col!(d, c_ssy) : nothing
+    sacc_ex_vec = hasproperty(d, c_sex) ? _ensure_float_col!(d, c_sex) : nothing
+    sacc_ey_vec = hasproperty(d, c_sey) ? _ensure_float_col!(d, c_sey) : nothing
 
     default_target = in_cent ? (0.0, 0.0) : (df.screen_res[1] / 2.0, df.screen_res[2] / 2.0)
     tx, ty = isnothing(target) ? default_target : (Float64(target[1]), Float64(target[2]))
     win_samples = window_ms isa Real ? round(Int, Float64(window_ms) / 1000.0 * df.sample_rate) : 0
     times_vec = hasproperty(d, :time) ? d[!, :time] : nothing
     trel_vec = _has_active_time_rel(d) ? d[!, :time_rel] : nothing
+    tr_col, pt_col = _group_seam_cols(d)
 
     for g in grouped
         idxs = parentindices(g)[1]
@@ -177,6 +187,8 @@ function drift_correct!(
                 times_vec,
                 trel_vec,
                 idxs,
+                tr_col,
+                pt_col,
                 Float64(window_ms[1]),
                 Float64(window_ms[2]),
                 tx,

@@ -119,7 +119,7 @@ function _make_bg_stimulus_callback(
     sy::Real,
 )
     stim_dict = isnothing(stimuli) ? Dict{String,Any}() : stimuli
-    cached_vars = !isnothing(match_stimuli) ? EyeFun.variables(df) : nothing
+    cached_vars = !isnothing(match_stimuli) ? variables(df) : nothing
     stim_keys = collect(keys(stim_dict))
 
     return function (segment_id)
@@ -208,12 +208,13 @@ end
 
 """
     plot_databrowser(df::EyeData; eye=:auto, split_by=nothing, aois=nothing,
-                     bg_stimulus=nothing, stimuli=nothing, match_stimuli=nothing)
+                     bg_stimulus=nothing, stimuli=nothing, match_stimuli=nothing,
+                     prefix=nothing, display_plot=true) -> (Figure, EyeViewerMediaState)
 
-Open an interactive eye-tracking data viewer.
+Open an interactive eye-tracking data viewer and return `(fig, state)`.
 
 # Keyword Arguments
-- `eye`: Which eye to use: `:auto` (default), `:left`, or `:right`.
+- `eye`: Which eye to use: `:auto` (default), `:left`, `:right`, or `:both`.
 - `split_by`: How to segment data for browsing.
   - `nothing` (default): show entire DataFrame as one continuous view
   - `:trial`: one page per trial
@@ -224,8 +225,12 @@ Open an interactive eye-tracking data viewer.
   `AudioMedia`, and `TextMedia` objects.
 - `stimuli`: A `Dict{String, Any}` of pre-loaded assets (from `read_stimuli`) used
   together with `match_stimuli` for automatic per-trial lookup.
-- `match_stimuli`: A function `segment_id -> Vector{AbstractEyeFunMedia}` used to
-  bind entries in the `stimuli` dict to trials.
+- `match_stimuli`: A function `row -> Vector{AbstractEyeFunMedia}` or
+  `(row, stimuli) -> Vector{AbstractEyeFunMedia}`, where `row` is the `DataFrameRow`
+  of trial variables (from `variables(df)`, or the first sample row of the segment),
+  used to bind entries in `stimuli` to each segment.
+- `prefix`: Optional column prefix (`Symbol`) for custom event columns (e.g. `:alg`).
+- `display_plot`: Whether to immediately call `display(fig)` (default `true`).
 
 # Layout
 - **Left**: Spatial gaze view (gaze position on screen with optional stimulus overlay)
@@ -248,15 +253,17 @@ Open an interactive eye-tracking data viewer.
 
 # Example
 ```julia
-df = read_et_data("data.edf"; trial_time_zero="TRIALID")
-plot_databrowser(df)
-plot_databrowser(df; split_by=:trial)
-plot_databrowser(df; split_by=[:block, :trial])
+using EyeFun, GLMakie
 
-# With background stimuli
+df = read_et_data("data.edf"; trial_time_zero="TRIALID")
+fig, state = plot_databrowser(df)
+fig, state = plot_databrowser(df; split_by=:trial)
+fig, state = plot_databrowser(df; split_by=[:block, :trial])
+
+# With background stimuli matched from a trial variable column `row.image`
 stim = read_stimuli("/path/to/stimuli")
-plot_databrowser(df; split_by=:trial, stimuli=stim,
-                 match_stimuli=id -> [ImageMedia(content=stim["\$id.png"])])
+fig, state = plot_databrowser(df; split_by=:trial, stimuli=stim,
+                              match_stimuli=(row, stim) -> [ImageMedia(content=stim[row.image])])
 ```
 """
 function plot_databrowser(
@@ -271,10 +278,15 @@ function plot_databrowser(
     display_plot::Bool = true,
 )
     resolved_eye = _resolve_eye(df, eye)
-    _ensure_eye_cols!(df, resolved_eye; cols = :gaze)
-    _ensure_eye_cols!(df, resolved_eye; cols = :pupil)
+    if resolved_eye === :both
+        _check_and_merge_eye_coords(df.df, :gxL, :gxR, df.coords)
+        _check_and_merge_eye_coords(df.df, :gyL, :gyR, df.coords)
+    end
     ecols = _eye_columns(resolved_eye)
     gx_col, gy_col, pa_col = ecols.gx, ecols.gy, ecols.pa
+    coord_mode = _col_coord_mode(df.df, gx_col, df.coords)
+    ppd_val = Float64(pixels_per_degree(df))
+    unit_lbl = coord_mode === :deg ? "°" : "px"
     sx, sy = df.screen_res
 
     # Pre-group segments for trial switching and stimulus lookup
@@ -324,6 +336,8 @@ function plot_databrowser(
         bg_stimulus,
         segment_views,
         prefix,
+        coord_mode,
+        ppd = ppd_val,
     )
 
     fig = Figure(size = (1920, 1080), padding = (0, 0, 0, 0))
@@ -334,8 +348,8 @@ function plot_databrowser(
     # Left column: spatial (row 1) + polar (row 2)
     ax_spatial = Axis(
         g_left[1, 1];
-        xlabel = "X (px)",
-        ylabel = "Y (px)",
+        xlabel = "X ($unit_lbl)",
+        ylabel = "Y ($unit_lbl)",
         aspect = DataAspect(),
         yreversed = true,
         title = "Gaze Position",
@@ -357,7 +371,7 @@ function plot_databrowser(
     # Right column: time-series (rows 1:3)
     ax_xy = Axis(
         g_right[1, 1];
-        ylabel = "Position (px)",
+        ylabel = "Position ($unit_lbl)",
         xgridvisible = false,
         ygridvisible = false,
     )
@@ -442,15 +456,23 @@ function plot_databrowser(
     end
 
     function _update_highlight_overlay!()
-        haskey(_cache, :saccades_win) || return
+        if !haskey(_cache, :saccades_win)
+            _hl_sacc_vis[] = false
+            _hl_fix_vis[] = false
+            return
+        end
         saccades = _cache[:saccades_win]::Vector{SaccadeInfo}
         fixations = get(_cache, :fixations_win, FixationInfo[])::Vector{FixationInfo}
 
         t = get(_cache, :t_win, Float64[])::Vector{Float64}
-        isempty(t) && return
+        if isempty(t)
+            _hl_sacc_vis[] = false
+            _hl_fix_vis[] = false
+            return
+        end
 
         sel_s = state.selected_saccade[]
-        if sel_s > 0 && sel_s <= length(saccades)
+        if state.show_saccades[] && sel_s > 0 && sel_s <= length(saccades)
             s = saccades[sel_s]
             _hl_sacc_spatial_pts[] = [Point2f(s.x1, s.y1), Point2f(s.x2, s.y2)]
             ti = clamp(s.time_idx, 1, length(t))
@@ -462,7 +484,7 @@ function plot_databrowser(
         end
 
         sel_f = state.selected_fixation[]
-        if sel_f > 0 && sel_f <= length(fixations)
+        if state.show_fixations[] && sel_f > 0 && sel_f <= length(fixations)
             f = fixations[sel_f]
             _hl_fix_spatial_pts[] = [Point2f(f.x, f.y)]
             _hl_fix_spatial_ms[] = max(3.0, min(f.dur / 10.0, 40.0))
@@ -470,8 +492,8 @@ function plot_databrowser(
             t_lo = t[clamp(f.time_start, 1, length(t))]
             t_hi = t[clamp(f.time_end, 1, length(t))]
 
-            xy_h = _cache[:xy_bar_h]
-            vel_h = _cache[:vel_bar_h]
+            xy_h = Float64(get(_cache, :xy_bar_h, 0.0))
+            vel_h = Float64(get(_cache, :vel_bar_h, 0.0))
             _hl_fix_xy_pts[] = Point2f[(t_lo, 0), (t_hi, 0), (t_hi, xy_h), (t_lo, xy_h)]
             _hl_fix_vel_pts[] = Point2f[(t_lo, 0), (t_hi, 0), (t_hi, vel_h), (t_lo, vel_h)]
 
@@ -479,6 +501,37 @@ function plot_databrowser(
         else
             _hl_fix_vis[] = false
         end
+    end
+
+    function _refresh_view!(;
+        full::Bool = false,
+        reset_zoom::Bool = false,
+        window_start::Int = 1,
+    )
+        if full
+            _db_draw_all!(
+                axes,
+                df,
+                state,
+                trial_label,
+                _cache;
+                reset_zoom = reset_zoom,
+                window_start = window_start,
+            )
+        else
+            _db_redraw_window!(
+                axes,
+                state,
+                _cache;
+                reset_zoom = reset_zoom,
+                window_start = window_start,
+            )
+        end
+        _db_add_cursor_dots!(axes, cursor_obs)
+        _db_update_cursor!(cursor_obs, _cache, state)
+        _create_overlay_plots!()
+        _update_highlight_overlay!()
+        return nothing
     end
 
     # Left column (under spatial): navigation + toggles
@@ -565,7 +618,7 @@ function plot_databrowser(
         tellwidth = false,
     )
 
-    lbl_speed = Label(
+    Label(
         slider_controls[2, 1],
         "Speed:";
         fontsize = 11,
@@ -626,19 +679,13 @@ function plot_databrowser(
         )
         on(tog.active) do val
             obs[] = val
-            _db_redraw_window!(
-                axes,
-                state,
-                _cache;
-                window_start = round(Int, sl_scroll.value[]),
-            )
-            _db_add_cursor_dots!(axes, cursor_obs)
-            _db_update_cursor!(cursor_obs, _cache, state)
-            _create_overlay_plots!()
+            _refresh_view!(window_start = round(Int, sl_scroll.value[]))
         end
     end
     colgap!(left_controls, 4)
     rowgap!(left_controls, 4)
+
+    _suppress_slider_cb = Ref(false)
 
     on(window_view_obs) do is_win
         btn_scroll_play.blockscene.visible = is_win && isnothing(state.split_by)
@@ -649,39 +696,51 @@ function plot_databrowser(
         n = max(1, nrow(state.segment_views[state.trial[]]))
 
         frame_range = (ws > 0 && n > ws) ? ws : n
-        sl_frame.range[] = 1:frame_range
-
-        if ws > 0 && n > ws
-            sl_scroll.range[] = 1:max(1, n-ws+1)
-            sl_scroll.value.val = 1
+        _suppress_slider_cb[] = true
+        try
+            sl_frame.range[] = 1:frame_range
+            if ws > 0 && n > ws
+                sl_scroll.range[] = 1:max(1, n-ws+1)
+                set_close_to!(sl_scroll, 1)
+            end
+        finally
+            _suppress_slider_cb[] = false
         end
 
-        _db_redraw_window!(axes, state, _cache; reset_zoom = true, window_start = 1)
-        _db_add_cursor_dots!(axes, cursor_obs)
-        _db_update_cursor!(cursor_obs, _cache, state)
-        _create_overlay_plots!()
+        _refresh_view!(reset_zoom = true, window_start = 1)
     end
 
     btn_scroll_play.blockscene.visible = window_view_obs[] && isnothing(state.split_by)
     sl_scroll.blockscene.visible = window_view_obs[] && isnothing(state.split_by)
 
-    # Play/pause states
+    # Play/pause states & generation counters so rapid clicks never spawn duplicate loops
     _playing = Observable(false)
     _scroll_playing = Observable(false)
+    _play_gen = Ref(0)
+    _scroll_gen = Ref(0)
+    _had_open_window = Ref(events(fig).window_open[])
 
     on(events(fig).window_open) do is_open
-        if !is_open
+        if is_open
+            _had_open_window[] = true
+        else
             _playing[] = false
             _scroll_playing[] = false
+            _play_gen[] += 1
+            _scroll_gen[] += 1
         end
     end
 
     on(btn_play.clicks) do _
         _playing[] = !_playing[]
+        _play_gen[] += 1
+        my_gen = _play_gen[]
         btn_play.label[] = _playing[] ? "||" : "▶"
         if _playing[]
             @async begin
-                while _playing[]
+                while _playing[] &&
+                          _play_gen[] == my_gen &&
+                          (!_had_open_window[] || events(fig).window_open[])
                     current = sl_frame.value[]
                     n = length(sl_frame.range[])
                     if current >= n
@@ -698,10 +757,14 @@ function plot_databrowser(
 
     on(btn_scroll_play.clicks) do _
         _scroll_playing[] = !_scroll_playing[]
+        _scroll_gen[] += 1
+        my_gen = _scroll_gen[]
         btn_scroll_play.label[] = _scroll_playing[] ? "||" : "▶"
         if _scroll_playing[]
             @async begin
-                while _scroll_playing[]
+                while _scroll_playing[] &&
+                          _scroll_gen[] == my_gen &&
+                          (!_had_open_window[] || events(fig).window_open[])
                     current = round(Int, sl_scroll.value[])
                     scroll_range = sl_scroll.range[]
                     if current >= last(scroll_range)
@@ -719,8 +782,10 @@ function plot_databrowser(
     function _goto_trial!(idx::Int)
         idx = clamp(idx, 1, length(state.segments))
         _playing[] = false
+        _play_gen[] += 1
         btn_play.label[] = "▶"
         _scroll_playing[] = false
+        _scroll_gen[] += 1
         btn_scroll_play.label[] = "▶"
         state.trial[] = idx
         state.selected_saccade[] = 0
@@ -729,28 +794,22 @@ function plot_databrowser(
         n = max(1, nrow(g))
 
         ws = state.window_samples
-        if ws > 0 && n > ws
-            sl_scroll.range[] = 1:max(1, n-ws+1)
-            set_close_to!(sl_scroll, 1)
-            sl_frame.range[] = 1:ws
-        else
-            sl_frame.range[] = 1:n
+        _suppress_slider_cb[] = true
+        try
+            if ws > 0 && n > ws
+                sl_scroll.range[] = 1:max(1, n-ws+1)
+                set_close_to!(sl_scroll, 1)
+                sl_frame.range[] = 1:ws
+            else
+                sl_frame.range[] = 1:n
+            end
+            set_close_to!(sl_frame, 1)
+        finally
+            _suppress_slider_cb[] = false
         end
-        set_close_to!(sl_frame, 1)
         state.frame[] = 1
-        w_start = sl_scroll.value[]
-        _db_draw_all!(
-            axes,
-            df,
-            state,
-            trial_label,
-            _cache;
-            reset_zoom = true,
-            window_start = w_start,
-        )
-        _db_add_cursor_dots!(axes, cursor_obs)
-        _db_update_cursor!(cursor_obs, _cache, state)
-        _create_overlay_plots!()
+        w_start = ws > 0 && n > ws ? round(Int, sl_scroll.value[]) : 1
+        _refresh_view!(full = true, reset_zoom = true, window_start = w_start)
     end
 
     if !isnothing(btn_prev)
@@ -796,18 +855,17 @@ function plot_databrowser(
     end
 
     on(sl_frame.value) do f
+        _suppress_slider_cb[] && return
         w_start = get(_cache, :window_start, 1)
         state.frame[] = w_start + f - 1
         _db_update_cursor!(cursor_obs, _cache, state)
     end
 
     on(sl_scroll.value) do w
+        _suppress_slider_cb[] && return
         w_start = round(Int, w)
-        _db_redraw_window!(axes, state, _cache; window_start = w_start)
-        _db_add_cursor_dots!(axes, cursor_obs)
-        _create_overlay_plots!()
         state.frame[] = w_start + sl_frame.value[] - 1
-        _db_update_cursor!(cursor_obs, _cache, state)
+        _refresh_view!(window_start = w_start)
     end
 
     on(events(fig).keyboardbutton) do event
@@ -823,16 +881,10 @@ function plot_databrowser(
                 end
                 return Consume(true)
             elseif event.key == Keyboard.r
-                _db_redraw_window!(
-                    axes,
-                    state,
-                    _cache;
+                _refresh_view!(
                     reset_zoom = true,
                     window_start = get(_cache, :window_start, 1),
                 )
-                _db_add_cursor_dots!(axes, cursor_obs)
-                _db_update_cursor!(cursor_obs, _cache, state)
-                _create_overlay_plots!()
                 return Consume(true)
             elseif event.key == Keyboard.escape
                 state.selected_saccade[] = 0
@@ -847,26 +899,22 @@ function plot_databrowser(
         return Consume(false)
     end
 
-    function _toggle_fixation!(idx::Int, within_threshold::Bool)
-        if within_threshold && state.selected_fixation[] == idx
+    function _toggle_fixation!(idx::Int)
+        if state.selected_fixation[] == idx
             state.selected_fixation[] = 0
-        elseif within_threshold
+        else
             state.selected_fixation[] = idx
             state.selected_saccade[] = 0
-        else
-            state.selected_fixation[] = 0
         end
         _update_highlight_overlay!()
     end
 
-    function _toggle_saccade!(idx::Int, within_threshold::Bool)
-        if within_threshold && state.selected_saccade[] == idx
+    function _toggle_saccade!(idx::Int)
+        if state.selected_saccade[] == idx
             state.selected_saccade[] = 0
-        elseif within_threshold
+        else
             state.selected_saccade[] = idx
             state.selected_fixation[] = 0
-        else
-            state.selected_saccade[] = 0
         end
         _update_highlight_overlay!()
     end
@@ -902,14 +950,15 @@ function plot_databrowser(
                 end
             end
 
-            # Select whichever is closer, with thresholds
-            fix_ok = best_fix_dist < 40.0
-            sacc_ok = best_sacc_dist < 30.0
+            # Select whichever is closer, with coordinate-aware thresholds
+            click_scale = (state.coord_mode === :deg && state.ppd > 0.0) ? (1.0 / state.ppd) : 1.0
+            fix_ok = state.show_fixations[] && best_fix_dist < 40.0 * click_scale
+            sacc_ok = state.show_saccades[] && best_sacc_dist < 30.0 * click_scale
 
             if fix_ok && (!sacc_ok || best_fix_dist <= best_sacc_dist)
-                _toggle_fixation!(best_fix_idx, true)
+                _toggle_fixation!(best_fix_idx)
             elseif sacc_ok
-                _toggle_saccade!(best_sacc_idx, true)
+                _toggle_saccade!(best_sacc_idx)
             else
                 state.selected_saccade[] = 0
                 state.selected_fixation[] = 0
@@ -932,7 +981,6 @@ function plot_databrowser(
                 fixations =
                     get(_cache, :fixations_win, FixationInfo[])::Vector{FixationInfo}
 
-                # Use cached windowed time (matches axes)
                 t = get(_cache, :t_win, Float64[])::Vector{Float64}
                 isempty(t) && return Consume(false)
                 t_range = length(t) > 1 ? t[end] - t[1] : 1.0
@@ -959,10 +1007,10 @@ function plot_databrowser(
                     end
                 end
 
-                if best_sacc_dist < threshold
-                    _toggle_saccade!(best_sacc_idx, true)
-                elseif fix_idx > 0
-                    _toggle_fixation!(fix_idx, true)
+                if state.show_saccades[] && best_sacc_dist < threshold
+                    _toggle_saccade!(best_sacc_idx)
+                elseif state.show_fixations[] && fix_idx > 0
+                    _toggle_fixation!(fix_idx)
                 else
                     state.selected_saccade[] = 0
                     state.selected_fixation[] = 0
@@ -977,18 +1025,7 @@ function plot_databrowser(
     register_interaction!(ax_xy, :event_select, _make_time_select_handler())
     register_interaction!(ax_vel, :event_select, _make_time_select_handler())
 
-    _db_draw_all!(
-        axes,
-        df,
-        state,
-        trial_label,
-        _cache;
-        reset_zoom = true,
-        window_start = 1,
-    )
-    _db_add_cursor_dots!(axes, cursor_obs)
-    _db_update_cursor!(cursor_obs, _cache, state)
-    _create_overlay_plots!()
+    _refresh_view!(full = true, reset_zoom = true, window_start = 1)
 
     # Figure layout columns and UI rows
     colsize!(fig.layout, 1, Relative(0.58))

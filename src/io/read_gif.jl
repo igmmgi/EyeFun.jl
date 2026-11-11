@@ -16,7 +16,7 @@ end
 
 # Each entry is a (prefix_code, suffix_byte) pair stored in two arrays
 function lzw_decompress(data::Vector{UInt8}, min_code::Int, npixels::Int)
-    (min_code < 2 || min_code > 11 || npixels <= 0) && return UInt8[]
+    (min_code < 2 || min_code > 8 || npixels <= 0) && return UInt8[]
     clear = 1 << min_code
     eoi = clear + 1
 

@@ -40,12 +40,9 @@ function read_smi(
         error("Unknown SMI file extension: $ext. Expected .txt or .idf")
     end
     resolved_ev = events_path
-    if isnothing(resolved_ev) && ext == ".txt" && ncodeunits(path) > 12
-        tail = SubString(path, ncodeunits(path) - 11, ncodeunits(path))
-        if lowercase(tail) == "_samples.txt"
-            cand = SubString(path, 1, ncodeunits(path) - 12) * "_events.txt"
-            isfile(cand) && (resolved_ev = cand)
-        end
+    if isnothing(resolved_ev) && ext == ".txt" && endswith(lowercase(path), "_samples.txt")
+        cand = String(chop(path; tail = 12)) * "_events.txt"
+        isfile(cand) && (resolved_ev = cand)
     end
     if !isnothing(resolved_ev)
         isfile(resolved_ev) || error("SMI events file not found: $resolved_ev")
@@ -361,24 +358,35 @@ function _read_smi_txt(path::String; verbose::Bool = false)
             if sb - sa >= 1 && @inbounds(raw[sa]) == UInt8('#') && @inbounds(raw[sa+1]) == UInt8('#')
                 line_s = _span_to_string(raw, sa + 2, sb)
                 content = lstrip(line_s)
-                if startswith(content, "Sample Rate:")
-                    sample_rate = parse(Float64, strip(split(content, '\t')[end]))
-                elseif startswith(content, "Calibration Area:")
-                    parts = split(content, '\t')
-                    if length(parts) >= 3
-                        w = parse(Int, strip(parts[end-1]))
-                        h = parse(Int, strip(parts[end]))
-                        screen_res = (w, h)
+                colon_idx = findfirst(':', content)
+                if !isnothing(colon_idx)
+                    key = strip(SubString(content, 1, prevind(content, colon_idx)))
+                    val_raw = strip(SubString(content, nextind(content, colon_idx)))
+                    if key == "Sample Rate" && !isempty(val_raw)
+                        v = tryparse(Float64, replace(strip(split(val_raw, '\t')[end]), ',' => '.'))
+                        !isnothing(v) && v > 0 && (sample_rate = v)
+                    elseif key == "Calibration Area" && !isempty(val_raw)
+                        parts = split(val_raw, '\t'; keepempty = false)
+                        if length(parts) >= 2
+                            w = tryparse(Int, strip(parts[end-1]))
+                            h = tryparse(Int, strip(parts[end]))
+                            (!isnothing(w) && !isnothing(h) && w > 0 && h > 0) && (screen_res = (w, h))
+                        end
+                    elseif key == "Subject"
+                        subject = isempty(val_raw) ? "" : String(strip(split(val_raw, '\t')[end]))
+                    elseif key == "Stimulus Dimension [mm]" && !isempty(val_raw)
+                        parts = split(val_raw, '\t'; keepempty = false)
+                        if length(parts) >= 2
+                            v = tryparse(Float64, replace(strip(parts[end-1]), ',' => '.'))
+                            !isnothing(v) && v > 0 && (stim_width_mm = v)
+                        elseif length(parts) == 1
+                            v = tryparse(Float64, replace(strip(parts[1]), ',' => '.'))
+                            !isnothing(v) && v > 0 && (stim_width_mm = v)
+                        end
+                    elseif key == "Head Distance [mm]" && !isempty(val_raw)
+                        v = tryparse(Float64, replace(strip(split(val_raw, '\t')[end]), ',' => '.'))
+                        !isnothing(v) && v > 0 && (head_dist_mm = v)
                     end
-                elseif startswith(content, "Subject:")
-                    subject = String(strip(split(content, '\t')[end]))
-                elseif startswith(content, "Stimulus Dimension [mm]:")
-                    parts = split(content, '\t')
-                    if length(parts) >= 3
-                        stim_width_mm = parse(Float64, strip(parts[end-1]))
-                    end
-                elseif startswith(content, "Head Distance [mm]:")
-                    head_dist_mm = parse(Float64, strip(split(content, '\t')[end]))
                 end
                 continue
             end
@@ -405,7 +413,7 @@ function _read_smi_txt(path::String; verbose::Bool = false)
             continue
         end
 
-        n_cols = _tsv_split_spans!(col_a, col_b, raw, ls, le)
+        n_cols = min(_tsv_split_spans!(col_a, col_b, raw, ls, le), length(col_a))
         (idx_type == 0 || n_cols < max(idx_type, idx_time)) && continue
         ta, tb = _tsv_trim_span(raw, @inbounds(col_a[idx_type]), @inbounds(col_b[idx_type]))
 
@@ -575,7 +583,7 @@ function _read_smi_txt(path::String; verbose::Bool = false)
 
     n = length(time_vec)
     if sample_rate <= 0.0 && n > 1
-        sample_rate = _estimate_sample_rate_typed(time_vec)
+        sample_rate = _estimate_sample_rate_ms(time_vec; fallback = 1000.0)
     end
     df = DataFrame(
         time = time_vec,
@@ -829,15 +837,9 @@ function _read_smi_idf(path::String; verbose::Bool = false)
     resize!(cryR, row)
 
     if header_sample_rate == 0.0 && row > 1
-        n_check = min(row, 2000)
-        valid_diffs = Float64[]
-        sizehint!(valid_diffs, n_check)
-        @inbounds for i = 2:n_check
-            dt = time_vec[i] - time_vec[i-1]
-            dt > 0.0 && push!(valid_diffs, dt)
-        end
-        if !isempty(valid_diffs)
-            sample_rate = round(1000.0 / median!(valid_diffs))
+        sr_est = _estimate_sample_rate_ms(time_vec; fallback = 0.0)
+        if sr_est > 0.0
+            sample_rate = sr_est
         else
             sample_rate = 50.0
             @warn "Could not detect IDF sample rate from timestamps, defaulting to 50 Hz"
@@ -910,6 +912,7 @@ function _read_smi_events_txt(path::String)::DataFrame
     raw = Base.read(path)
     n_bytes = length(raw)
     ev_type = String[]
+    ev_eye = Symbol[]
     ev_st = Float64[]
     ev_en = Float64[]
     ev_dur = Float64[]
@@ -942,9 +945,12 @@ function _read_smi_events_txt(path::String)::DataFrame
         @inbounds b1 = raw[sa]
         (b1 == UInt8('#') || b1 == UInt8('T') || b1 == UInt8('E')) && continue
 
-        n_cols = _tsv_split_spans!(col_a, col_b, raw, ls, le)
+        n_cols = min(_tsv_split_spans!(col_a, col_b, raw, ls, le), length(col_a))
         n_cols < 5 && continue
         ka, kb = _tsv_trim_span(raw, col_a[1], col_b[1])
+        eye_sym =
+            (kb > ka && @inbounds(raw[kb-1]) == UInt8(' ') && @inbounds(raw[kb]) == UInt8('R')) ? :right :
+            ((kb > ka && @inbounds(raw[kb-1]) == UInt8(' ') && @inbounds(raw[kb]) == UInt8('L')) ? :left : :both)
 
         if _span_starts_with_ascii(raw, ka, kb, "Fixation") && n_cols >= 7
             st = _bytes_parse_f64(raw, col_a[4], col_b[4]) / 1000.0
@@ -953,6 +959,7 @@ function _read_smi_events_txt(path::String)::DataFrame
             gx = _bytes_parse_f64(raw, col_a[7], col_b[7])
             gy = n_cols >= 8 ? _bytes_parse_f64(raw, col_a[8], col_b[8]) : NaN
             push!(ev_type, "FIXATION")
+            push!(ev_eye, eye_sym)
             push!(ev_st, st)
             push!(ev_en, en)
             push!(ev_dur, dur)
@@ -976,6 +983,7 @@ function _read_smi_events_txt(path::String)::DataFrame
             amp = n_cols >= 11 ? _bytes_parse_f64(raw, col_a[11], col_b[11]) : NaN
             pv = n_cols >= 12 ? _bytes_parse_f64(raw, col_a[12], col_b[12]) : NaN
             push!(ev_type, "SACCADE")
+            push!(ev_eye, eye_sym)
             push!(ev_st, st)
             push!(ev_en, en)
             push!(ev_dur, dur)
@@ -993,6 +1001,7 @@ function _read_smi_events_txt(path::String)::DataFrame
             en = _bytes_parse_f64(raw, col_a[5], col_b[5]) / 1000.0
             dur = _bytes_parse_f64(raw, col_a[6], col_b[6]) / 1000.0
             push!(ev_type, "BLINK")
+            push!(ev_eye, eye_sym)
             push!(ev_st, st)
             push!(ev_en, en)
             push!(ev_dur, dur)
@@ -1013,6 +1022,7 @@ function _read_smi_events_txt(path::String)::DataFrame
         entime = ev_en,
         duration = ev_dur,
         type = ev_type,
+        eye = ev_eye,
         gavx = ev_gavx,
         gavy = ev_gavy,
         gstx = ev_gstx,
@@ -1049,15 +1059,37 @@ function _stamp_smi_events!(df::DataFrame, evs::DataFrame)
     ev_st = evs[!, :time]
     ev_en = evs[!, :entime]
     ev_dur = evs[!, :duration]
+    has_eye = hasproperty(evs, :eye)
+    ev_eye = has_eye ? evs[!, :eye] : nothing
+    target_eye = :both
+    if has_eye
+        pref =
+            (hasproperty(df, :gxL) && any(!isnan, df[!, :gxL])) ? :left :
+            ((hasproperty(df, :gxR) && any(!isnan, df[!, :gxR])) ? :right : :left)
+        if any(e -> !ismissing(e) && e === pref, ev_eye)
+            target_eye = pref
+        elseif any(e -> !ismissing(e) && e in (:left, :right), ev_eye)
+            target_eye = pref === :left ? :right : :left
+        end
+    end
+
     @inbounds for k = 1:nrow(evs)
+        if has_eye && target_eye !== :both
+            ek = ev_eye[k]
+            (!ismissing(ek) && ek !== :both && ek !== target_eye) && continue
+        end
         tp = ev_t[k]
-        (ismissing(ev_en[k]) || isnan(ev_en[k])) && continue
+        (ismissing(ev_en[k]) || isnan(ev_en[k]) || ismissing(ev_st[k]) || isnan(ev_st[k])) && continue
         st = Float64(ev_st[k])
         en = Float64(ev_en[k])
+        en >= st || continue
         lo = searchsortedfirst(times, st)
         hi = searchsortedlast(times, en)
         lo > hi && continue
-        d_ms = round(Int32, ismissing(ev_dur[k]) || isnan(ev_dur[k]) ? max(0.0, en - st) : Float64(ev_dur[k]))
+        raw_d =
+            ismissing(ev_dur[k]) || !isfinite(ev_dur[k]) ? max(0.0, en - st) :
+            max(0.0, Float64(ev_dur[k]))
+        d_ms = Int32(clamp(round(Int64, raw_d), 0, Int64(typemax(Int32))))
         if tp == "FIXATION"
             gx = Float64(evs.gavx[k])
             gy = Float64(evs.gavy[k])

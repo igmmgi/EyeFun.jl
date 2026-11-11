@@ -50,8 +50,9 @@ There is also a **[positron-julia extension](https://open-vsx.org/extension/ntlu
 - Integrated Julia REPL within the IDE
 - Package manager UI
 
-> [!NOTE]
-> JetBrains IDEs are commercial software, though free community editions and academic licences are available.
+:::info
+JetBrains IDEs are commercial software, though free community editions and academic licences are available.
+:::
 
 ## Neovim + Iron.nvim
 

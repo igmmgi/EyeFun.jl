@@ -27,14 +27,7 @@
     @test (@allocated EyeFun._apply_selection_view(ed, (trial = 1,))) < 512 * 1024 * cov_scale
 
     # In-place preprocessing and event detection
-    ed_work = EyeData(
-        copy(ed.df);
-        source = ed.source,
-        sample_rate = ed.sample_rate,
-        screen_res = ed.screen_res,
-        screen_width_cm = ed.screen_width_cm,
-        viewing_distance_cm = ed.viewing_distance_cm,
-    )
+    ed_work = copy(ed)
     smooth_pupil!(ed_work)
     interpolate_blinks!(ed_work)
     savitzky_golay_filter!(ed_work)

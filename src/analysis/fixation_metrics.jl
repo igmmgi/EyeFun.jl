@@ -1,62 +1,3 @@
-function _extract_trial_fixations_rows!(
-    fixs::Vector{NamedTuple{(:fx, :fy, :dur_ms, :onset_ms),Tuple{Float64,Float64,Float64,Float64}}},
-    in_fix::AbstractVector{Bool},
-    fix_gavx::AbstractVector{<:Real},
-    fix_gavy::AbstractVector{<:Real},
-    fix_dur::AbstractVector{<:Real},
-    t_buf::Vector{Float64},
-    rows::AbstractVector{Int},
-    m::Int,
-    has_tw::Bool,
-    t_start::Float64,
-    t_end::Float64,
-)
-    empty!(fixs)
-    prev = false
-
-    @inbounds for k = 1:m
-        r = rows[k]
-        cur = in_fix[r]
-        if cur & !prev
-            fx = Float64(fix_gavx[r])
-            if !isnan(fx)
-                fy = Float64(fix_gavy[r])
-                if !isnan(fy)
-                    dur_ms = Float64(fix_dur[r])
-                    onset_ms = t_buf[k]
-                    if !isnan(onset_ms)
-                        keep = true
-                        if has_tw
-                            fix_end = onset_ms + dur_ms
-                            if fix_end <= t_start || onset_ms >= t_end
-                                keep = false
-                            else
-                                if onset_ms < t_start
-                                    dur_ms -= (t_start - onset_ms)
-                                    onset_ms = t_start
-                                end
-                                if onset_ms + dur_ms > t_end
-                                    dur_ms -= (onset_ms + dur_ms - t_end)
-                                end
-                                dur_ms <= 0 && (keep = false)
-                            end
-                        end
-                        if keep
-                            push!(
-                                fixs,
-                                (fx = fx, fy = fy, dur_ms = dur_ms, onset_ms = onset_ms),
-                            )
-                        end
-                    end
-                end
-            end
-        end
-        prev = cur
-    end
-
-    return nothing
-end
-
 function _fixation_metrics_flat!(
     row_first_idx::Vector{Int},
     col_aoi::Vector{String},
@@ -82,21 +23,28 @@ function _fixation_metrics_flat!(
     n_groups = length(grouped)
     n_aois = length(aois)
     has_tw = !isnothing(time_window)
+    tr_col, pt_col = _group_seam_cols(parent_df)
 
     t_buf = Float64[]
-    fixs = NamedTuple{(:fx, :fy, :dur_ms, :onset_ms),Tuple{Float64,Float64,Float64,Float64}}[]
+    fx = Float64[]
+    fy = Float64[]
+    fd = Float64[]
+    ft = Float64[]
 
     out_pos = 0
     @inbounds for g_idx = 1:n_groups
         rows = parentindices(grouped[g_idx])[1]
         m = length(rows)
         first_r = rows[1]
-        _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, rows)
+        _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, rows, tr_col, pt_col)
         t_start, t_end =
             has_tw ? _resolve_time_window_rows(parent_df, first_r, time_window) : (0.0, 0.0)
 
-        _extract_trial_fixations_rows!(
-            fixs,
+        _extract_group_fixations_rows!(
+            fx,
+            fy,
+            fd,
+            ft,
             in_fix,
             fix_gavx,
             fix_gavy,
@@ -104,6 +52,8 @@ function _fixation_metrics_flat!(
             t_buf,
             rows,
             m,
+            tr_col,
+            pt_col,
             has_tw,
             t_start,
             t_end,
@@ -121,24 +71,19 @@ function _fixation_metrics_flat!(
             visits = 0
             was_inside = false
 
-            for k in eachindex(fixs)
-                fix = fixs[k]
-                if _in_aoi_interval_fast(
-                    aoi,
-                    fix.fx,
-                    fix.fy,
-                    fix.onset_ms,
-                    fix.onset_ms + fix.dur_ms,
-                )
+            for k in eachindex(fx)
+                dur_k = fd[k]
+                onset_k = ft[k]
+                if _in_aoi_interval_fast(aoi, fx[k], fy[k], onset_k, onset_k + dur_k)
                     if fcount == 0
-                        ffd = fix.dur_ms
-                        ff_onset = fix.onset_ms
+                        ffd = dur_k
+                        ff_onset = onset_k
                         in_first_pass = true
                     end
                     if in_first_pass && !done_first_pass
-                        gaze_dur += fix.dur_ms
+                        gaze_dur += dur_k
                     end
-                    total += fix.dur_ms
+                    total += dur_k
                     fcount += 1
                     if !was_inside
                         visits += 1

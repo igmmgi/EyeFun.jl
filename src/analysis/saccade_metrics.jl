@@ -26,13 +26,14 @@ function _saccade_metrics_flat!(
 )
     n_groups = length(grouped)
     has_tw = !isnothing(time_window)
+    tr_col, pt_col = _group_seam_cols(parent_df)
     t_buf = Float64[]
 
     @inbounds for g_idx = 1:n_groups
         rows = parentindices(grouped[g_idx])[1]
         m = length(rows)
         first_r = rows[1]
-        _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, rows)
+        _fill_group_rel_time!(t_buf, has_trel, trel_col, time_col, rows, tr_col, pt_col)
         t_start, t_end =
             has_tw ? _resolve_time_window_rows(parent_df, first_r, time_window) :
             (-Inf, Inf)
@@ -42,13 +43,15 @@ function _saccade_metrics_flat!(
         while i <= m
             if in_sacc[rows[i]]
                 j = i + 1
-                while j <= m && in_sacc[rows[j]]
+                while j <= m &&
+                          in_sacc[rows[j]] &&
+                          _is_group_row_contig(rows[j-1], rows[j], tr_col, pt_col)
                     j += 1
                 end
                 j_end = j - 1
 
                 sacc_t = t_buf[i]
-                if t_start <= sacc_t <= t_end
+                if !has_tw || (!isnan(sacc_t) && t_start <= sacc_t <= t_end)
                     first_k = 0
                     last_k = 0
                     valid_cnt = 0

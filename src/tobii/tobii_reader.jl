@@ -85,9 +85,12 @@ function _parse_tobii_header!(
     elseif haskey(col_map, "Recording timestamp [us]")
         idx_time = col_map["Recording timestamp [us]"]
         time_scale = 1e-3
+    elseif haskey(col_map, "Recording timestamp [s]")
+        idx_time = col_map["Recording timestamp [s]"]
+        time_scale = 1000.0
     elseif haskey(col_map, "Recording timestamp")
         idx_time = col_map["Recording timestamp"]
-        time_scale = 1.0
+        time_scale = 1e-3
     else
         error(
             "Required timestamp column (e.g. 'Recording timestamp [ms]' or 'Recording timestamp [μs]') not found in Tobii TSV: $path",
@@ -162,11 +165,25 @@ function _parse_tobii_header!(
     idx_em_dur = get(
         col_map,
         "Eye movement event duration [ms]",
-        get(col_map, "Eye movement event duration", 0),
+        get(
+            col_map,
+            "Eye movement event duration",
+            get(col_map, "Gaze event duration [ms]", get(col_map, "Gaze event duration", 0)),
+        ),
     )
     idx_em_idx = get(col_map, "Eye movement type index", 0)
-    idx_fix_x = get(col_map, "Fixation point X [DACS px]", 0)
-    idx_fix_y = get(col_map, "Fixation point Y [DACS px]", 0)
+    idx_fix_x = get(col_map, "Fixation point X [DACS px]", get(col_map, "Fixation point X [MCS px]", 0))
+    idx_fix_y = get(col_map, "Fixation point Y [DACS px]", get(col_map, "Fixation point Y [MCS px]", 0))
+    idx_fix_x_norm = get(
+        col_map,
+        "Fixation point X [ADCS norm]",
+        get(col_map, "Fixation point X [MCS norm]", 0),
+    )
+    idx_fix_y_norm = get(
+        col_map,
+        "Fixation point Y [ADCS norm]",
+        get(col_map, "Fixation point Y [MCS norm]", 0),
+    )
 
     return (;
         idx_time,
@@ -203,6 +220,8 @@ function _parse_tobii_header!(
         idx_em_idx,
         idx_fix_x,
         idx_fix_y,
+        idx_fix_x_norm,
+        idx_fix_y_norm,
     )
 end
 
@@ -276,7 +295,7 @@ function read_tobii(
     idx_gxL_norm = idx_gyL_norm = idx_gxR_norm = idx_gyR_norm = 0
     idx_gx_fused = idx_gy_fused = idx_gx_fused_norm = idx_gy_fused_norm = idx_pa_fused = 0
     idx_subj = idx_trial = 0
-    idx_em_type = idx_em_dur = idx_em_idx = idx_fix_x = idx_fix_y = 0
+    idx_em_type = idx_em_dur = idx_em_idx = idx_fix_x = idx_fix_y = idx_fix_x_norm = idx_fix_y_norm = 0
     use_fused_gaze = false
     use_fused_pupil = false
     time_scale = 1.0
@@ -349,6 +368,8 @@ function read_tobii(
                 idx_em_idx,
                 idx_fix_x,
                 idx_fix_y,
+                idx_fix_x_norm,
+                idx_fix_y_norm,
             ) = _parse_tobii_header!(col_a, col_b, raw, ls, le, path)
             header_parsed = true
             continue
@@ -499,15 +520,19 @@ function read_tobii(
             paR = _tobii_parse_f32_col(raw, col_a, col_b, n_cols, idx_paR)
         end
 
-        if idx_valL > 0 && _is_invalid_tobii_bytes(raw, col_a[min(idx_valL, n_cols)], idx_valL <= n_cols ? col_b[idx_valL] : 0)
-            if !use_fused_gaze || idx_valR == 0 || (
-                idx_valR <= n_cols && _is_invalid_tobii_bytes(raw, col_a[idx_valR], col_b[idx_valR])
-            )
+        valL_bad =
+            idx_valL > 0 && idx_valL <= n_cols && _is_invalid_tobii_bytes(raw, col_a[idx_valL], col_b[idx_valL])
+        valR_bad =
+            idx_valR > 0 && idx_valR <= n_cols && _is_invalid_tobii_bytes(raw, col_a[idx_valR], col_b[idx_valR])
+        if valL_bad
+            if !use_fused_gaze || idx_valR == 0 || valR_bad
                 gxL = gyL = NaN32
-                idx_pvalL == 0 && !use_fused_pupil && (paL = NaN32)
+            end
+            if idx_pvalL == 0 && (!use_fused_pupil || idx_valR == 0 || valR_bad)
+                paL = NaN32
             end
         end
-        if idx_valR > 0 && idx_valR <= n_cols && _is_invalid_tobii_bytes(raw, col_a[idx_valR], col_b[idx_valR])
+        if valR_bad
             gxR = gyR = NaN32
             idx_pvalR == 0 && (paR = NaN32)
         end
@@ -518,12 +543,16 @@ function read_tobii(
             paR = NaN32
         end
 
-        if idx_em_type > 0 && idx_em_type <= n_cols
-            ema, emb = _tsv_trim_span(raw, col_a[idx_em_type], col_b[idx_em_type])
-            em_code =
-                _span_eq_ascii(raw, ema, emb, "Fixation") ? 0x01 :
-                _span_eq_ascii(raw, ema, emb, "Saccade") ? 0x02 :
-                _span_eq_ascii(raw, ema, emb, "EyesNotFound") ? 0x03 : 0x00
+        if idx_em_type > 0
+            if idx_em_type <= n_cols
+                ema, emb = _tsv_trim_span(raw, col_a[idx_em_type], col_b[idx_em_type])
+                em_code =
+                    _span_eq_ascii(raw, ema, emb, "Fixation") ? 0x01 :
+                    _span_eq_ascii(raw, ema, emb, "Saccade") ? 0x02 :
+                    _span_eq_ascii(raw, ema, emb, "EyesNotFound") ? 0x03 : 0x00
+            else
+                em_code = 0x00
+            end
             em_d =
                 (idx_em_dur > 0 && idx_em_dur <= n_cols) ?
                 Int32(clamp(_bytes_parse_int(raw, col_a[idx_em_dur], col_b[idx_em_dur]), 0, Int(typemax(Int32)))) :
@@ -532,8 +561,20 @@ function read_tobii(
                 (idx_em_idx > 0 && idx_em_idx <= n_cols) ?
                 Int32(clamp(_bytes_parse_int(raw, col_a[idx_em_idx], col_b[idx_em_idx]), 0, Int(typemax(Int32)))) :
                 Int32(0)
-            fx = _tobii_parse_f32_col(raw, col_a, col_b, n_cols, idx_fix_x)
-            fy = _tobii_parse_f32_col(raw, col_a, col_b, n_cols, idx_fix_y)
+            fx =
+                idx_fix_x > 0 ? _tobii_parse_f32_col(raw, col_a, col_b, n_cols, idx_fix_x) :
+                (
+                    idx_fix_x_norm > 0 ?
+                    _tobii_parse_f32_col(raw, col_a, col_b, n_cols, idx_fix_x_norm) * res_w_f32 :
+                    NaN32
+                )
+            fy =
+                idx_fix_y > 0 ? _tobii_parse_f32_col(raw, col_a, col_b, n_cols, idx_fix_y) :
+                (
+                    idx_fix_y_norm > 0 ?
+                    _tobii_parse_f32_col(raw, col_a, col_b, n_cols, idx_fix_y_norm) * res_h_f32 :
+                    NaN32
+                )
             push!(native_evt, em_code)
             push!(native_dur, em_d)
             push!(native_idx, em_i)
@@ -591,19 +632,8 @@ function read_tobii(
     end
 
     if n > 1
-        n_check = min(n, 2000)
-        valid_diffs = Float64[]
-        sizehint!(valid_diffs, n_check)
-        @inbounds for i = 2:n_check
-            dt = times[i] - times[i-1]
-            dt > 0.0 && push!(valid_diffs, dt)
-        end
-        if !isempty(valid_diffs)
-            med_diff_ms = median!(valid_diffs)
-            if med_diff_ms > 0
-                tob.sample_rate = 1000.0 / med_diff_ms
-            end
-        end
+        sr_est = _estimate_sample_rate_ms(times; fallback = 0.0)
+        sr_est > 0.0 && (tob.sample_rate = sr_est)
     end
 
     verbose && @info "Tobii TSV: $n samples, $(tob.sample_rate) Hz, subject=$(tob.subject)"
