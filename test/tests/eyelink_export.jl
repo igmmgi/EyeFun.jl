@@ -14,9 +14,7 @@
             @test !isnothing(edf2.samples)
             @test nrow(edf2.samples) > 0
 
-            ratio = nrow(edf2.samples) / nrow(edf.samples)
-            @test ratio > 0.95
-            @test ratio <= 1.05
+            @test nrow(edf2.samples) == nrow(edf.samples)
         finally
             isfile(out_path) && rm(out_path)
         end
@@ -88,7 +86,10 @@ end
                 @test filesize(out_path) > 0
 
                 cmp = compare_asc_files(ref_path, out_path)
+                @test cmp.n_jul_samples == cmp.n_ref_samples
+                @test cmp.timestamp_mismatches == 0
                 @test cmp.sample_mismatches == 0
+                @test cmp.n_jul_msgs == cmp.n_ref_msgs
                 @test abs(cmp.ref_counts[:efix] - cmp.jul_counts[:efix]) <= 5
                 @test abs(cmp.ref_counts[:esacc] - cmp.jul_counts[:esacc]) <= 5
             finally

@@ -50,6 +50,15 @@ function compare_asc_files(ref_path::String, jul_path::String)
     ref_samples = get(ref_groups, :sample, String[])
     jul_samples = get(jul_groups, :sample, String[])
 
+    # Verify every sample timestamp across the entire file
+    n_all_samples = min(length(ref_samples), length(jul_samples))
+    timestamp_mismatches = 0
+    for i = 1:n_all_samples
+        ts_ref = SubString(ref_samples[i], 1, something(findfirst(isspace, ref_samples[i]), length(ref_samples[i]) + 1) - 1)
+        ts_jul = SubString(jul_samples[i], 1, something(findfirst(isspace, jul_samples[i]), length(jul_samples[i]) + 1) - 1)
+        ts_ref != ts_jul && (timestamp_mismatches += 1)
+    end
+
     # Compare first N sample values (timestamp, gx, gy, pa)
     n_compare = min(100, length(ref_samples), length(jul_samples))
     sample_mismatches = 0
@@ -159,6 +168,7 @@ function compare_asc_files(ref_path::String, jul_path::String)
         jul_counts = jul_counts,
         n_ref_samples = length(ref_samples),
         n_jul_samples = length(jul_samples),
+        timestamp_mismatches = timestamp_mismatches,
         sample_mismatches = sample_mismatches,
         n_efix = n_efix,
         efix_value_matches = efix_value_matches,
@@ -183,9 +193,8 @@ end
             cmp = compare_asc_files(ref_path, jul_path)
 
             @testset "Sample lines" begin
-                ratio = cmp.n_jul_samples / cmp.n_ref_samples
-                @test ratio > 0.97
-                @test ratio <= 1.03
+                @test cmp.n_jul_samples == cmp.n_ref_samples
+                @test cmp.timestamp_mismatches == 0
                 @test cmp.sample_mismatches == 0
             end
 
@@ -197,7 +206,7 @@ end
                 @test abs(
                     get(cmp.ref_counts, :esacc, 0) - get(cmp.jul_counts, :esacc, 0),
                 ) <= esacc_tol
-                @test abs(cmp.n_ref_msgs - cmp.n_jul_msgs) <= 10
+                @test cmp.n_jul_msgs == cmp.n_ref_msgs
             end
 
             @testset "EFIX values" begin
@@ -227,8 +236,11 @@ end
                         match_rate = cmp.eblink_matches / cmp.n_eblink
                         @test match_rate > 0.99
                     else
-                        # Binocular blink pairing differs from edf2asc
-                        @test cmp.n_eblink > 0
+                        # Binocular blink flutter coalescing matches edf2asc within a few events
+                        @test abs(
+                            get(cmp.ref_counts, :eblink, 0) -
+                            get(cmp.jul_counts, :eblink, 0),
+                        ) <= 10
                     end
                 end
             end

@@ -347,10 +347,34 @@ function _all_equal_at_indices(
     return true
 end
 
+@inline function _has_enclosing_saccade(
+    s_idx::Vector{Int},
+    ev_st::AbstractVector{<:Integer},
+    ev_en::AbstractVector{<:Integer},
+    ev_eye::AbstractVector{<:Integer},
+    b1_st::UInt32,
+    b2_en::UInt32,
+    eye_val::Int16,
+)::Bool
+    @inbounds for si in s_idx
+        ek = Int16(ev_eye[si])
+        if ek == eye_val || ek == Int16(EYE_BINOCULAR) || ek < Int16(0) || eye_val < Int16(0)
+            if UInt32(ev_st[si]) <= b1_st && b2_en <= UInt32(ev_en[si])
+                return true
+            end
+        end
+    end
+    return false
+end
+
 function _dedupe_and_merge_blinks(
     raw_st::Vector{UInt32},
     raw_en::Vector{UInt32},
     raw_eye::Vector{T},
+    ev_type::Union{AbstractVector{<:Integer},Nothing} = nothing,
+    ev_st::Union{AbstractVector{<:Integer},Nothing} = nothing,
+    ev_en::Union{AbstractVector{<:Integer},Nothing} = nothing,
+    ev_eye::Union{AbstractVector{<:Integer},Nothing} = nothing,
 )::Tuple{Vector{UInt32},Vector{UInt32},Vector{T}} where {T<:Integer}
     nb = length(raw_st)
     nb <= 1 && return (raw_st, raw_en, raw_eye)
@@ -383,6 +407,12 @@ function _dedupe_and_merge_blinks(
     merged_st = sizehint!(UInt32[], nu)
     merged_en = sizehint!(UInt32[], nu)
     merged_eye = sizehint!(T[], nu)
+    s_idx = nothing
+    has_evs =
+        !isnothing(ev_type) &&
+        !isnothing(ev_st) &&
+        !isnothing(ev_en) &&
+        !isnothing(ev_eye)
     @inbounds begin
         i1 = perm2[1]
         cur_st = u_st[i1]
@@ -390,7 +420,26 @@ function _dedupe_and_merge_blinks(
         cur_eye = u_eye[i1]
         for k = 2:nu
             ik = perm2[k]
-            if u_eye[ik] == cur_eye && u_st[ik] <= cur_en + UInt32(1)
+            should_merge = false
+            if u_eye[ik] == cur_eye
+                if u_st[ik] <= cur_en + UInt32(1)
+                    should_merge = true
+                elseif has_evs && u_st[ik] <= cur_en + UInt32(2000)
+                    if isnothing(s_idx)
+                        s_idx = _find_event_indices(ev_type, EVENT_ENDSACC)
+                    end
+                    should_merge = _has_enclosing_saccade(
+                        s_idx,
+                        ev_st,
+                        ev_en,
+                        ev_eye,
+                        cur_st,
+                        u_en[ik],
+                        Int16(cur_eye),
+                    )
+                end
+            end
+            if should_merge
                 cur_en = max(cur_en, u_en[ik])
             else
                 push!(merged_st, cur_st)
@@ -471,7 +520,8 @@ function _parse_blinks_typed(
     end
 
     final_st, final_en, final_eye =
-        (is_binary && nb > 1) ? _dedupe_and_merge_blinks(init_st, init_en, init_eye) :
+        nb > 1 ?
+        _dedupe_and_merge_blinks(init_st, init_en, init_eye, ev_type, ev_st, ev_en, ev_eye) :
         (init_st, init_en, init_eye)
 
     return DataFrame(
@@ -1201,7 +1251,7 @@ function create_eyefun_data(
 
     if nrow(evs) > 0
         max_snap_ms =
-            sr > 0.0 ? UInt32(fld(round(Int, 1000.0 / sr), 2)) : UInt32(0)
+            sr > 0.0 ? max(UInt32(1), UInt32(cld(round(Int, 1000.0 / sr), 2))) : UInt32(0)
         _stamp_events_direct!(
             times,
             evs[!, :type],

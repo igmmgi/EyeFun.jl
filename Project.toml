@@ -1,6 +1,6 @@
 name = "EyeFun"
 uuid = "fbdcb25a-f3f3-4a67-bdd8-a73b8531a536"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["igmmgi <ian.mackenzie@uni-tuebingen.de>", "carolin.dudschig@uni-tuebingen.de"]
 
 [deps]

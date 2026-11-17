@@ -28,6 +28,7 @@ const _START_ET_MASK =
     (UInt64(1) << EVENT_STARTSACC) |
     (UInt64(1) << EVENT_STARTFIX) |
     (UInt64(1) << EVENT_STARTBLINK) |
+    (UInt64(1) << EVENT_FIXUPDATE) |
     (UInt64(1) << EVENT_STARTPARSE) |
     (UInt64(1) << EVENT_ENDPARSE) |
     (UInt64(1) << EVENT_BREAKPARSE)
@@ -35,8 +36,59 @@ const _START_ET_MASK =
 const _FEVENT_ET_MASK =
     (UInt64(1) << EVENT_ENDSACC) |
     (UInt64(1) << EVENT_ENDFIX) |
-    (UInt64(1) << EVENT_ENDBLINK) |
-    (UInt64(1) << EVENT_FIXUPDATE)
+    (UInt64(1) << EVENT_ENDBLINK)
+
+@inline function _is_valid_edf_event_header(
+    data::Vector{UInt8},
+    pos::Int,
+    n_data::Int,
+    et::Int,
+    marker_byte::UInt8,
+    ref_ts::UInt32,
+)::Bool
+    b0 = @inbounds data[pos]
+    b1 = @inbounds data[pos+1]
+    ts = read_be_uint32(data, pos + 3)
+
+    if ref_ts > UInt32(0)
+        abs(Int64(ts) - Int64(ref_ts)) > 14_400_000 && return false
+    end
+
+    if ((_RECORDING_ET_MASK >> et) & UInt64(1)) != 0
+        return (b0 >> 6) == 0x00
+    end
+
+    marker_byte == HEADER_MARKER || return false
+
+    if et == EVENT_MESSAGEEVENT
+        b0 == UInt8(EVENT_MESSAGEEVENT) || return false
+        pos + 9 <= n_data || return false
+        @inbounds(data[pos+7]) == 0x5e || return false
+        msg_len = Int(read_be_uint16(data, pos + 8))
+        return 0 <= msg_len <= 4096
+    end
+
+    if 3 <= et <= 9
+        (b1 == 0x00 || b1 == 0x80 || b1 == 0xc0) || return false
+        if et == EVENT_ENDBLINK
+            pos + 12 <= n_data || return false
+            @inbounds(data[pos+7]) == 0x41 || return false
+            entime = read_be_uint32(data, pos + 8)
+            return entime >= ts && (entime - ts) <= UInt32(300_000)
+        elseif et == EVENT_ENDSACC || et == EVENT_ENDFIX || et == EVENT_FIXUPDATE
+            pos + 11 <= n_data || return false
+            entime = read_be_uint32(data, pos + 8)
+            return entime >= ts && (entime - ts) <= UInt32(300_000)
+        end
+        return true
+    end
+
+    if et == EVENT_BUTTONEVENT || et == EVENT_INPUTEVENT
+        return (b0 >> 6) == 0x00
+    end
+
+    return true
+end
 
 function _parse_edf_binary!(
     edf::EDFFile,
@@ -56,46 +108,67 @@ function _parse_edf_binary!(
     trial = 0
     in_trial = false
     current_sample_ts = UInt32(0)
+    ref_ts = UInt32(0)
     current_sflags = UInt16(0)
     sflags_base = UInt16(0)
     current_sample_body_bytes = 0
 
     while pos + 6 <= n_data
+        if current_sflags != 0
+            flags_peek = read_be_uint16(binary_data, pos)
+            flags_base = flags_peek & ~UInt16(SAMPLE_FULL_TS_FLAG)
+            if flags_base == sflags_base || flags_base == (sflags_base | UInt16(1))
+                req =
+                    ((flags_peek & SAMPLE_FULL_TS_FLAG) != 0 ? 4 : 1) +
+                    current_sample_body_bytes
+                if pos + 1 + req <= n_data
+                    pos += 2
+                    pos, current_sample_ts = _push_sample_bytes!(
+                        binary_data,
+                        pos,
+                        flags_peek,
+                        current_sflags,
+                        current_sample_ts,
+                        in_trial,
+                        trial,
+                        sample_cols,
+                    )
+                    current_sample_ts > UInt32(0) && (ref_ts = current_sample_ts)
+                    continue
+                end
+            end
+        end
+
         @inbounds marker_byte = binary_data[pos+2]
         is_header = false
         et = 0
         if marker_byte == HEADER_MARKER
             et = Int(@inbounds(binary_data[pos]) & TYPE_MASK)
-            is_header = ((_KNOWN_ET_MASK >> et) & UInt64(1)) != 0
+            if ((_KNOWN_ET_MASK >> et) & UInt64(1)) != 0
+                is_header = _is_valid_edf_event_header(
+                    binary_data,
+                    pos,
+                    n_data,
+                    et,
+                    marker_byte,
+                    ref_ts,
+                )
+            end
         elseif marker_byte == UInt8(0x41)
             et = Int(@inbounds(binary_data[pos]) & TYPE_MASK)
-            is_header = ((_RECORDING_ET_MASK >> et) & UInt64(1)) != 0
+            if ((_RECORDING_ET_MASK >> et) & UInt64(1)) != 0
+                is_header = _is_valid_edf_event_header(
+                    binary_data,
+                    pos,
+                    n_data,
+                    et,
+                    marker_byte,
+                    ref_ts,
+                )
+            end
         end
 
         if !is_header
-            if current_sflags != 0
-                flags_peek = read_be_uint16(binary_data, pos)
-                flags_base = flags_peek & ~UInt16(SAMPLE_FULL_TS_FLAG)
-                if flags_base == sflags_base || flags_base == (sflags_base | UInt16(1))
-                    req =
-                        ((flags_peek & SAMPLE_FULL_TS_FLAG) != 0 ? 4 : 1) +
-                        current_sample_body_bytes
-                    if pos + 1 + req <= n_data
-                        pos += 2
-                        pos, current_sample_ts = _push_sample_bytes!(
-                            binary_data,
-                            pos,
-                            flags_peek,
-                            current_sflags,
-                            current_sample_ts,
-                            in_trial,
-                            trial,
-                            sample_cols,
-                        )
-                        continue
-                    end
-                end
-            end
             pos += 1
             continue
         end
@@ -128,6 +201,7 @@ function _parse_edf_binary!(
                 end
             end
             _push_msg_event_bytes!(ev_cols, ts, eye_val, binary_data, t_lo, t_hi)
+            ts > UInt32(0) && ref_ts == UInt32(0) && (ref_ts = ts)
 
         elseif (et_bit & _RECORDING_ET_MASK) != 0
             rec, pos = _recording_bytes(binary_data, pos, ts, in_trial ? trial : nothing)
@@ -138,6 +212,9 @@ function _parse_edf_binary!(
                 # in the binary stream can have rates like 24320 Hz and would
                 # corrupt current_sflags mid-recording.
                 is_plausible = rec.sample_rate >= 100.0f0 && rec.sample_rate <= 2000.0f0
+                if is_plausible
+                    ts > UInt32(0) && (ref_ts = ts)
+                end
                 if is_plausible &&
                    rec.sflags != 0 &&
                    (et == EVENT_STARTSAMPLES || et == EVENT_ENDSAMPLES)

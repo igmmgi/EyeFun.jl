@@ -439,6 +439,13 @@ end
         ev.eye[k] = eye_val
     end
     if et == EVENT_ENDBLINK
+        if pos + 5 <= length(data) && @inbounds(data[pos]) == 0x41
+            entime = read_be_uint32(data, pos + 1)
+            if entime >= ts && (entime - ts) <= UInt32(300_000)
+                @inbounds ev.entime[k] = entime
+                return pos + 6
+            end
+        end
         @inbounds ev.entime[k] = ts
         return pos
     end
