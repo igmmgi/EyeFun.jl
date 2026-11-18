@@ -6,6 +6,61 @@ const _LBL_FIX = 0x01
 const _LBL_SACC = 0x02
 const _LBL_SEP = 0x03
 const _LBL_PSO = 0x04
+const _LBL_BLINK = 0x05
+
+function _mask_blink_vel_range!(
+    vel::Vector{Float64},
+    blink_mask::AbstractVector{Bool},
+    lo::Int,
+    hi::Int,
+    pad::Int,
+)
+    i = lo
+    @inbounds while i <= hi
+        if blink_mask[i]
+            j = i + 1
+            while j <= hi && blink_mask[j]
+                j += 1
+            end
+            m_lo = max(lo, i - pad)
+            m_hi = min(hi, j - 1 + pad)
+            for k = m_lo:m_hi
+                vel[k] = NaN
+            end
+            i = j
+        else
+            i += 1
+        end
+    end
+    return nothing
+end
+
+function _mask_blink_labels_range!(
+    labels::Vector{UInt8},
+    blink_mask::AbstractVector{Bool},
+    lo::Int,
+    hi::Int,
+    pad::Int,
+)
+    i = lo
+    @inbounds while i <= hi
+        if blink_mask[i]
+            j = i + 1
+            while j <= hi && blink_mask[j]
+                j += 1
+            end
+            m_lo = max(lo, i - pad)
+            m_hi = min(hi, j - 1 + pad)
+            for k = m_lo:m_hi
+                labels[k] = _LBL_BLINK
+            end
+            i = j
+        else
+            i += 1
+        end
+    end
+    return nothing
+end
 
 function _compute_velocity_deg!(
     vel::Vector{Float64},
@@ -384,7 +439,7 @@ function _idt_classify_u8!(
     i = lo
     just_ended_fix = (lo > 1 && labels[lo-1] == _LBL_FIX)
     @inbounds while i <= hi - min_fix_samples + 1
-        if isnan(gx[i]) || isnan(gy[i])
+        if isnan(gx[i]) || isnan(gy[i]) || labels[i] == _LBL_BLINK
             just_ended_fix = false
             i += 1
             continue
@@ -405,7 +460,7 @@ function _idt_classify_u8!(
         for k = i:j
             xk = Float64(gx[k])
             yk = Float64(gy[k])
-            if isnan(xk) || isnan(yk)
+            if isnan(xk) || isnan(yk) || labels[k] == _LBL_BLINK
                 nan_pos = k
                 break
             end
@@ -425,7 +480,7 @@ function _idt_classify_u8!(
             while j < hi
                 xn = Float64(gx[j+1])
                 yn = Float64(gy[j+1])
-                if isnan(xn) || isnan(yn)
+                if isnan(xn) || isnan(yn) || labels[j+1] == _LBL_BLINK
                     hit_nan = true
                     break
                 end
@@ -670,6 +725,7 @@ events never bleed across trial or participant boundaries.
 - `min_fixation_ms=60`: Minimum fixation duration in ms
 - `min_saccade_ms=10`: Minimum saccade duration in ms
 - `min_blink_ms=80`: Minimum NaN-run duration to classify as a blink
+- `blink_margin_ms=20`: Margin in ms masked around `in_blink` intervals so eyelid-occlusion velocity spikes are not misclassified as saccades
 - `detect_blinks=nothing`: When `true`, detect blinks from `NaN` runs; when `nothing` (default), enabled automatically for `:smi`/`:tobii` data and `:generic` data lacking a blink column
 - `refine_saccades=(velocity_threshold === :adaptive)`: Expand suprathreshold saccade peaks backward/forward to Nyström & Holmqvist (2010) `μ + 3σ` local velocity minima (I-VT only)
 - `detect_pso=false`: Detect post-saccadic oscillations / glissades immediately following saccade offset and populate `in_pso` and `pso_dur` columns so PSO wobble is excluded from fixation centroids (I-VT only)
@@ -686,6 +742,7 @@ function detect_events!(
     min_fixation_ms::Int = 60,
     min_saccade_ms::Int = 10,
     min_blink_ms::Int = 80,
+    blink_margin_ms::Int = 20,
     detect_blinks::Union{Nothing,Bool} = nothing,
     refine_saccades::Bool = (velocity_threshold === :adaptive),
     detect_pso::Bool = false,
@@ -695,6 +752,8 @@ function detect_events!(
 )
 
     method ∈ (:ivt, :idt) || error("Invalid method=:$method. Use :ivt or :idt.")
+    blink_margin_ms >= 0 ||
+        throw(ArgumentError("blink_margin_ms must be non-negative (got $blink_margin_ms)."))
     is_adaptive = if velocity_threshold isa Symbol
         velocity_threshold == :adaptive || throw(
             ArgumentError(
@@ -722,6 +781,19 @@ function detect_events!(
     min_fix_samples = max(1, round(Int, min_fixation_ms * samples_per_ms))
     min_sacc_samples = max(1, round(Int, min_saccade_ms * samples_per_ms))
     max_pso_samples = max(0, round(Int, max_pso_ms * samples_per_ms))
+    blink_pad = max(0, round(Int, blink_margin_ms * samples_per_ms))
+
+    blink_col = isnothing(prefix) ? :in_blink : Symbol(prefix, :_in_blink)
+    do_blinks = something(
+        detect_blinks,
+        df.source in (:smi, :tobii) ||
+        (df.source == :generic && !hasproperty(df.df, blink_col)),
+    )
+    if do_blinks
+        _detect_nan_blinks!(df, min_blink_ms, eye, prefix)
+    end
+    blink_mask = hasproperty(df.df, blink_col) ? df.df[!, blink_col] :
+                 (hasproperty(df.df, :in_blink) ? df.df[!, :in_blink] : nothing)
 
     gx = _as_float_vec(df.df[!, gx_col])
     gy = _as_float_vec(df.df[!, gy_col])
@@ -739,6 +811,9 @@ function detect_events!(
 
     _foreach_trial_segment(df.df) do lo, hi
         _compute_velocity_deg!(all_vel, gx, gy, lo, hi, vel_scale)
+        if !isnothing(blink_mask)
+            _mask_blink_vel_range!(all_vel, blink_mask, lo, hi, blink_pad)
+        end
         if is_ivt
             if is_adaptive
                 seg_v_thresh, mu_v, sigma_v = _adaptive_ivt_stats(all_vel, lo, hi)
@@ -764,6 +839,9 @@ function detect_events!(
                 )
             end
         else
+            if !isnothing(blink_mask)
+                _mask_blink_labels_range!(all_labels, blink_mask, lo, hi, blink_pad)
+            end
             _idt_classify_u8!(
                 all_labels,
                 gx,
@@ -779,16 +857,6 @@ function detect_events!(
     end
 
     _write_event_columns_u8!(df, all_labels, gx, gy, pa, all_vel, ppd, sample_rate, prefix, do_pso)
-
-    blink_col = isnothing(prefix) ? :in_blink : Symbol(prefix, :_in_blink)
-    do_blinks = something(
-        detect_blinks,
-        df.source in (:smi, :tobii) ||
-        (df.source == :generic && !hasproperty(df.df, blink_col)),
-    )
-    if do_blinks
-        _detect_nan_blinks!(df, min_blink_ms, eye, prefix)
-    end
 
     return df
 end

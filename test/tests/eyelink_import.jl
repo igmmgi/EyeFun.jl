@@ -216,6 +216,12 @@ end
         be_u16(5120),
         be_u16(1205),
         msg_pkt(1035, "TRIAL_RESULT 0"),
+        # ENDSAMPLES at ts = 1036 resets current_sflags so inter-trial [0x85, 0x00, 0x21] STARTSACC is never read as a sample
+        UInt8[0x10, 0x00, 0x41],
+        be_u32(1036),
+        UInt8[0x00],
+        UInt8[0x85, 0x00, 0x21],
+        be_u32(1040),
     )
 
     tmp_edf = tempname() * ".edf"
@@ -228,10 +234,11 @@ end
         @test nrow(msgs) == 3
         @test collect(msgs.message) == ["TRIALID 1", "Stimulus On", "TRIAL_RESULT 0"]
 
-        # 2. All 3 samples preserved without swallowing
+        # 2. All 3 samples preserved without swallowing, and post-ENDSAMPLES STARTSACC is parsed as event (not sample #4)
         @test nrow(edf_syn.samples) == 3
         @test collect(edf_syn.samples.time) == UInt32[1000, 1002, 1035]
         @test edf_syn.samples.gxL[1] ≈ 852.8f0
+        @test any(r -> r.type == EyeFun.EVENT_STARTSACC && r.sttime == UInt32(1040), eachrow(edf_syn.events))
 
         # 3. Hardware ENDBLINK entime extracted directly and duplicates deduplicated
         bl_df = EyeFun.parse_blinks(edf_syn.events; samples = edf_syn.samples)

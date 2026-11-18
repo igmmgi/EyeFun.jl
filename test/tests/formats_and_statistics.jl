@@ -503,6 +503,23 @@ using Random
         @test ed_pfe.df.paL[1] ≈ 1000.0f0 atol = 1e-4
         @test ed_pfe.df.paL[2] > 1050.0f0
 
+        # Foreshortening across an already-interpolated blink span (finite paL, NaN gxL/gyL)
+        # interpolates gaze within trial so no step discontinuity is introduced inside the blink
+        ed_pfe_bl = EyeData(
+            DataFrame(
+                trial = fill(1, 5),
+                time = collect(0.0:4.0),
+                gxL = Float32[1850.0, NaN, NaN, NaN, 1850.0],
+                gyL = Float32[540.0, NaN, NaN, NaN, 540.0],
+                paL = fill(1000.0f0, 5),
+            );
+            screen_res = (1920, 1080),
+            screen_width_cm = 53.0,
+            viewing_distance_cm = 60.0,
+        )
+        correct_pupil_foreshortening!(ed_pfe_bl; measure = :area)
+        @test all(v -> v ≈ ed_pfe_bl.df.paL[1], ed_pfe_bl.df.paL)
+
         # MultiMatch scanpath similarity + >26 AOI Levenshtein support
         ed_mm = EyeData(
             DataFrame(

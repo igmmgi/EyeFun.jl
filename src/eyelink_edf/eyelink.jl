@@ -215,9 +215,13 @@ function _parse_edf_binary!(
                 if is_plausible
                     ts > UInt32(0) && (ref_ts = ts)
                 end
-                if is_plausible &&
+                if et == EVENT_ENDSAMPLES
+                    current_sflags = UInt16(0)
+                    sflags_base = UInt16(0)
+                    current_sample_body_bytes = 0
+                elseif is_plausible &&
                    rec.sflags != 0 &&
-                   (et == EVENT_STARTSAMPLES || et == EVENT_ENDSAMPLES)
+                   et == EVENT_STARTSAMPLES
                     current_sflags = rec.sflags
                     sflags_base = current_sflags & ~UInt16(SAMPLE_FULL_TS_FLAG)
                     current_sample_body_bytes = _edf_sample_body_bytes(current_sflags)

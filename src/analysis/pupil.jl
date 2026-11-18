@@ -709,6 +709,9 @@ whose apparent area scales by `cos(α)`. Depending on `measure`:
 `camera_pos` specifies the camera position `(cam_x_cm, cam_y_cm)` (or 3D
 `(cam_x_cm, cam_y_cm, cam_z_cm)`) in physical centimeters relative to screen center;
 defaults to `(0.0, 0.0, df.viewing_distance_cm)` (optical axis aligned with screen center).
+Best applied before `interpolate_blinks!` (and before baseline normalization); if pupil
+values have already been interpolated across `NaN`-gaze blink spans, gaze position is
+linearly interpolated within each trial to avoid step discontinuities across blinks.
 Modifies `df` in-place and returns `df`.
 """
 function correct_pupil_foreshortening!(
@@ -760,10 +763,13 @@ function correct_pupil_foreshortening!(
     gx_vec = d[!, ecols.gx]
     gy_vec = d[!, ecols.gy]
     pa_src = _as_float_vec(d[!, ecols.pa])
+    tr_col, pt_col = _group_seam_cols(d)
     pa_out = _correct_pfe_kernel(
         pa_src,
         gx_vec,
         gy_vec,
+        tr_col,
+        pt_col,
         gx_deg,
         gy_deg,
         gx_cent,
@@ -784,10 +790,29 @@ function correct_pupil_foreshortening!(
     return df
 end
 
+@inline function _gaze_xy_cm(
+    xi::Float64,
+    yi::Float64,
+    gx_deg::Bool,
+    gy_deg::Bool,
+    gx_cent::Bool,
+    gy_cent::Bool,
+    ppd::Float64,
+    cx_px::Float64,
+    cy_px::Float64,
+    cm_per_px::Float64,
+)::Tuple{Float64,Float64}
+    dx_px = gx_deg ? (gx_cent ? xi * ppd : (xi * ppd - cx_px)) : (gx_cent ? xi : (xi - cx_px))
+    dy_px = gy_deg ? (gy_cent ? yi * ppd : (yi * ppd - cy_px)) : (gy_cent ? yi : (yi - cy_px))
+    return dx_px * cm_per_px, dy_px * cm_per_px
+end
+
 function _correct_pfe_kernel(
     pa_src::Vector{T},
     gx_vec::AbstractVector,
     gy_vec::AbstractVector,
+    tr_col::Union{Nothing,AbstractVector},
+    pt_col::Union{Nothing,AbstractVector},
     gx_deg::Bool,
     gy_deg::Bool,
     gx_cent::Bool,
@@ -804,25 +829,88 @@ function _correct_pfe_kernel(
     use_diam::Bool,
 ) where {T<:AbstractFloat}
     pa_out = copy(pa_src)
-    @inbounds for i in eachindex(pa_out, gx_vec, gy_vec)
-        pi = Float64(pa_out[i])
-        isnan(pi) && continue
+    n = length(pa_out)
+    have_prev = false
+    prev_x_cm = 0.0
+    prev_y_cm = 0.0
+    prev_idx = 0
+    gap_end = 0
+    have_next = false
+    next_x_cm = 0.0
+    next_y_cm = 0.0
+
+    @inbounds for i = 1:n
+        if i > 1 && !_is_group_row_contig(i - 1, i, tr_col, pt_col)
+            have_prev = false
+            gap_end = 0
+            have_next = false
+        end
+
         xi_raw = gx_vec[i]
         yi_raw = gy_vec[i]
-        (ismissing(xi_raw) || ismissing(yi_raw)) && continue
-        xi = Float64(xi_raw)
-        yi = Float64(yi_raw)
-        (isnan(xi) || isnan(yi)) && continue
+        xy_ok = false
+        xi = 0.0
+        yi = 0.0
+        if !ismissing(xi_raw) && !ismissing(yi_raw)
+            xi = Float64(xi_raw)
+            yi = Float64(yi_raw)
+            xy_ok = !isnan(xi) && !isnan(yi)
+        end
 
-        dx_px = gx_deg ? (gx_cent ? xi * ppd : (xi * ppd - cx_px)) : (gx_cent ? xi : (xi - cx_px))
-        dy_px = gy_deg ? (gy_cent ? yi * ppd : (yi * ppd - cy_px)) : (gy_cent ? yi : (yi - cy_px))
-        x_cm = dx_px * cm_per_px
-        y_cm = dy_px * cm_per_px
+        pi = Float64(pa_out[i])
+        if xy_ok
+            x_cm, y_cm = _gaze_xy_cm(xi, yi, gx_deg, gy_deg, gx_cent, gy_cent, ppd, cx_px, cy_px, cm_per_px)
+            have_prev = true
+            prev_x_cm = x_cm
+            prev_y_cm = y_cm
+            prev_idx = i
+            if !isnan(pi)
+                g_norm = sqrt(x_cm * x_cm + y_cm * y_cm + dist_cm * dist_cm)
+                cos_a = clamp((x_cm * cam_x + y_cm * cam_y + dist_cm * cam_z) / (g_norm * cam_norm), 0.25, 1.0)
+                factor = use_diam ? (1.0 / sqrt(cos_a)) : (1.0 / cos_a)
+                pa_out[i] = T(pi * factor)
+            end
+        elseif !isnan(pi)
+            if i > gap_end
+                j = i + 1
+                found_next = false
+                nx_cm = 0.0
+                ny_cm = 0.0
+                while j <= n && _is_group_row_contig(j - 1, j, tr_col, pt_col)
+                    xjr = gx_vec[j]
+                    yjr = gy_vec[j]
+                    if !ismissing(xjr) && !ismissing(yjr)
+                        xjf = Float64(xjr)
+                        yjf = Float64(yjr)
+                        if !isnan(xjf) && !isnan(yjf)
+                            nx_cm, ny_cm = _gaze_xy_cm(xjf, yjf, gx_deg, gy_deg, gx_cent, gy_cent, ppd, cx_px, cy_px, cm_per_px)
+                            found_next = true
+                            break
+                        end
+                    end
+                    j += 1
+                end
+                gap_end = j - 1
+                have_next = found_next
+                next_x_cm = nx_cm
+                next_y_cm = ny_cm
+            end
 
-        g_norm = sqrt(x_cm * x_cm + y_cm * y_cm + dist_cm * dist_cm)
-        cos_a = clamp((x_cm * cam_x + y_cm * cam_y + dist_cm * cam_z) / (g_norm * cam_norm), 0.25, 1.0)
-        factor = use_diam ? (1.0 / sqrt(cos_a)) : (1.0 / cos_a)
-        pa_out[i] = T(pi * factor)
+            if have_prev || have_next
+                x_cm, y_cm = if have_prev && have_next
+                    frac = Float64(i - prev_idx) / Float64((gap_end + 1) - prev_idx)
+                    (prev_x_cm + frac * (next_x_cm - prev_x_cm), prev_y_cm + frac * (next_y_cm - prev_y_cm))
+                elseif have_prev
+                    (prev_x_cm, prev_y_cm)
+                else
+                    (next_x_cm, next_y_cm)
+                end
+                g_norm = sqrt(x_cm * x_cm + y_cm * y_cm + dist_cm * dist_cm)
+                cos_a = clamp((x_cm * cam_x + y_cm * cam_y + dist_cm * cam_z) / (g_norm * cam_norm), 0.25, 1.0)
+                factor = use_diam ? (1.0 / sqrt(cos_a)) : (1.0 / cos_a)
+                pa_out[i] = T(pi * factor)
+            end
+        end
     end
     return pa_out
 end

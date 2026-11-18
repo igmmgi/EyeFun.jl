@@ -277,5 +277,36 @@
         @test nrow(fix_ad) >= 2
         @test_throws ArgumentError detect_events!(ed_ad; velocity_threshold = :unknown)
         @test_throws ArgumentError detect_events!(ed_ad; velocity_threshold = 0.0)
+        @test_throws ArgumentError detect_events!(ed_ad; blink_margin_ms = -1)
+
+        # Eyelid-occlusion velocity sweeps bordering in_blink must not be flagged as saccades
+        n_bm = 300
+        gx_bm = fill(500.0, n_bm)
+        gy_bm = fill(400.0, n_bm)
+        in_bl_bm = falses(n_bm)
+        # 12 ms pre-blink downward eyelid droop (samples 109:120), 60 ms NaN blink (121:180), 12 ms post-blink sweep (181:192)
+        for k = 1:12
+            gy_bm[108+k] = 400.0 + 18.0 * k
+            gy_bm[180+k] = 616.0 - 18.0 * k
+        end
+        gx_bm[121:180] .= NaN
+        gy_bm[121:180] .= NaN
+        in_bl_bm[121:180] .= true
+
+        ed_bm = EyeData(
+            DataFrame(
+                trial = fill(1, n_bm),
+                time = collect(0.0:(n_bm-1)),
+                gxL = gx_bm,
+                gyL = gy_bm,
+                paL = fill(1000.0, n_bm),
+                in_blink = in_bl_bm,
+            );
+            sample_rate = 1000.0,
+        )
+        detect_events!(ed_bm; method = :ivt, velocity_threshold = :adaptive, blink_margin_ms = 20)
+        @test nrow(saccades(ed_bm)) == 0
+        detect_events!(ed_bm; method = :idt, dispersion_threshold = 1.0, blink_margin_ms = 20)
+        @test nrow(saccades(ed_bm)) == 0
     end
 end
